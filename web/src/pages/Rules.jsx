@@ -1,0 +1,472 @@
+import { useState, useEffect } from 'react';
+import { api } from '../lib/api.js';
+import CorrelationReview from '../components/CorrelationReview.jsx';
+
+const EMPTY_RULE = {
+  name: '',
+  stopProcessing: false,
+  conditions: {
+    text: [{ field: 'any', op: 'contains', value: '' }],
+    dateRange: { from: '', to: '' },
+    amountRange: { min: '', max: '' },
+    direction: 'any',
+    sources: [],
+  },
+  actions: { setCategory: '', addTags: [] },
+};
+
+const SOURCES = ['activobank', 'pricempire', 'manual'];
+
+function cleanRule(draft) {
+  const c = draft.conditions;
+  const conditions = {};
+  const text = (c.text || []).filter((t) => t.value.trim());
+  if (text.length) conditions.text = text;
+  if (c.dateRange?.from || c.dateRange?.to) {
+    conditions.dateRange = {
+      from: c.dateRange.from || null,
+      to: c.dateRange.to || null,
+    };
+  }
+  if (c.amountRange?.min !== '' || c.amountRange?.max !== '') {
+    conditions.amountRange = {
+      min: c.amountRange.min === '' ? null : parseFloat(c.amountRange.min),
+      max: c.amountRange.max === '' ? null : parseFloat(c.amountRange.max),
+    };
+  }
+  if (c.direction && c.direction !== 'any') conditions.direction = c.direction;
+  if (c.sources?.length) conditions.sources = c.sources;
+  return {
+    name: draft.name || text[0]?.value || 'Unnamed rule',
+    stopProcessing: draft.stopProcessing,
+    conditions,
+    actions: {
+      setCategory: draft.actions.setCategory || null,
+      addTags: draft.actions.addTags,
+    },
+  };
+}
+
+function describeConditions(rule) {
+  const c = rule.conditions || {};
+  const parts = [];
+  if (c.text?.length) parts.push(c.text.map((t) => `${t.field} ${t.op} "${t.value}"`).join(' OR '));
+  if (c.dateRange) parts.push(`date ${c.dateRange.from || '…'} → ${c.dateRange.to || '…'}`);
+  if (c.amountRange) parts.push(`|amount| ${c.amountRange.min ?? 0}–${c.amountRange.max ?? '∞'}`);
+  if (c.direction) parts.push(c.direction);
+  if (c.sources?.length) parts.push(`from ${c.sources.join('/')}`);
+  return parts.join(' · ') || 'matches everything';
+}
+
+export default function Rules() {
+  const [rules, setRules] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suggestions, setSuggestions] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const load = async () => {
+    const [r, t, c] = await Promise.all([api.getRules(), api.getTags(), api.getCategories()]);
+    setRules(r);
+    setTags(t);
+    setCategories(c);
+  };
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, []);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const move = async (index, delta) => {
+    const target = index + delta;
+    if (target < 0 || target >= rules.length) return;
+    const reordered = [...rules];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setRules(reordered);
+    await api.reorderRules(reordered.map((r) => r.id)).catch(() => {});
+    load();
+  };
+
+  const patch = async (rule, changes) => {
+    await api.updateRule(rule.id, changes).catch((e) => showToast('Error: ' + e.message));
+    load();
+  };
+
+  const remove = async (rule) => {
+    if (!confirm(`Delete rule "${rule.name}"?`)) return;
+    await api.deleteRule(rule.id).catch((e) => showToast('Error: ' + e.message));
+    load();
+  };
+
+  const runNow = async () => {
+    try {
+      const result = await api.runRules();
+      showToast(
+        `Rules run: ${result.evaluated} evaluated, ${result.categorized} categorized, ${result.tagged} tagged`
+      );
+    } catch (e) {
+      showToast('Error: ' + e.message);
+    }
+  };
+
+  const loadSuggestions = async () => {
+    try {
+      const settings = await api.getSettings().catch(() => null);
+      const s = await api.getRuleSuggestions(!!settings?.llm?.enabled);
+      setSuggestions([...(s.static || []), ...(s.llm || [])]);
+    } catch (e) {
+      showToast('Error: ' + e.message);
+    }
+  };
+
+  const accept = async (suggestion) => {
+    await api.acceptRuleSuggestion(suggestion).catch((e) => showToast('Error: ' + e.message));
+    setSuggestions((prev) => prev.filter((s) => s !== suggestion));
+    load();
+  };
+
+  const saveDraft = async () => {
+    try {
+      await api.createRule(cleanRule(draft));
+      setDraft(null);
+      showToast('Rule created');
+      load();
+    } catch (e) {
+      showToast('Error: ' + e.message);
+    }
+  };
+
+  const toggleDraftSource = (s) => {
+    const sources = draft.conditions.sources.includes(s)
+      ? draft.conditions.sources.filter((x) => x !== s)
+      : [...draft.conditions.sources, s];
+    setDraft({ ...draft, conditions: { ...draft.conditions, sources } });
+  };
+
+  const toggleDraftTag = (id) => {
+    const addTags = draft.actions.addTags.includes(id)
+      ? draft.actions.addTags.filter((x) => x !== id)
+      : [...draft.actions.addTags, id];
+    setDraft({ ...draft, actions: { ...draft.actions, addTags } });
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Rules</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={loadSuggestions}>💡 Suggestions</button>
+          <button className="btn-ghost" onClick={runNow}>▶ Run rules now</button>
+          <button className="btn-primary" onClick={() => setDraft(structuredClone(EMPTY_RULE))}>
+            + New rule
+          </button>
+        </div>
+      </div>
+
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+        Rules run top-to-bottom on every new transaction (and on demand). A rule with
+        <strong> stop</strong> enabled halts processing of later rules — like Outlook inbox rules.
+        Manual category choices are never overwritten.
+      </p>
+
+      {suggestions && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h3>Suggested rules</h3>
+          {suggestions.length === 0 && (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+              No new suggestions — all templates are covered by existing rules.
+            </p>
+          )}
+          {suggestions.map((s, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 0',
+                borderBottom: '1px solid var(--border)',
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                <strong>{s.name}</strong>{' '}
+                <span style={{ color: 'var(--text-muted)' }}>
+                  → {s.actions?.setCategory}
+                  {/* Template suggestions are grouped by category, so one row can
+                      stand in for a dozen merchants — say so instead of dumping
+                      every pattern inline. */}
+                  {s.coversMerchants > 1 &&
+                    ` · ${s.conditions?.text?.length || 0} padrões, ${s.coversMerchants} comerciantes`}
+                </span>
+              </span>
+              <span className="badge">{s.origin === 'suggested-llm' ? 'AI' : 'template'}</span>
+              <button className="btn-green btn-sm" onClick={() => accept(s)}>Accept</button>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => setSuggestions((prev) => prev.filter((x) => x !== s))}
+              >
+                Dismiss
+              </button>
+            </div>
+          ))}
+          <button className="btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setSuggestions(null)}>
+            Close
+          </button>
+        </div>
+      )}
+
+      {draft && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h3>New rule</h3>
+          <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+            <input
+              placeholder="Rule name"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+            {draft.conditions.text.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <select
+                  value={t.field}
+                  onChange={(e) => {
+                    const text = [...draft.conditions.text];
+                    text[i] = { ...t, field: e.target.value };
+                    setDraft({ ...draft, conditions: { ...draft.conditions, text } });
+                  }}
+                >
+                  <option value="any">description or merchant</option>
+                  <option value="description">description</option>
+                  <option value="merchant">merchant</option>
+                </select>
+                <select
+                  value={t.op}
+                  onChange={(e) => {
+                    const text = [...draft.conditions.text];
+                    text[i] = { ...t, op: e.target.value };
+                    setDraft({ ...draft, conditions: { ...draft.conditions, text } });
+                  }}
+                >
+                  <option value="contains">contains</option>
+                  <option value="equals">equals</option>
+                  <option value="regex">regex</option>
+                </select>
+                <input
+                  placeholder="text…"
+                  value={t.value}
+                  style={{ flex: 1, minWidth: 140 }}
+                  onChange={(e) => {
+                    const text = [...draft.conditions.text];
+                    text[i] = { ...t, value: e.target.value };
+                    setDraft({ ...draft, conditions: { ...draft.conditions, text } });
+                  }}
+                />
+                {i === draft.conditions.text.length - 1 && (
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        conditions: {
+                          ...draft.conditions,
+                          text: [...draft.conditions.text, { field: 'any', op: 'contains', value: '' }],
+                        },
+                      })
+                    }
+                  >
+                    + OR
+                  </button>
+                )}
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Date</span>
+              <input
+                type="date"
+                value={draft.conditions.dateRange.from}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    conditions: { ...draft.conditions, dateRange: { ...draft.conditions.dateRange, from: e.target.value } },
+                  })
+                }
+              />
+              <span>→</span>
+              <input
+                type="date"
+                value={draft.conditions.dateRange.to}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    conditions: { ...draft.conditions, dateRange: { ...draft.conditions.dateRange, to: e.target.value } },
+                  })
+                }
+              />
+              <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>Amount</span>
+              <input
+                type="number"
+                placeholder="min"
+                style={{ width: 90 }}
+                value={draft.conditions.amountRange.min}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    conditions: { ...draft.conditions, amountRange: { ...draft.conditions.amountRange, min: e.target.value } },
+                  })
+                }
+              />
+              <span>–</span>
+              <input
+                type="number"
+                placeholder="max"
+                style={{ width: 90 }}
+                value={draft.conditions.amountRange.max}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    conditions: { ...draft.conditions, amountRange: { ...draft.conditions.amountRange, max: e.target.value } },
+                  })
+                }
+              />
+              <select
+                value={draft.conditions.direction}
+                onChange={(e) =>
+                  setDraft({ ...draft, conditions: { ...draft.conditions, direction: e.target.value } })
+                }
+              >
+                <option value="any">debit or credit</option>
+                <option value="debit">debit only</option>
+                <option value="credit">credit only</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Sources:</span>
+              {SOURCES.map((s) => (
+                <label key={s} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.conditions.sources.includes(s)}
+                    onChange={() => toggleDraftSource(s)}
+                  />
+                  {s}
+                </label>
+              ))}
+              <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>(none = all)</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Then:</span>
+              <select
+                value={draft.actions.setCategory}
+                onChange={(e) => setDraft({ ...draft, actions: { ...draft.actions, setCategory: e.target.value } })}
+              >
+                <option value="">(don't set category)</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>set category: {c.name}</option>
+                ))}
+              </select>
+              {tags.map((t) => (
+                <label key={t.id} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.actions.addTags.includes(t.id)}
+                    onChange={() => toggleDraftTag(t.id)}
+                  />
+                  <span style={{ background: t.color, borderRadius: 8, padding: '0 8px', color: '#0d1117', fontWeight: 600 }}>
+                    {t.name}
+                  </span>
+                </label>
+              ))}
+              <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
+                <input
+                  type="checkbox"
+                  checked={draft.stopProcessing}
+                  onChange={(e) => setDraft({ ...draft, stopProcessing: e.target.checked })}
+                />
+                stop processing further rules
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn-ghost" onClick={() => setDraft(null)}>Cancel</button>
+              <button className="btn-green" onClick={saveDraft}>Create rule</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rules.length === 0 ? (
+        <div className="empty-state">
+          <h3>No rules yet</h3>
+          <p>Create rules or accept suggestions to auto-organize your transactions.</p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 70 }}>Order</th>
+                <th>Rule</th>
+                <th>Conditions</th>
+                <th>Actions</th>
+                <th style={{ width: 60 }}>Stop</th>
+                <th style={{ width: 70 }}>Enabled</th>
+                <th style={{ width: 90 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule, i) => (
+                <tr key={rule.id} style={{ opacity: rule.enabled ? 1 : 0.5 }}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost btn-sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                    <button className="btn-ghost btn-sm" onClick={() => move(i, 1)} disabled={i === rules.length - 1}>↓</button>
+                  </td>
+                  <td>
+                    <strong>{rule.name}</strong>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{rule.origin}</div>
+                  </td>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{describeConditions(rule)}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {rule.actions?.setCategory && <span className="tag">{rule.actions.setCategory}</span>}{' '}
+                    {(rule.actions?.addTags || []).map((id) => {
+                      const t = tags.find((x) => x.id === id);
+                      return t ? (
+                        <span key={id} style={{ background: t.color, borderRadius: 8, padding: '0 8px', color: '#0d1117', fontWeight: 600, fontSize: 11 }}>
+                          {t.name}
+                        </span>
+                      ) : null;
+                    })}
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={!!rule.stopProcessing}
+                      onChange={(e) => patch(rule, { stopProcessing: e.target.checked })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={!!rule.enabled}
+                      onChange={(e) => patch(rule, { enabled: e.target.checked })}
+                    />
+                  </td>
+                  <td>
+                    <button className="btn-red btn-sm" onClick={() => remove(rule)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <CorrelationReview showToast={showToast} />
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}

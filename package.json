@@ -1,0 +1,26 @@
+{
+  "name": "chronologs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"node server/index.js\" \"cd web && npx vite --port 5173 --open\"",
+    "server": "node server/index.js",
+    "web": "cd web && npx vite",
+    "start": "node server/index.js",
+    "build": "cd web && npx vite build",
+    "test": "node --test \"server/**/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "uuid": "^10.0.0",
+    "concurrently": "^9.0.0",
+    "googleapis": "^144.0.0",
+    "pdf-parse": "^1.1.1",
+    "csv-parse": "^5.5.6",
+    "multer": "^1.4.5-lts.1",
+    "playwright": "^1.48.0",
+    "node-cron": "^3.0.3"
+  }
+}

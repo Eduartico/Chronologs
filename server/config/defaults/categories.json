@@ -1,0 +1,17 @@
+[
+  { "id": "uncategorized", "name": "uncategorized", "color": "hsl(0, 0%, 55%)", "parent": null },
+  { "id": "food", "name": "food", "color": "hsl(25, 70%, 55%)", "parent": null },
+  { "id": "transport", "name": "transport", "color": "hsl(205, 65%, 55%)", "parent": null },
+  { "id": "housing", "name": "housing", "color": "hsl(30, 45%, 50%)", "parent": null },
+  { "id": "utilities", "name": "utilities", "color": "hsl(50, 65%, 50%)", "parent": null },
+  { "id": "entertainment", "name": "entertainment", "color": "hsl(280, 55%, 60%)", "parent": null },
+  { "id": "subscriptions", "name": "subscriptions", "color": "hsl(330, 60%, 58%)", "parent": null },
+  { "id": "health", "name": "health", "color": "hsl(0, 60%, 58%)", "parent": null },
+  { "id": "education", "name": "education", "color": "hsl(230, 55%, 60%)", "parent": null },
+  { "id": "shopping", "name": "shopping", "color": "hsl(180, 45%, 45%)", "parent": null },
+  { "id": "income", "name": "income", "color": "hsl(140, 55%, 45%)", "parent": null },
+  { "id": "investments", "name": "investments", "color": "hsl(160, 50%, 40%)", "parent": null },
+  { "id": "transfers", "name": "transfers", "color": "hsl(210, 15%, 55%)", "parent": null },
+  { "id": "gaming", "name": "gaming", "color": "hsl(260, 60%, 62%)", "parent": null },
+  { "id": "travel", "name": "travel", "color": "hsl(190, 65%, 50%)", "parent": null }
+]

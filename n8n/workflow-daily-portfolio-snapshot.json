@@ -1,0 +1,64 @@
+{
+  "name": "Chronologs — Daily Pricempire Snapshot (optional)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule (6am daily)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/ingest/pricempire",
+        "sendBody": false,
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "Refresh Pricempire Portfolios",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/correlations/run",
+        "sendBody": false,
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Detect Correlations",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Schedule (6am daily)": {
+      "main": [
+        [
+          { "node": "Refresh Pricempire Portfolios", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Refresh Pricempire Portfolios": {
+      "main": [
+        [
+          { "node": "Detect Correlations", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
+}

@@ -1,0 +1,78 @@
+{
+  "name": "Chronologs — Monthly Salary Check (optional)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule (1st of month, 9am)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/ingest/activobank",
+        "sendBody": false,
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Scan ActivoBank Emails",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3001/api/transactions/pending",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Fetch Pending Review Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pending = $input.first()?.json || [];\nreturn [{ json: { pendingCount: Array.isArray(pending) ? pending.length : 0, timestamp: new Date().toISOString() } }];"
+      },
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "Schedule (1st of month, 9am)": {
+      "main": [
+        [
+          { "node": "Scan ActivoBank Emails", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Scan ActivoBank Emails": {
+      "main": [
+        [
+          { "node": "Fetch Pending Review Queue", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Pending Review Queue": {
+      "main": [
+        [
+          { "node": "Summarize", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
+}

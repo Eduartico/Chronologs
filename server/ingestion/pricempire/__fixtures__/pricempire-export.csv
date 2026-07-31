@@ -1,0 +1,20 @@
+Name,Type,Quantity,Unit Price,Total Price,Fee Amount,Fee Percentage,Marketplace,Date,Note,Float Value,Paint Seed,Steam Asset ID,Custom Priced,Currency,Current Market Price
+"Dreams & Nightmares Case",buy,1,0,0,0,0,N/A,2025-09-24,N/A,N/A,N/A,N/A,No,USD,116
+"Dreams & Nightmares Case",buy,8,0,0,0,0,N/A,2022-07-25,N/A,N/A,N/A,N/A,No,USD,116
+"Dreams & Nightmares Case",sell,10,119,1190,0,15.0000,steam,2026-03-05,N/A,N/A,N/A,N/A,No,USD,116
+"Dreams & Nightmares Case",buy,6,167,1002,0,0,steam_buy,2026-04-23,N/A,N/A,N/A,N/A,No,USD,116
+"Dreams & Nightmares Case",buy,18,168,3024,0,0,steam_buy,2026-05-11,N/A,N/A,N/A,N/A,No,USD,116
+"Kilowatt Case",buy,1,0,0,0,0,N/A,2025-09-24,N/A,N/A,N/A,N/A,No,USD,14
+"Kilowatt Case",buy,1,0,0,0,0,N/A,2025-10-11,N/A,N/A,N/A,N/A,No,USD,14
+"Kilowatt Case",sell,5,18,90,0,15.0000,steam,2026-03-05,N/A,N/A,N/A,N/A,No,USD,14
+"★ StatTrak™ Huntsman Knife | Crimson Web (Field-Tested)",buy,1,20660,20660,0,0,N/A,2025-07-02,N/A,N/A,N/A,N/A,No,USD,14026
+"★ StatTrak™ Huntsman Knife | Crimson Web (Field-Tested)",sell,1,10288,10288,0,15.0000,steam,2025-10-23,N/A,N/A,N/A,N/A,No,USD,14026
+"AK-47 | Bloodsport (Factory New)",buy,1,31331,31331,0,0,N/A,2025-07-02,N/A,N/A,N/A,N/A,No,USD,16448
+"★ Sport Gloves | Amphibious (Field-Tested)",buy,1,32401,32401,0,0,buff163,2025-10-30,N/A,0.27482593,514,N/A,No,USD,32173
+"★ Sport Gloves | Scarlet Shamagh (Well-Worn)",buy,1,36100,36100,0,0,csfloat,2025-10-19,N/A,0.39026526,577,N/A,No,USD,17776
+"★ Sport Gloves | Scarlet Shamagh (Well-Worn)",sell,1,23700,23700,0,2.0000,csfloat,2026-03-12,N/A,N/A,N/A,N/A,No,USD,17776
+"Sticker | Eternal Fire (Glitter) | Copenhagen 2024",buy,3,0,0,0,0,N/A,2025-07-25,N/A,N/A,N/A,N/A,No,USD,196
+"Sticker | Eternal Fire (Glitter) | Copenhagen 2024",buy,3,0,0,0,0,N/A,2025-07-25,N/A,N/A,N/A,N/A,No,USD,196
+"Recoil Case",buy,300,27,8100,0,0,haloskins,2025-12-19,N/A,N/A,N/A,N/A,No,USD,32
+"Recoil Case",sell,713,56,39928,0,15.0000,steam,2026-03-15,N/A,N/A,N/A,N/A,No,USD,32
+"StatTrak™ Music Kit | Denzel Curry, ULTIMATE",buy,1,476,476,0,0,N/A,2025-10-23,"Imported from inventory",N/A,N/A,47219693865,No,USD,560

@@ -1,0 +1,59 @@
+{
+  "name": "Chronologs — Daily ActivoBank Email Scan (optional)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8,20 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule (8am & 8pm daily)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/ingest/activobank",
+        "sendBody": false,
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Scan ActivoBank Emails",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first()?.json || {};\nreturn [{ json: { newTransactions: result.new ?? 0, documents: result.documents ?? 0, errors: (result.errors || []).length, timestamp: new Date().toISOString() } }];"
+      },
+      "name": "Summarize Run",
+      "type": "n8n-nodes-base.code",
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Schedule (8am & 8pm daily)": {
+      "main": [
+        [
+          { "node": "Scan ActivoBank Emails", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Scan ActivoBank Emails": {
+      "main": [
+        [
+          { "node": "Summarize Run", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
+}

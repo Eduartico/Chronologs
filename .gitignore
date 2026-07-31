@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# User data — everything personal/sensitive lives here, never committed
+user-data/
+data/
+
+# Environment / secrets
+.env
+.env.local
+
+# Build output
+web/dist/
+
+# Logs
+*.log
