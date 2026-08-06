@@ -69,6 +69,15 @@ function documentSha(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+// Deterministic, so re-parsing the same receipt does not create a second order.
+function makeSecurityOrderId(order) {
+  const digest = createHash('sha1')
+    .update(`${order.date}|${order.security}|${order.side}|${order.quantity}`)
+    .digest('hex')
+    .slice(0, 10);
+  return `order-${order.date}-${digest}`;
+}
+
 /**
  * Ingests ActivoBank documents either from Gmail ({origin: 'gmail'}) or from
  * manually uploaded files ({origin: 'upload', files: [{filename, buffer}]}).
@@ -89,6 +98,7 @@ export async function ingestActivobank({
     parsed: 0,
     new: 0,
     duplicates: 0,
+    securityOrders: 0,
     skippedDocuments: 0,
     nonTransactional: 0,
     unparsedLines: [],
@@ -168,7 +178,7 @@ export async function ingestActivobank({
         );
       }
 
-      const { transactions, unparsedLines, kind } = await parseDocument(
+      const { transactions, orders, unparsedLines, kind } = await parseDocument(
         doc.filename,
         doc.buffer,
         doc.emailDate || null
@@ -178,6 +188,25 @@ export async function ingestActivobank({
       else result.parsed++;
 
       const documentId = `${batchId}/${doc.filename}`;
+
+      // Exchange order receipts describe a securities purchase, not a bank
+      // movement — they are recorded as their own event type and reconciled
+      // against the statement debit afterwards.
+      for (const order of orders || []) {
+        const ev = createEvent('security_order', 'activobank', {
+          security_order_id: makeSecurityOrderId(order),
+          date: order.date,
+          side: order.side,
+          security: order.security,
+          market: order.market,
+          quantity: order.quantity,
+          price: order.price,
+          quote: order.quote,
+          currency: order.currency,
+          executed: order.executed,
+        }, [{ type: 'document', id: documentId }]);
+        if (appendIfNewIndexed(ev, ledger)) result.securityOrders++;
+      }
       for (const tx of normalizeTransactions(transactions)) {
         if (transactionIndex.isReportedElsewhere(tx)) {
           result.duplicates++;
@@ -227,6 +256,20 @@ export async function ingestActivobank({
     }
   }
 
+  // Order receipts and their statement debits usually arrive in different
+  // batches, so reconciliation runs over everything, not just what is new.
+  if (result.securityOrders > 0 || result.new > 0) {
+    try {
+      const { linkSecurityOrders } = await import('../../engines/securities.js');
+      const { getProjections } = await import('../../projections/cache.js');
+      const projections = await getProjections();
+      const linked = await linkSecurityOrders(projections.securityOrders, projections.transactions);
+      result.securityLinks = linked.linked;
+    } catch (err) {
+      result.errors.push(`securities: ${err.message}`);
+    }
+  }
+
   // Move the batch out of the inbox once processed.
   if (docs.length > 0 && existsSync(inboxDir)) {
     const processedDir = documentsPath('activobank', 'processed', batchId);
@@ -237,6 +280,7 @@ export async function ingestActivobank({
 
   const details = [
     `${result.new} new transactions from ${result.parsed} statement/advice document(s)`,
+    result.securityOrders ? `${result.securityOrders} ordem(ns) de bolsa` : null,
     result.duplicates ? `${result.duplicates} already recorded` : null,
     result.skippedDocuments ? `${result.skippedDocuments} repeated document(s)` : null,
     result.nonTransactional ? `${result.nonTransactional} non-transactional` : null,

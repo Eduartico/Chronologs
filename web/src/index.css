@@ -29,6 +29,40 @@ body {
   background: var(--accent-soft);
 }
 
+/*
+ * The scrollbar.
+ *
+ * The platform default is a wide grey slab with two arrow buttons, drawn in
+ * whatever the operating system feels like — on a dark surface it reads as a
+ * seam down the side of the page. This is the same bar with the furniture
+ * removed: no arrows, no track, a thumb that only asserts itself under the
+ * pointer.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ---------------- controls ---------------- */
 
 button {
@@ -39,6 +73,11 @@ button {
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   padding: 6px 13px;
+  /* The floor under every inline `style={{ background: ... }}` a button sets:
+     if that value is ever invalid CSS (an alpha suffix on a non-hex colour,
+     say), the browser drops the declaration and a button that meant to be
+     tinted falls back to this instead of the operating system's own grey. */
+  background: transparent;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease);
 }
@@ -53,32 +92,100 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/*
+ * Text inputs are text.
+ *
+ * They used to carry a filled background, a border and a focus ring, which made
+ * every editable value look like a form field parked in the middle of a
+ * sentence. A field only has to *announce* itself while the caret is actually
+ * in it — not on hover, which read as a highlight the field did not earn just
+ * because the pointer passed over it. So: no fill, no box ever, and a single
+ * hairline underneath that appears on focus alone.
+ */
 input,
 select,
 textarea {
   font-family: inherit;
   font-size: var(--fs-base);
-  padding: 6px 10px;
+  padding: 5px 2px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+/*
+ * Won by nothing else. Two rounds of scoped overrides (`:focus`, then
+ * `.editable.is-editing:focus-visible`) each left a gap — hover, focus-within,
+ * or a sibling rule elsewhere in the file kept winning back a hairline or a
+ * ring. This is the one place a global rule has to out-rank other global
+ * rules on purpose: every state, every input-like element, no exceptions
+ * except the ones declared right below.
+ */
+input,
+select,
+input:hover,
+select:hover,
+input:focus,
+select:focus,
+input:focus-visible,
+select:focus-visible,
+input:focus-within,
+select:focus-within {
+  border-bottom: 0 !important;
+}
+input,
+select,
+textarea,
+input:hover,
+select:hover,
+textarea:hover,
+input:focus,
+select:focus,
+textarea:focus,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-within,
+select:focus-within,
+textarea:focus-within {
+  outline: none !important;
+}
+
+/* A checkbox is a control, not text — it keeps its own shape. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='color'],
+input[type='file'] {
+  padding: 0;
+  border-bottom: none;
+}
+
+/* A multi-line box is the one place a boundary genuinely helps: without it
+   there is no telling where the writing area ends. */
+textarea {
+  padding: var(--sp-2);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--surface-0);
-  color: var(--text);
-  outline: none;
-  transition: border-color var(--t-fast) var(--ease);
 }
-
-input:hover,
-select:hover {
-  border-color: var(--border-strong);
-}
-
-input:focus,
-select:focus {
+textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-input::placeholder {
+select {
+  cursor: pointer;
+}
+/* The dropdown's own popup is native — the browser paints it, not this
+   stylesheet — but its colours still come from CSS. Without this the option
+   list fell back to the operating system's white, unreadable on a dark page. */
+select option {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
   color: var(--text-muted);
 }
 
@@ -134,7 +241,7 @@ input::placeholder {
 }
 
 .sidebar {
-  width: 224px;
+  width: 260px;
   background: var(--surface-1);
   border-right: 1px solid var(--border);
   padding: var(--sp-5) var(--sp-3);
@@ -142,24 +249,92 @@ input::placeholder {
   flex-direction: column;
   gap: 2px;
   flex-shrink: 0;
+  transition: width var(--t-fast) var(--ease);
+}
+/* Collapsed rail: icons only, labels replaced by native tooltips. */
+.sidebar.collapsed {
+  width: 68px;
+  padding-left: var(--sp-2);
+  padding-right: var(--sp-2);
+  align-items: center;
 }
 
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: stretch;
+}
+
+/*
+ * Identity and chrome in one row: wordmark, then whatever isn't navigation —
+ * notifications, the collapse toggle. This used to be two rows, each closed
+ * off with its own border-bottom, and the second row put the bell hard against
+ * the left edge and the toggle hard against the right with an empty gap
+ * between them. One row, one divider, both controls beside the name.
+ */
 .sidebar-logo {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 0 var(--sp-2) var(--sp-5);
-  margin-bottom: var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-3);
   border-bottom: 1px solid var(--border);
+  align-self: stretch;
+}
+.sidebar.collapsed .sidebar-logo {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding-left: 0;
+  padding-right: 0;
 }
 .sidebar-logo img {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 .sidebar-logo h1 {
-  font-size: var(--fs-md);
+  flex: 1;
+  font-size: var(--fs-lg);
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.sidebar-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Settings sits apart from the daily list, pinned to the foot of the rail by
+   the nav list's own `flex: 1` below — configuration is not a place you visit
+   between Transactions and Insights. */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  align-self: stretch;
+}
+
+
+/* Collapsed rail has no room for a count, so unread work shows as a dot. */
+.sidebar-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--accent-yellow, var(--accent));
 }
 
 /* The active item gets a rail on the left rather than only a fill, so the
@@ -168,13 +343,17 @@ input::placeholder {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 7px var(--sp-3);
+  gap: var(--sp-3);
+  padding: 11px var(--sp-3);
   border-radius: var(--r-sm);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.sidebar.collapsed .sidebar-link {
+  justify-content: center;
+  padding: 11px 0;
 }
 .sidebar-link:hover {
   background: var(--surface-2);
@@ -274,6 +453,22 @@ table {
   border-collapse: collapse;
 }
 
+/*
+ * Columns whose widths are declared, not negotiated.
+ *
+ * By default a table sizes each column to its widest cell, so anything that
+ * grows inside a cell — an open picker, a longer subcategory name — resizes the
+ * column and reflows every row. Declaring the widths in `COLUMNS` and setting
+ * this makes the layout a property of the table rather than of its contents.
+ */
+table.table-fixed {
+  table-layout: fixed;
+}
+table.table-fixed td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 th {
   text-align: left;
   color: var(--text-muted);
@@ -290,7 +485,9 @@ th {
   z-index: 1;
 }
 
-/* Sortable headers announce themselves on hover instead of looking inert. */
+/* Sortable headers announce themselves on hover instead of looking inert.
+   The arrow itself is styled further down, with the rest of the controls that
+   replaced this table's dropdowns. */
 th.sortable {
   cursor: pointer;
   user-select: none;
@@ -298,11 +495,6 @@ th.sortable {
 }
 th.sortable:hover {
   color: var(--text);
-}
-th .sort-arrow {
-  margin-left: 4px;
-  opacity: 0.9;
-  color: var(--accent);
 }
 
 td {
@@ -519,15 +711,27 @@ tbody tr:hover td {
 
 /* ---------------- notification bell ---------------- */
 
+/* One declaration each. These used to be written twice — once here from when
+   the bell lived in the header, once again further down — with the later block
+   winning purely on source order, which is a trap for whoever edits next. */
 .notification-bell {
   position: relative;
-  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 .bell-button {
-  background: transparent;
-  padding: 4px 6px;
-  font-size: var(--fs-md);
+  display: flex;
+  align-items: center;
   position: relative;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+.bell-button:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 .bell-badge {
   position: absolute;
@@ -545,7 +749,10 @@ tbody tr:hover td {
 }
 .bell-dropdown {
   position: absolute;
-  left: 0;
+  /* The bell now sits near the right edge of a narrow sidebar row rather than
+     at the left of a full-width one; anchoring the panel to its right edge
+     keeps it growing back over the sidebar instead of starting mid-row. */
+  right: 0;
   top: 30px;
   width: 320px;
   max-height: 420px;
@@ -617,20 +824,1359 @@ tbody tr:hover td {
   .layout {
     flex-direction: column;
   }
-  .sidebar {
+  .sidebar,
+  .sidebar.collapsed {
     width: 100%;
     flex-direction: row;
+    align-items: center;
     overflow-x: auto;
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+  .sidebar-nav {
+    flex-direction: row;
+    align-self: auto;
   }
   .sidebar-logo {
     border-bottom: none;
     padding-bottom: 0;
     margin-bottom: 0;
+    align-self: auto;
+  }
+  /* The rail toggle is meaningless once the sidebar is a horizontal bar. */
+  .sidebar-toggle {
+    display: none;
+  }
+  .sidebar-footer {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+    border-top: none;
   }
   .main-content {
     padding: var(--sp-4);
     max-height: none;
   }
+}
+
+/* ---------------- filter chips ---------------- */
+
+/* Shows what is currently narrowing the list. A table that came back empty
+   because of a filter three controls away reads as a broken page otherwise. */
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.filter-chip button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  display: flex;
+}
+.filter-chip button:hover {
+  color: var(--text);
+}
+
+/* ---------------- bulk selection ---------------- */
+
+.selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+}
+.selection-count {
+  font-weight: 600;
+}
+
+/*
+ * Selecting rows to act on them together. Deliberately not a switch: a switch
+ * means "this thing is now on", and ticking four transactions to categorize
+ * them in one go is not a setting.
+ */
+.select-box,
+input[type='checkbox'] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-0);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* Drawn rather than glyphed, so it is the same tick at every zoom level and in
+   every browser. */
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border: 2px solid #08111c;
+  border-top: none;
+  border-right: none;
+  transform: translateY(-1px) rotate(-45deg);
+}
+input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* The switch supplies its own visuals over a hidden native box. */
+.switch input[type='checkbox'] {
+  appearance: none;
+  width: auto;
+  height: auto;
+  border: none;
+  background: transparent;
+}
+.switch input[type='checkbox']::after {
+  content: none;
+}
+
+.card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/*
+ * The whole card is the hit target, not the 16px checkbox in its corner. It
+ * still holds its own buttons, so it carries no `cursor: pointer` — the hover
+ * tint is the affordance, and the pointer stays a pointer over the controls
+ * that do something else.
+ */
+.card.selectable {
+  outline: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.card.selectable:hover:not(.selected) {
+  border-color: var(--border-strong, var(--accent));
+  background: var(--bg-hover);
+}
+.card.selectable:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* ---------------- category picker ---------------- */
+
+/* A grid of icon buttons instead of a <select>: the categories that get used
+   are recognised by shape, and the most-used ones sort to the front. */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: var(--sp-2);
+}
+.category-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px var(--sp-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  text-align: left;
+  font-size: var(--fs-base);
+  width: 100%;
+}
+.category-option:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.category-option .count {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.category-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.icon-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+/* In a table row the tinted square repeats down the whole column and reads as
+   chrome, not colour. Bare drops the background — the glyph itself, painted
+   in the category's colour, is enough. */
+.icon-swatch.is-bare {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------------- travel calendar ---------------- */
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.calendar-head {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--sp-1) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.calendar-day {
+  position: relative;
+  min-height: 56px;
+  padding: 4px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.calendar-day.outside {
+  opacity: 0.35;
+}
+.calendar-day.today {
+  border-color: var(--accent);
+}
+/* Travel days are tinted rather than badged so a multi-week trip reads as one
+   continuous block at a glance. */
+.calendar-day.in-travel {
+  background: var(--info-soft);
+  border-color: var(--info);
+  color: var(--text);
+}
+.calendar-day.in-margin {
+  background: var(--surface-2);
+  border-style: dashed;
+}
+.calendar-day .day-total {
+  position: absolute;
+  bottom: 4px;
+  right: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- duplicates & advisor ---------------- */
+
+.evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-xs);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.evidence.strong {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-base);
+}
+.dup-row:first-of-type {
+  border-top: none;
+}
+.dup-row .doc {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-lg);
+  font-weight: 620;
+  margin: var(--sp-6) 0 var(--sp-3);
+}
+
+/* ---------------- accounts & vaults ---------------- */
+
+/* Pushes itself and everything after it — the section's own actions — to the
+   right edge of the heading. */
+.section-title-aside {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-weight: 450;
+  font-size: var(--fs-sm);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.account-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-sm);
+}
+.account-meta dt {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.account-meta dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/*
+ * The reconciliation strip. Amber by default rather than red: an unexplained
+ * remainder is normal — it is money the account held before the earliest
+ * statement we have — and colouring it as an error would train the eye to
+ * ignore it.
+ */
+.reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.reconcile-ok {
+  border-left-color: var(--good);
+  background: var(--good-soft);
+}
+
+.hint {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+tr.row-warn td {
+  background: var(--warn-soft);
+}
+
+.subtable {
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+}
+.subtable td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---------------- icon picker ---------------- */
+
+/* Sixty-odd glyphs no longer fit in one glance, so the grid scrolls under a
+   search box that stays put. */
+/* The blank row that makes new things. It reads as a row about to exist, not
+   as a form parked under the table. */
+.add-row td {
+  background: var(--surface-1);
+}
+.add-row input {
+  width: 100%;
+  min-width: 0;
+}
+tbody tr.add-row:hover td {
+  background: var(--surface-1);
+}
+
+.icon-swatch-button {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: filter var(--t-fast) var(--ease);
+}
+.icon-swatch-button:hover:not(:disabled) {
+  filter: brightness(1.35);
+}
+
+.color-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  flex-shrink: 0;
+}
+.color-trigger span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--r-full);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transition: transform var(--t-fast) var(--ease);
+}
+.color-trigger:hover:not(:disabled) span {
+  transform: scale(1.25);
+}
+/* Like the row controls, quiet until the row is under the pointer. */
+tbody tr .color-trigger,
+tbody tr .icon-swatch-button {
+  opacity: 0.85;
+}
+tbody tr:hover .color-trigger,
+tbody tr:hover .icon-swatch-button,
+tbody tr:focus-within .color-trigger,
+tbody tr:focus-within .icon-swatch-button {
+  opacity: 1;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: var(--sp-2);
+}
+/* Sits under the icon grid inside `StylePicker`'s single popover, rather than
+   behind a second trigger button on the far side of the name. */
+.color-grid-attached {
+  padding: var(--sp-2) 0 0;
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+}
+.color-swatch.is-on {
+  border: 2px solid var(--text);
+}
+
+.icon-picker-option {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+}
+.icon-picker-option:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.icon-picker-search {
+  width: 100%;
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.icon-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---------------- vaults ---------------- */
+
+/*
+ * The vault name used to be a `btn-ghost`, which drew a box around it and made
+ * a heading look like a control, and the two warning states were `.tag` pills —
+ * styled clickable everywhere else in the app, but inert here. What matters on
+ * this row is the balance, so the name and the balance lead and everything else
+ * is support underneath.
+ */
+.vault-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vault-name:hover {
+  color: var(--accent);
+}
+.vault-name .chev {
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.vault-name .chev.open {
+  transform: rotate(90deg);
+}
+
+.vault-flow {
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* Inferred rather than read off the statement — said quietly, and explained on
+   hover rather than shouted as a pill. */
+.vault-estimated {
+  color: var(--warn);
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+
+.vault-balance {
+  font-size: var(--fs-lg);
+}
+
+.vault-alias {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.vault-table td {
+  vertical-align: top;
+}
+
+/* ---------------- categories & subcategories ---------------- */
+
+.category-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/*
+ * Subcategories look like categories, because they are the same idea seen from
+ * the other side. They used to be flat coloured pills with no glyph, which read
+ * as something casual sitting next to a serious control.
+ */
+.subcat-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.subcat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px 2px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  max-width: 160px;
+}
+.subcat-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subcat-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+/* The × only appears once you are on the chip, so a row of them is a row of
+   labels rather than a row of buttons. */
+.subcat-chip:hover .subcat-chip-x,
+.subcat-chip-x:focus-visible {
+  opacity: 0.75;
+}
+.subcat-chip-x:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.subcat-picker {
+  padding: var(--sp-2);
+}
+.subcat-picker input {
+  width: 100%;
+  margin-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--border);
+}
+/* Same wrapped grid the category picker uses (`.category-grid`/`.category-option`
+   from index.css:964), just narrower and scrollable — this popover is a third
+   the width of the compact category one, so it needs room to grow downward
+   instead of sideways. */
+.subcat-picker-grid {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tag-pill {
+  color: #0d1117;
+  border-radius: var(--r-full);
+  padding: 2px 4px 2px 2px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.tag-pill button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+}
+.tag-pill button:hover {
+  background: rgba(0, 0, 0, 0.14);
+}
+.tag-pill-x {
+  cursor: pointer;
+  opacity: 0.65;
+  padding-right: 6px;
+}
+.tag-pill-x:hover {
+  opacity: 1;
+}
+/* Armed by the first click. The pill keeps its colour so the tag is still
+   recognisable, but the × becomes a target you have to mean. */
+.tag-pill-x.armed {
+  opacity: 1;
+  background: var(--bad);
+  color: #1a0806;
+  border-radius: var(--r-full);
+  padding: 0 6px;
+  margin-right: 2px;
+}
+
+.tag-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.tag-edit input[type='text'],
+.tag-edit input:not([type]) {
+  max-width: 150px;
+  padding: 3px 8px;
+}
+.tag-edit input[type='color'] {
+  width: 28px;
+  height: 26px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+/* ---------------- travel card ----------------
+ *
+ * The trip's own line is where it gets corrected. There used to be a labelled
+ * four-field form that unfolded under the card; the fields now sit where the
+ * values were, which is why the two states share these metrics.
+ */
+
+.travel-headline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 600;
+  min-height: 30px;
+}
+.travel-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: 3px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  min-height: 26px;
+}
+
+.dup-row.row-marked {
+  background: var(--accent-soft);
+}
+
+/* ---------------- inline bars ---------------- */
+
+.bar-track {
+  height: 8px;
+  min-width: 60px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+
+/* ---------------- direct manipulation ----------------
+ *
+ * Rows used to spell their verbs out — "Editar", "Apagar", "Guardar" — and open
+ * a second copy of a field somewhere else to edit the first one. What follows
+ * is the replacement: icon-only controls that swap in place, and values that
+ * become writable where they already sit.
+ */
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.icon-btn-good:hover:not(:disabled) {
+  background: var(--good-soft);
+  border-color: transparent;
+  color: var(--good);
+}
+.icon-btn-danger:hover:not(:disabled) {
+  background: var(--bad-soft);
+  border-color: transparent;
+  color: var(--bad);
+}
+/* Armed: the second press is the one that deletes. A full block of red used
+   to mark that, but it read as a status colour rather than a button — the
+   bin having already become a tick says "this one is live now"; the glyph
+   just carries the same danger colour any other destructive icon does. */
+.icon-btn-armed,
+.icon-btn-armed:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--bad);
+}
+
+/* A fixed floor under the cluster: edit/delete and confirm/cancel are the same
+   two positions, so swapping between them must not move the column. */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  min-width: 68px;
+}
+
+/* The controls stay quiet until the row is under the pointer — a table of
+   thirty rows should not read as sixty buttons. */
+tbody tr .row-actions .icon-btn {
+  opacity: 0.55;
+  transition: opacity var(--t-fast) var(--ease), background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+tbody tr:hover .row-actions .icon-btn,
+tbody tr:focus-within .row-actions .icon-btn,
+.row-actions .icon-btn:focus-visible,
+.row-actions .icon-btn-armed {
+  opacity: 1;
+}
+
+/* Pencil+bin, check+cross, pencil+armed-check — the cluster swaps its whole
+   set rather than one button at a time, and used to cut between them with no
+   transition at all. `RowActions` keys each set so React remounts instead of
+   diffing props, which is what lets this fire on every swap: a short scale-in
+   on the way in, nothing on the way out — a button that lingers while fading
+   is still clickable, which is worse than one that just isn't there. */
+.row-actions .icon-btn {
+  animation: row-action-in 120ms var(--ease);
+}
+@keyframes row-action-in {
+  from {
+    transform: scale(0.88);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-actions .icon-btn {
+    animation: none;
+  }
+}
+
+.editable {
+  border-radius: var(--r-sm);
+  padding: 1px 2px;
+  cursor: text;
+}
+.editable.is-locked {
+  cursor: default;
+}
+/*
+ * The field is the text.
+ *
+ * This used to give the input a filled background and a hard border, so the
+ * moment a row went into edit the value stopped looking like the value and
+ * started looking like a form. Nothing about the glyphs may change — same font,
+ * same weight, same position, same colour, and (via `.autosize` below) the same
+ * *width* a moment ago as plain text. No border at all, not even on focus:
+ * what tells you the row is live is the row itself (below) and the buttons
+ * swapping to a tick and a cross, not a line under one word in the middle of
+ * it.
+ */
+input.editable.is-editing,
+select.editable.is-editing {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 1px 2px;
+  background: transparent;
+  border: none;
+}
+
+/*
+ * The grid-mirror autosize trick: an invisible copy of the value (the `::after`)
+ * sizes the grid cell, and the real input is stacked on top of it in the same
+ * cell. Typing a character widens the input by a character, never by jumping
+ * to some fixed field width — which used to fling the colour swatch and every
+ * column after it toward the far edge of the row the moment edit mode started.
+ */
+.autosize {
+  display: inline-grid;
+  vertical-align: bottom;
+  max-width: 100%;
+}
+.autosize::after {
+  content: attr(data-value);
+  visibility: hidden;
+  white-space: pre;
+  font: inherit;
+  padding: 1px 2px;
+  grid-area: 1 / 1;
+}
+.autosize > input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 1ch;
+}
+
+/* The row is what lights up, not the box around each word. */
+tr.is-editing td {
+  background: var(--accent-soft);
+}
+tr.is-editing:hover td {
+  background: var(--accent-soft);
+}
+
+/* ---------------- floating panels ----------------
+ *
+ * Everything that opens over the page — pickers, tooltips, calendars — comes
+ * through `Popover`, which portals to the body. Nothing here may live inside a
+ * table cell: doing that is what made a row grow three hundred pixels tall and
+ * shove the rest of the page down.
+ */
+.popover {
+  z-index: 60;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-3);
+  animation: popover-in var(--t-fast) var(--ease);
+}
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+.tooltip-anchor {
+  display: inline-flex;
+}
+
+/* Opens a floating picker. Reads as the value it holds, not as a control —
+   the cursor and the menu that opens are the only hint. */
+.picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.picker-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The browser's own tooltip cannot be styled; with icon-only buttons the label
+   is the only thing between the reader and a guess, so it gets to look like the
+   rest of the site. */
+.popover.tooltip {
+  max-width: 280px;
+  padding: 6px 10px;
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ---------------- switch ----------------
+ *
+ * For state, not for selection. Ticking rows to act on them together is a
+ * different idea and keeps a box shape.
+ */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch-track {
+  width: 34px;
+  height: 20px;
+  padding: 2px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: background var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+}
+.switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  background: var(--text-muted);
+  transition: transform var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+.switch input:checked + .switch-track {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.switch input:checked + .switch-track .switch-thumb {
+  background: var(--accent);
+  transform: translateX(14px);
+}
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.switch input:disabled + .switch-track {
+  opacity: 0.45;
+}
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.switch-label.is-disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+/* ---------------- date field ---------------- */
+
+.date-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.date-field input {
+  width: 122px;
+  padding-right: 26px;
+  font-variant-numeric: tabular-nums;
+}
+/* What the field is about to complete to, drawn behind the caret. It is not a
+   value yet — leaving the field is what accepts it. */
+.date-ghost {
+  position: absolute;
+  left: 2px;
+  top: 0;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 5px 0;
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: transparent;
+  pointer-events: none;
+  white-space: pre;
+}
+.date-ghost span {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.date-field-cal {
+  position: absolute;
+  right: 1px;
+  width: 26px;
+  height: 26px;
+}
+/* Unreadable input keeps what was typed rather than swallowing it — the border
+   is the only thing that changes. */
+.date-field.is-bad input {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 3px var(--bad-soft);
+}
+.date-range {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.date-range-sep {
+  color: var(--text-muted);
+}
+
+/* The frame comes from `.popover`; this is only the contents. */
+.calendar-pop {
+  padding: var(--sp-2);
+}
+.calendar-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+/* The travel page's month grid is a wall planner with room for daily totals;
+   inside a field the same grid has to be thumbnail-sized. */
+.calendar-pop-grid .calendar-day {
+  min-height: 0;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: var(--fs-xs);
+  background: transparent;
+  border-color: transparent;
+}
+.calendar-day.pickable {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.calendar-day.pickable:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.calendar-day.picked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08111c;
+  font-weight: 600;
+}
+.calendar-pop-foot {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------------- sortable headers ---------------- */
+
+.th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* The arrow is only committed on the column doing the sorting; elsewhere it is
+   a hint that shows up under the pointer. */
+th.sortable .sort-arrow {
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity var(--t-fast) var(--ease);
+}
+th.sortable:hover .sort-arrow {
+  opacity: 0.5;
+}
+th.sortable.is-sorted {
+  color: var(--text);
+}
+th.sortable.is-sorted .sort-arrow {
+  opacity: 1;
+  color: var(--accent);
+}
+th.sortable.num .th-inner {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+/* The column-header gesture, for screens made of cards rather than rows. */
+.sort-strip {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+.sort-strip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.sort-strip-btn svg {
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.sort-strip-btn:hover svg {
+  opacity: 0.5;
+}
+.sort-strip-btn.is-on {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.sort-strip-btn.is-on svg {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ---------------- advisor ----------------
+ *
+ * Each finding leads with the reasoning, in prose. It used to lead with
+ * "12 regras → 1 · food", which says what would change and nothing about
+ * whether you want it.
+ */
+.advice-item {
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
+}
+.advice-lead {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 78ch;
+}
+.advice-lead strong {
+  color: var(--text);
+}
+.advice-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+/* The model's opinion is set apart, because it is a guess and the sentence
+   above it is not. */
+.advice-llm {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--info);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 78ch;
+}
+
+/* Patterns and impacted rows used to be one run-on paragraph, comma-joined
+   until it wrapped five lines deep. A grid reads as a list of separate
+   things because it is one. */
+.advice-details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.advice-details-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px var(--sp-3);
+  margin-top: 4px;
+}
+@media (max-width: 900px) {
+  .advice-details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* A re-analysis on top of a panel that already has content: the old content
+   stays put and legible underneath, dimmed, rather than being torn out and
+   replaced by a bare "a carregar" line. */
+.advisor-panel {
+  position: relative;
+}
+.advisor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 16, 22, 0.72);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(1px);
+}
+.advisor-overlay p {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+/* ---------------- nested rule conditions ----------------
+ *
+ * A group is its operator (E / OU / NÃO) plus an indented stack of children,
+ * each either a condition row or another group. The left border is the only
+ * thing that says "this is inside that" — nesting shown as depth, not as a
+ * box drawn around a box drawn around a box.
+ */
+.cond-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cond-group:not(.cond-group-root) {
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--border);
+}
+.cond-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cond-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cond-group-add {
+  display: flex;
+  gap: var(--sp-2);
+}
+.cond-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cond-row select,
+.cond-row input {
+  min-width: 0;
+}
+.cond-between {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------------- segmented toggle ---------------- */
+
+.seg-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-0);
+}
+.seg-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+.seg-btn:hover:not(.is-on) {
+  color: var(--text);
+}
+.seg-btn.is-on {
+  background: var(--surface-2);
+  color: var(--accent);
 }

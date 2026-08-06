@@ -24,7 +24,10 @@ const PERIOD = /EXTRATO\s+DE\s+(\d{4})\/(\d{2})\/(\d{2})\s+A\s+(\d{4})\/(\d{2})\
 // either as "CONTA SIMPLES N. 45600427404 MOEDA: EUR" or just
 // "CONTA POUPEUP MOEDA: EUR"; the bare "CONTA SIMPLES 2 316.44" line in the
 // summary block must not match.
-const ACCOUNT = /\b(CONTA\s+[A-Za-zÀ-Ü][A-Za-zÀ-ÿ0-9 ]*?)\s+(?:N\.?\s*\d{6,}\s+)?MOEDA\b/i;
+// The account number is what identifies the account across document types: an
+// advice note calls the same account "Conta Depósitos à Ordem" where the
+// statement calls it "CONTA SIMPLES".
+const ACCOUNT = /\b(CONTA\s+[A-Za-zÀ-Ü][A-Za-zÀ-ÿ0-9 ]*?)\s+(?:N\.?\s*(\d{6,})\s+)?MOEDA\b/i;
 // Booking date then value date, both MM.DD, at the very start of the row.
 const ROW_DATES = /^\s*(\d{1,2})\.(\d{2})\s+(\d{1,2})\.(\d{2})(?=\s|$)/;
 // Statement amounts use a space or dot as thousands separator: "1 815.55".
@@ -137,6 +140,7 @@ export function parseExtratoRows(pages) {
   let cols = null;
   let period = null;
   let account = null;
+  let accountNumber = null;
   let pendingDescription = null;
 
   for (const page of pages) {
@@ -164,6 +168,7 @@ export function parseExtratoRows(pages) {
       const accountMatch = text.match(ACCOUNT);
       if (accountMatch) {
         account = accountMatch[1].replace(/\s+/g, ' ').trim();
+        accountNumber = accountMatch[2] || null;
         pendingDescription = null;
         continue;
       }
@@ -213,6 +218,7 @@ export function parseExtratoRows(pages) {
         description: clean,
         amount: entry.column === 'debit' ? -entry.value : entry.value,
         account,
+        accountNumber,
         balance: balance ? balance.value : null,
       });
     }

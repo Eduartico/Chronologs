@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api.js';
+import { formatDateTime } from '../lib/format.js';
+import Icon from '../components/Icon.jsx';
 
 /**
  * Most ActivoBank mail is not a statement — repeated template notices,
@@ -136,7 +138,9 @@ function ActivobankCard() {
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3>🏦 ActivoBank (via Gmail)</h3>
+        <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="accounts" size={16} /> ActivoBank (via Gmail)
+        </h3>
         <div style={{ display: 'flex', gap: 14 }}>
           <StatusDot ok={status.hasCredentials} label="Credentials" />
           <StatusDot ok={status.connected} label="Google connected" />
@@ -145,7 +149,7 @@ function ActivobankCard() {
       <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '6px 0 12px' }}>
         Scans every ActivoBank email and attachment in your Gmail and builds the transaction
         history. You can also upload statements (PDF/CSV) manually below.
-        {status.lastSyncAt && ` Last sync: ${new Date(status.lastSyncAt).toLocaleString()}`}
+        {status.lastSyncAt && ` Última sincronização: ${formatDateTime(status.lastSyncAt)}`}
       </p>
 
       {!status.connected && (
@@ -297,15 +301,26 @@ function PricempireCard() {
     }
   };
 
-  const refreshNow = async () => {
+  /**
+   * Resync downloads each selected portfolio's own CSV export and imports it,
+   * which is the same data path as a manual upload. The old scraper only runs
+   * if the export button cannot be found, and the server says so when it does.
+   */
+  const resyncNow = async () => {
     setBusy(true);
     setMessage(null);
     try {
       const result = await api.ingestPricempire();
-      setMessage(`Refresh complete: ${result.new ?? 0} new transactions, ${result.items ?? 0} items priced.`);
+      const parts = [
+        `${result.new ?? 0} transacções novas de ${result.parsed ?? 0} linhas`,
+        result.duplicates ? `${result.duplicates} já registadas` : null,
+        result.portfolios ? `${result.portfolios} portefólio(s)` : null,
+        result.method === 'scrape-fallback' ? 'via scraper (export indisponível)' : null,
+      ].filter(Boolean);
+      setMessage(`Ressincronização concluída: ${parts.join(', ')}.`);
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage('Erro: ' + err.message);
     } finally {
       setBusy(false);
     }
@@ -318,13 +333,16 @@ function PricempireCard() {
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3>🔫 Pricempire (CS2 skins)</h3>
+        <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="gaming" size={16} /> Pricempire (CS2 skins)
+        </h3>
         <StatusDot ok={status.sessionOk} label={status.sessionOk ? 'Session active' : 'Not connected'} />
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '6px 0 12px' }}>
-        Opens a real browser window for you to log in once; the session is kept alive for
-        automatic refreshes. Pick which portfolios to import.
-        {status.lastSync && ` Last sync: ${new Date(status.lastSync).toLocaleString()}`}
+        Abre uma janela de browser real para entrares uma vez; a sessão fica guardada para as
+        sincronizações seguintes. A ressincronização descarrega o CSV de <strong>Export</strong> de
+        cada portefólio escolhido e importa-o.
+        {status.lastSync && ` Última sincronização: ${formatDateTime(status.lastSync)}`}
       </p>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -334,10 +352,15 @@ function PricempireCard() {
         {status.sessionOk && (
           <>
             <button className="btn-ghost" onClick={() => loadPortfolios(false)} disabled={busy}>
-              Choose portfolios{status.selectedPortfolios?.length ? ` (${status.selectedPortfolios.length} selected)` : ''}
+              Escolher portefólios{status.selectedPortfolios?.length ? ` (${status.selectedPortfolios.length} seleccionados)` : ''}
             </button>
-            <button className="btn-primary" onClick={refreshNow} disabled={busy || !status.selectedPortfolios?.length}>
-              {busy ? 'Working…' : 'Refresh now'}
+            <button
+              className="btn-primary"
+              onClick={resyncNow}
+              disabled={busy || !status.selectedPortfolios?.length}
+              title="Abre o portefólio, descarrega o CSV de export e importa-o"
+            >
+              {busy ? 'A trabalhar…' : 'Ressincronizar agora'}
             </button>
           </>
         )}
@@ -351,8 +374,8 @@ function PricempireCard() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {portfoliosFetchedAt
-                  ? `Cached list from ${new Date(portfoliosFetchedAt).toLocaleString()}`
-                  : 'Not cached yet'}
+                  ? `Lista em cache de ${formatDateTime(portfoliosFetchedAt)}`
+                  : 'Ainda sem cache'}
               </span>
               <button
                 className="btn-ghost btn-sm"
@@ -361,12 +384,12 @@ function PricempireCard() {
                 title="Opens the browser and re-reads the list from Pricempire (~10s)"
                 style={{ marginLeft: 'auto' }}
               >
-                {busy ? '⏳ …' : '↻ Refresh list'}
+                {busy ? '⏳ …' : '↻ Actualizar lista'}
               </button>
             </div>
             {portfolios.length === 0 && (
               <p style={{ color: 'var(--text-muted)' }}>
-                No portfolios cached — click "Refresh list".
+                Nenhum portefólio em cache — carrega em "Actualizar lista".
               </p>
             )}
             {portfolios.map((p) => (

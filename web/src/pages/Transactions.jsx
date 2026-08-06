@@ -1,20 +1,76 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { formatDate } from '../lib/format.js';
+import { usePersistentState } from '../lib/usePersistentState.js';
 import { api } from '../lib/api.js';
-import TagChips from '../components/TagChips.jsx';
+import SubcategoryPicker from '../components/SubcategoryPicker.jsx';
+import Icon from '../components/Icon.jsx';
+import CategoryPicker from '../components/CategoryPicker.jsx';
+import SortHeader from '../components/ui/SortHeader.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import RowActions from '../components/ui/RowActions.jsx';
+import DateField, { DateRangeField } from '../components/ui/DateField.jsx';
 
 const PAGE_SIZE = 50;
 
-// Column definitions drive both the header row and the comparator, so adding a
-// sortable column is one entry rather than three edits.
+// Column definitions drive the header row, the comparator and the column
+// widths, so adding a sortable column is one entry rather than four edits.
+//
+// The widths are not decoration. The table is `table-layout: fixed`, which is
+// what stops a cell's contents from resizing its column: opening the category
+// picker used to make the row three hundred pixels tall and shove the page
+// down, and adding a subcategory left the column a different width than before.
 const COLUMNS = [
-  { key: 'date', label: 'Data', sortable: true, get: (t) => t.date || '' },
+  { key: 'date', label: 'Data', sortable: true, get: (t) => t.date || '', width: 100 },
   { key: 'description', label: 'Descrição', sortable: true, get: (t) => (t.description || '').toLowerCase() },
-  { key: 'merchant', label: 'Comerciante', sortable: true, get: (t) => (t.merchant || '').toLowerCase() },
-  { key: 'amount', label: 'Montante', sortable: true, get: (t) => Number(t.amount) || 0, align: 'right' },
-  { key: 'category', label: 'Categoria', sortable: true, get: (t) => t.category || '' },
-  { key: 'tags', label: 'Tags', sortable: false },
-  { key: 'status', label: 'Estado', sortable: true, get: (t) => t.status || '' },
-  { key: 'actions', label: 'Acções', sortable: false },
+  { key: 'merchant', label: 'Comerciante', sortable: true, get: (t) => (t.merchant || '').toLowerCase(), width: 200 },
+  { key: 'amount', label: 'Montante', sortable: true, get: (t) => Number(t.amount) || 0, align: 'right', width: 110 },
+  { key: 'category', label: 'Categoria', sortable: true, get: (t) => t.category || '', width: 170 },
+  { key: 'tags', label: 'Subcategorias', sortable: false, width: 200 },
+  { key: 'status', label: 'Estado', sortable: true, get: (t) => t.status || '', width: 110 },
+  // The actions column has no heading: the icons in it say what they do, and a
+  // word above them only widens the column.
+  { key: 'actions', label: '', sortable: false, width: 80 },
+];
+
+const STATUS_LABELS = {
+  all: 'Todos os estados',
+  pending: 'Por classificar',
+  categorized: 'Categorizadas',
+  overridden: 'Corrigidas à mão',
+};
+
+// Every filter lives in one object and goes to the server together. Splitting
+// them between client and server is what made "All categories" look broken:
+// picking a category while the status filter still said "pending" could only
+// ever return nothing, since a pending transaction has no category yet.
+const EMPTY_FILTERS = {
+  status: 'all',
+  search: '',
+  category: '',
+  tag: '',
+  startDate: '',
+  endDate: '',
+  minAmount: '',
+  maxAmount: '',
+  direction: '',
+};
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthsAgo(months) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+const DATE_PRESETS = [
+  { id: 'all', label: 'Sempre', range: () => ({ startDate: '', endDate: '' }) },
+  { id: 'month', label: 'Este mês', range: () => ({ startDate: todayIso().slice(0, 8) + '01', endDate: todayIso() }) },
+  { id: '3m', label: '3 meses', range: () => ({ startDate: monthsAgo(3), endDate: todayIso() }) },
+  { id: '12m', label: '12 meses', range: () => ({ startDate: monthsAgo(12), endDate: todayIso() }) },
+  { id: 'year', label: 'Este ano', range: () => ({ startDate: `${todayIso().slice(0, 4)}-01-01`, endDate: todayIso() }) },
 ];
 
 function formatAmount(amount) {
@@ -24,18 +80,6 @@ function formatAmount(amount) {
   return <span className={cls}>{sign}€{Math.abs(num).toFixed(2)}</span>;
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-}
 
 function StatusBadge({ status }) {
   const map = {
@@ -48,39 +92,65 @@ function StatusBadge({ status }) {
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
+  const [totals, setTotals] = useState({ matched: 0, total: 0 });
   const [categories, setCategories] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [travels, setTravels] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending');
-  const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState(null);
   const [suggestions, setSuggestions] = useState({});
   const [toast, setToast] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showMore, setShowMore] = usePersistentState('transactions.showMore', false);
+  const [sort, setSort] = usePersistentState('transactions.sort', { key: 'date', dir: 'desc' });
+  const [page, setPage] = usePersistentState('transactions.page', 0);
+
+  const [filters, setFilters] = usePersistentState('transactions.filters', EMPTY_FILTERS);
+  // The search box is debounced through its own state so every keystroke does
+  // not become a request.
+  const [searchInput, setSearchInput] = usePersistentState('transactions.searchInput', '');
+
   const [manualEntry, setManualEntry] = useState({
     description: '',
     merchant: '',
     amount: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
   });
 
-  const [tags, setTags] = useState([]);
-  const [tagFilter, setTagFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [addingTagFor, setAddingTagFor] = useState(null);
-  const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
-  const [page, setPage] = useState(0);
+  const setFilter = (patch) => setFilters((f) => ({ ...f, ...patch }));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.searchTransactions(filters);
+      setTransactions(data.transactions);
+      setTotals({ matched: data.matched, total: data.total });
+    } catch (err) {
+      showToast('Erro: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
 
   useEffect(() => {
-    loadTransactions();
-    loadCategories();
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    api.getCategories(true).then(setCategories).catch(() => {});
     api.getTags().then(setTags).catch(() => {});
-  }, [filter]);
+    api.getTravels().then(setTravels).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setFilter({ search: searchInput }), 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Any change to what is being shown puts the reader back on the first page —
   // staying on page 12 of a now-shorter list looks like an empty result.
   useEffect(() => {
     setPage(0);
-  }, [filter, tagFilter, categoryFilter, sort]);
+  }, [filters, sort]);
 
   function toggleSort(key) {
     setSort((prev) =>
@@ -90,70 +160,85 @@ export default function Transactions() {
 
   const visible = useMemo(() => {
     const column = COLUMNS.find((c) => c.key === sort.key);
-    const list = transactions.filter(
-      (tx) =>
-        (!tagFilter || (tx.tags || []).includes(tagFilter)) &&
-        (!categoryFilter || tx.category === categoryFilter)
-    );
-    if (!column?.get) return list;
+    if (!column?.get) return transactions;
     const dir = sort.dir === 'asc' ? 1 : -1;
-    return [...list].sort((a, b) => {
+    return [...transactions].sort((a, b) => {
       const x = column.get(a);
       const y = column.get(b);
       if (x < y) return -1 * dir;
       if (x > y) return 1 * dir;
       return 0;
     });
-  }, [transactions, tagFilter, categoryFilter, sort]);
+  }, [transactions, sort]);
+
+  // Which trip a transaction falls inside, so travel spending is recognisable
+  // without opening the travel page.
+  const travelFor = useCallback(
+    (tx) => {
+      const d = String(tx.date).slice(0, 10);
+      return travels.find((t) => t.window && d >= t.window.from && d <= t.window.to) || null;
+    },
+    [travels]
+  );
 
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const pageRows = visible.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const categoryByName = useMemo(
+    () => Object.fromEntries(categories.map((c) => [c.name, c])),
+    [categories]
+  );
+
+  const activeFilters = useMemo(() => {
+    const chips = [];
+    if (filters.status !== 'all') chips.push({ key: 'status', label: STATUS_LABELS[filters.status], reset: { status: 'all' } });
+    if (filters.search) chips.push({ key: 'search', label: `"${filters.search}"`, reset: { search: '' } });
+    if (filters.category) chips.push({ key: 'category', label: filters.category, reset: { category: '' } });
+    if (filters.tag) {
+      const tag = tags.find((t) => t.id === filters.tag);
+      chips.push({ key: 'tag', label: tag?.name || 'tag', reset: { tag: '' } });
+    }
+    if (filters.startDate || filters.endDate) {
+      chips.push({
+        key: 'dates',
+        label: `${filters.startDate ? formatDate(filters.startDate) : '…'} → ${filters.endDate ? formatDate(filters.endDate) : '…'}`,
+        reset: { startDate: '', endDate: '' },
+      });
+    }
+    if (filters.minAmount || filters.maxAmount) {
+      chips.push({
+        key: 'amount',
+        label: `€${filters.minAmount || '0'} – €${filters.maxAmount || '∞'}`,
+        reset: { minAmount: '', maxAmount: '' },
+      });
+    }
+    if (filters.direction) {
+      chips.push({
+        key: 'direction',
+        label: filters.direction === 'debit' ? 'Só débitos' : 'Só créditos',
+        reset: { direction: '' },
+      });
+    }
+    return chips;
+  }, [filters, tags]);
 
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   }
 
-  async function loadTransactions() {
-    setLoading(true);
-    try {
-      const params = { status: filter === 'all' ? undefined : filter };
-      if (search) params.search = search;
-      const data = await api.getTransactions(params);
-      setTransactions(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadCategories() {
-    try {
-      const data = await api.getCategories();
-      setCategories(data);
-    } catch {}
+  async function refreshAll() {
+    await load();
+    api.getCategories(true).then(setCategories).catch(() => {});
   }
 
   async function handleCategorize(tx, category) {
     try {
-      await api.categorize(tx.id, category);
-      showToast(`Categorized as "${category}"`);
-      loadTransactions();
-      setEditing(null);
+      if (tx.status === 'overridden') await api.overrideCategory(tx.id, category);
+      else await api.categorize(tx.id, category);
+      showToast(`Categorizada como "${category}"`);
+      refreshAll();
     } catch (err) {
-      showToast('Error: ' + err.message);
-    }
-  }
-
-  async function handleOverride(tx, newCategory) {
-    try {
-      await api.overrideCategory(tx.id, newCategory);
-      showToast(`Overridden to "${newCategory}"`);
-      loadTransactions();
-      setEditing(null);
-    } catch (err) {
-      showToast('Error: ' + err.message);
+      showToast('Erro: ' + err.message);
     }
   }
 
@@ -165,32 +250,27 @@ export default function Transactions() {
     } catch {}
   }
 
-  function handleSearch() {
-    loadTransactions();
-  }
-
   async function handleAddTag(tx, tagId) {
     try {
       await api.addTransactionTag(tx.id, tagId);
-      setAddingTagFor(null);
-      loadTransactions();
+      load();
     } catch (err) {
-      showToast('Error: ' + err.message);
+      showToast('Erro: ' + err.message);
     }
   }
 
   async function handleRemoveTag(tx, tagId) {
     try {
       await api.removeTransactionTag(tx.id, tagId);
-      loadTransactions();
+      load();
     } catch (err) {
-      showToast('Error: ' + err.message);
+      showToast('Erro: ' + err.message);
     }
   }
 
   async function handleAddManual() {
     if (!manualEntry.description || !manualEntry.amount || !manualEntry.date) {
-      showToast('Description, amount and date are required');
+      showToast('Descrição, montante e data são obrigatórios');
       return;
     }
     try {
@@ -200,26 +280,31 @@ export default function Transactions() {
         amount: parseFloat(manualEntry.amount),
         date: manualEntry.date,
       });
-      showToast('Transaction added');
+      showToast('Transacção adicionada');
       setShowAdd(false);
-      setManualEntry({
-        description: '',
-        merchant: '',
-        amount: '',
-        date: new Date().toISOString().slice(0, 10),
-      });
-      loadTransactions();
+      setManualEntry({ description: '', merchant: '', amount: '', date: todayIso() });
+      load();
     } catch (err) {
-      showToast('Error: ' + err.message);
+      showToast('Erro: ' + err.message);
     }
   }
+
+  const activePreset = DATE_PRESETS.find((p) => {
+    const r = p.range();
+    return r.startDate === filters.startDate && r.endDate === filters.endDate;
+  });
 
   return (
     <div>
       <div className="page-header">
-        <h2>Transactions</h2>
+        <div>
+          <h2>Transacções</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
+            {loading ? 'A carregar…' : `${totals.matched} de ${totals.total} transacções`}
+          </p>
+        </div>
         <button className="btn-primary" onClick={() => setShowAdd(!showAdd)}>
-          + Add manual
+          + Adicionar manual
         </button>
       </div>
 
@@ -227,242 +312,268 @@ export default function Transactions() {
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <input
-              placeholder="Description"
+              placeholder="Descrição"
               value={manualEntry.description}
               onChange={(e) => setManualEntry({ ...manualEntry, description: e.target.value })}
               style={{ flex: 2, minWidth: 180 }}
             />
             <input
-              placeholder="Merchant (optional)"
+              placeholder="Comerciante (opcional)"
               value={manualEntry.merchant}
               onChange={(e) => setManualEntry({ ...manualEntry, merchant: e.target.value })}
               style={{ flex: 1, minWidth: 140 }}
             />
             <input
-              placeholder="Amount (e.g. -12.50)"
+              placeholder="Montante (ex.: -12.50)"
               type="number"
               step="0.01"
               value={manualEntry.amount}
               onChange={(e) => setManualEntry({ ...manualEntry, amount: e.target.value })}
-              style={{ width: 140 }}
+              style={{ width: 150 }}
             />
-            <input
-              type="date"
+            <DateField
               value={manualEntry.date}
-              onChange={(e) => setManualEntry({ ...manualEntry, date: e.target.value })}
+              onChange={(date) => setManualEntry({ ...manualEntry, date })}
+              title="Data"
             />
-            <button className="btn-green" onClick={handleAddManual}>Save</button>
-            <button className="btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+            <RowActions editing onSave={handleAddManual} onCancel={() => setShowAdd(false)} />
           </div>
         </div>
       )}
 
       <div className="filter-bar">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="pending">Pending Classification</option>
-          <option value="all">All</option>
-          <option value="categorized">Categorized</option>
-          <option value="overridden">Overridden</option>
-        </select>
-        <input
-          placeholder="Search description or merchant..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-        />
-        <button className="btn-ghost" onClick={handleSearch}>
-          Search
-        </button>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.name}>{c.name}</option>
+        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
+          {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
           ))}
         </select>
-        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-          <option value="">All tags</option>
-          {tags.map((t) => (
-            <option key={t.id} value={t.id}>
-              🏷 {t.name}
+        <input
+          placeholder="Pesquisar descrição ou comerciante…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+        <select value={filters.category} onChange={(e) => setFilter({ category: e.target.value })}>
+          <option value="">Todas as categorias</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}{c.count ? ` (${c.count})` : ''}
             </option>
           ))}
         </select>
-        <button className="btn-ghost" onClick={loadTransactions} style={{ marginLeft: 'auto' }}>
-          ↻ Refresh
+        <select value={filters.tag} onChange={(e) => setFilter({ tag: e.target.value })}>
+          <option value="">Todas as tags</option>
+          {tags.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        <button className="btn-ghost" onClick={() => setShowMore((s) => !s)}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="filter" size={15} /> {showMore ? 'Menos filtros' : 'Mais filtros'}
+          </span>
+        </button>
+        <button className="btn-ghost" onClick={load} style={{ marginLeft: 'auto' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="refresh" size={15} /> Actualizar
+          </span>
         </button>
       </div>
 
+      {showMore && (
+        <div className="card" style={{ marginBottom: 12, display: 'grid', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>Datas</span>
+            {DATE_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                className={activePreset?.id === p.id ? 'btn-primary btn-sm' : 'btn-ghost btn-sm'}
+                onClick={() => setFilter(p.range())}
+              >
+                {p.label}
+              </button>
+            ))}
+            <DateRangeField
+              from={filters.startDate}
+              to={filters.endDate}
+              onChange={({ from, to }) => setFilter({ startDate: from, endDate: to })}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>Montante</span>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="mínimo €"
+              value={filters.minAmount}
+              onChange={(e) => setFilter({ minAmount: e.target.value })}
+              style={{ width: 130, minWidth: 0 }}
+            />
+            <input
+              type="number"
+              step="0.01"
+              placeholder="máximo €"
+              value={filters.maxAmount}
+              onChange={(e) => setFilter({ maxAmount: e.target.value })}
+              style={{ width: 130, minWidth: 0 }}
+            />
+            <select value={filters.direction} onChange={(e) => setFilter({ direction: e.target.value })}>
+              <option value="">Débitos e créditos</option>
+              <option value="debit">Só débitos</option>
+              <option value="credit">Só créditos</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {activeFilters.length > 0 && (
+        <div className="filter-chips">
+          <span>Filtros:</span>
+          {activeFilters.map((chip) => (
+            <span key={chip.key} className="filter-chip">
+              {chip.label}
+              <button onClick={() => setFilter(chip.reset)} title="Remover filtro">
+                <Icon name="close" size={12} />
+              </button>
+            </span>
+          ))}
+          <button
+            className="btn-ghost btn-sm"
+            onClick={() => {
+              setSearchInput('');
+              setFilters(EMPTY_FILTERS);
+            }}
+          >
+            Limpar tudo
+          </button>
+        </div>
+      )}
+
       {loading ? (
-        <div className="empty-state"><p>Loading...</p></div>
+        <div className="empty-state"><p>A carregar…</p></div>
       ) : visible.length === 0 ? (
         <div className="empty-state">
-          <h3>No transactions found</h3>
-          <p>Transactions will appear here after ingestion.</p>
+          <h3>Nenhuma transacção corresponde</h3>
+          {/* The specific dead end that used to read as a broken button. */}
+          {filters.status === 'pending' && filters.category && filters.category !== 'uncategorized' ? (
+            <p>
+              O estado <strong>Por classificar</strong> exclui tudo o que já tem categoria, por isso
+              nunca pode devolver transacções em <strong>{filters.category}</strong>.{' '}
+              <button className="btn-ghost btn-sm" onClick={() => setFilter({ status: 'all' })}>
+                Mostrar todos os estados
+              </button>
+            </p>
+          ) : (
+            <p>
+              {totals.total} transacções no total — os filtros activos excluem-nas todas.{' '}
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => {
+                  setSearchInput('');
+                  setFilters(EMPTY_FILTERS);
+                }}
+              >
+                Limpar filtros
+              </button>
+            </p>
+          )}
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'auto' }}>
-          <table>
+          <table className="table-fixed">
             <thead>
               <tr>
                 {COLUMNS.map((col) => (
-                  <th
-                    key={col.key}
-                    className={col.sortable ? 'sortable' : undefined}
-                    onClick={col.sortable ? () => toggleSort(col.key) : undefined}
-                    style={col.align === 'right' ? { textAlign: 'right' } : undefined}
-                  >
-                    {col.label}
-                    {sort.key === col.key && (
-                      <span className="sort-arrow">{sort.dir === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </th>
+                  <SortHeader key={col.key} column={col} sort={sort} onToggle={toggleSort} />
                 ))}
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((tx) => (
-                <tr key={tx.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(tx.date)}</td>
-                  <td>
-                    {tx.description}
-                    {tx.links && tx.links.length > 0 && (
-                      <span
-                        title={`Linked to: ${tx.links
-                          .map((l) => l.transactionIds.filter((id) => id !== tx.id).join(', '))
-                          .join('; ')}`}
-                        style={{ marginLeft: 6, cursor: 'help' }}
-                      >
-                        🔗
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ color: 'var(--text-muted)' }}>{tx.merchant || '—'}</td>
-                  <td>{formatAmount(tx.amount)}</td>
-                  <td>
-                    {editing === tx.id ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <select
-                          defaultValue={tx.category}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              if (tx.status === 'overridden') {
-                                handleOverride(tx, e.target.value);
-                              } else {
-                                handleCategorize(tx, e.target.value);
-                              }
-                            }
-                          }}
-                          style={{ minWidth: 140 }}
-                        >
-                          <option value="">Select...</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="btn-ghost btn-sm" onClick={() => setEditing(null)}>
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
+              {pageRows.map((tx) => {
+                const travel = travelFor(tx);
+                return (
+                  <tr key={tx.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(tx.date)}</td>
+                    <td>
+                      {tx.description}
+                      {tx.links && tx.links.length > 0 && (
                         <span
-                          style={{ cursor: 'pointer', borderBottom: '1px dashed var(--border)' }}
-                          onClick={() => {
-                            setEditing(tx.id);
-                            loadSuggestions(tx.id);
-                          }}
+                          title={tx.links.map((l) => l.note || l.linkId).join('; ')}
+                          style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle', color: 'var(--info)' }}
                         >
-                          {tx.category || 'uncategorized'}
+                          <Icon name="link" size={13} />
                         </span>
-                        {suggestions[tx.id] && suggestions[tx.id].length > 0 && (
-                          <div className="suggestions">
-                            {suggestions[tx.id]
-                              .filter((s) => s.category !== tx.category)
-                              .slice(0, 3)
-                              .map((s) => (
-                                <span
-                                  key={s.category}
-                                  className="tag"
-                                  onClick={() =>
-                                    tx.status === 'overridden'
-                                      ? handleOverride(tx, s.category)
-                                      : handleCategorize(tx, s.category)
-                                  }
-                                >
-                                  {s.category}
-                                  {s.confidence > 0 && ` (${Math.round(s.confidence * 100)}%)`}
-                                </span>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <TagChips tagIds={tx.tags || []} tags={tags} onRemove={(id) => handleRemoveTag(tx, id)} />
-                      {addingTagFor === tx.id ? (
-                        <select
-                          autoFocus
-                          defaultValue=""
-                          onChange={(e) => e.target.value && handleAddTag(tx, e.target.value)}
-                          onBlur={() => setAddingTagFor(null)}
-                          style={{ fontSize: 11, padding: '2px 4px' }}
+                      )}
+                      {travel && (
+                        <span
+                          title={`Durante a viagem "${travel.name}"`}
+                          style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle', color: 'var(--info)' }}
                         >
-                          <option value="">tag…</option>
-                          {tags
-                            .filter((t) => !(tx.tags || []).includes(t.id))
-                            .map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
+                          <Icon name="travel" size={13} />
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ color: 'var(--text-muted)' }}>{tx.merchant || '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(tx.amount)}</td>
+                    {/*
+                      The category cell no longer changes size when it is being
+                      used: the picker floats over the table instead of growing
+                      inside this cell.
+                    */}
+                    <td>
+                      <CategoryPicker
+                        compact
+                        categories={categories}
+                        selected={tx.category || 'uncategorized'}
+                        onPick={(name) => handleCategorize(tx, name)}
+                      />
+                      {suggestions[tx.id] && suggestions[tx.id].length > 0 && (
+                        <div className="suggestions">
+                          {suggestions[tx.id]
+                            .filter((s) => s.category !== tx.category)
+                            .slice(0, 2)
+                            .map((s) => (
+                              <span
+                                key={s.category}
+                                className="tag"
+                                onClick={() => handleCategorize(tx, s.category)}
+                              >
+                                {s.category}
+                                {s.confidence > 0 && ` (${Math.round(s.confidence * 100)}%)`}
+                              </span>
                             ))}
-                        </select>
-                      ) : (
-                        <span
-                          style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
-                          onClick={() => setAddingTagFor(tx.id)}
-                          title="Add tag"
-                        >
-                          +🏷
-                        </span>
+                        </div>
                       )}
-                    </div>
-                  </td>
-                  <td>
-                    <StatusBadge status={tx.status} />
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {editing !== tx.id && (
-                        <button
-                          className="btn-ghost btn-sm"
-                          onClick={() => {
-                            setEditing(tx.id);
-                            loadSuggestions(tx.id);
-                          }}
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <button
-                        className="btn-red btn-sm"
-                        onClick={() => {
-                          if (tx.status === 'overridden') {
-                            handleOverride(tx, 'uncategorized');
-                          } else {
-                            handleCategorize(tx, 'uncategorized');
-                          }
-                        }}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      <SubcategoryPicker
+                        subcategories={tags}
+                        selected={tx.tags || []}
+                        onAdd={(id) => handleAddTag(tx, id)}
+                        onRemove={(id) => handleRemoveTag(tx, id)}
+                      />
+                    </td>
+                    <td><StatusBadge status={tx.status} /></td>
+                    <td>
+                      {/* "Repor" sends the row back to uncategorized — it undoes
+                          a decision rather than deleting anything, so it is a
+                          refresh, not a bin. */}
+                      <div className="row-actions">
+                        <IconButton
+                          icon="brain"
+                          label="Ver o que as regras sugerem para esta"
+                          onClick={() => loadSuggestions(tx.id)}
+                        />
+                        <IconButton
+                          icon="refresh"
+                          tone="danger"
+                          label="Repor: volta a uncategorized"
+                          onClick={() => handleCategorize(tx, 'uncategorized')}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 

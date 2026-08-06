@@ -9,7 +9,7 @@
     "web": "cd web && npx vite",
     "start": "node server/index.js",
     "build": "cd web && npx vite build",
-    "test": "node --test \"server/**/*.test.js\""
+    "test": "node --test \"server/**/*.test.js\" \"web/src/lib/**/*.test.js\""
   },
   "dependencies": {
     "express": "^4.21.0",

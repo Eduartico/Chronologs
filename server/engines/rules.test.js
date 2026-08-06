@@ -141,3 +141,159 @@ test('lenient matching skips date/amount/source conditions for pseudo-transactio
   assert.equal(ruleMatches(pseudo, rule), false);
   assert.equal(ruleMatches(pseudo, rule, { lenient: true }), true);
 });
+
+// ---------- nested condition trees ----------
+//
+// `conditions.tree` is what lets a rule say "(A or B) and not C" — the flat
+// shape above can only AND groups together and OR entries inside `text`. Every
+// rule the correction-learning path writes stays in that flat shape forever;
+// these only exercise the opt-in path a rule takes when built through the tree
+// editor.
+
+const supermarketTx = (overrides = {}) => ({
+  description: 'COMPRA 0412 CONTINENTE MATOSINHOS',
+  merchant: 'CONTINENTE MATOSINHOS',
+  date: '2026-07-15',
+  amount: -42.5,
+  source: 'activobank',
+  ...overrides,
+});
+
+test('a tree rule with no tree falls through to the flat evaluator unchanged', () => {
+  // The ~400 learned rules already on file have no `tree` key at all — this is
+  // what proves adding the feature could not have touched them.
+  const rule = {
+    id: 'r',
+    enabled: true,
+    conditions: { text: [{ field: 'any', op: 'contains', value: 'continente' }] },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx(), rule), true);
+});
+
+test('"any" (OR) matches when either branch matches', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'any',
+        children: [
+          { field: 'merchant', op: 'contains', value: 'pingo doce' },
+          { field: 'merchant', op: 'contains', value: 'continente' },
+        ],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx(), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ merchant: 'LIDL PORTO' }), rule), false);
+});
+
+test('"all" (AND) requires every branch', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'all',
+        children: [
+          { field: 'merchant', op: 'contains', value: 'continente' },
+          { field: 'direction', op: 'equals', value: 'debit' },
+        ],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx(), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ amount: 42.5 }), rule), false); // credit, fails the second branch
+});
+
+test('"not" inverts its children', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'all',
+        children: [
+          { field: 'merchant', op: 'contains', value: 'continente' },
+          { op: 'not', children: [{ field: 'amount', op: 'gt', value: 100 }] },
+        ],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx(), rule), true); // 42.50, not over 100
+  assert.equal(ruleMatches(supermarketTx({ amount: -150 }), rule), false); // over 100, NOT excludes it
+});
+
+test('groups nest: (A or B) and not C', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'all',
+        children: [
+          {
+            op: 'any',
+            children: [
+              { field: 'merchant', op: 'contains', value: 'continente' },
+              { field: 'merchant', op: 'contains', value: 'pingo doce' },
+            ],
+          },
+          { op: 'not', children: [{ field: 'direction', op: 'equals', value: 'credit' }] },
+        ],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx(), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ merchant: 'PINGO DOCE MAIA' }), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ merchant: 'LIDL' }), rule), false); // matches neither OR branch
+  assert.equal(ruleMatches(supermarketTx({ amount: 42.5 }), rule), false); // credit, NOT excludes it
+});
+
+test('amount "between" on a tree leaf', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: { op: 'all', children: [{ field: 'amount', op: 'between', value: { min: 10, max: 50 } }] },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx({ amount: -42.5 }), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ amount: -5 }), rule), false);
+  assert.equal(ruleMatches(supermarketTx({ amount: -80 }), rule), false);
+});
+
+test('date "between" on a tree leaf', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'all',
+        children: [{ field: 'date', op: 'between', value: { from: '2026-07-01', to: '2026-07-31' } }],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  assert.equal(ruleMatches(supermarketTx({ date: '2026-07-15' }), rule), true);
+  assert.equal(ruleMatches(supermarketTx({ date: '2026-08-01' }), rule), false);
+});
+
+test('a tree leaf is lenient the same way a flat condition is', () => {
+  const rule = {
+    id: 'r',
+    conditions: {
+      tree: {
+        op: 'all',
+        children: [
+          { field: 'merchant', op: 'contains', value: 'continente' },
+          { field: 'amount', op: 'gt', value: 10 },
+        ],
+      },
+    },
+    actions: { setCategory: 'food', addTags: [] },
+  };
+  const pseudo = { description: '', merchant: 'CONTINENTE', date: null, amount: null, source: null };
+  assert.equal(ruleMatches(pseudo, rule), false);
+  assert.equal(ruleMatches(pseudo, rule, { lenient: true }), true);
+});

@@ -9,10 +9,12 @@ import {
   sortTransactions,
 } from './suggest.js';
 
-// The context builder reads the user's rules from disk; these tests only assert
-// on behaviour that comes from the bundled templates/keywords plus the history
-// passed in explicitly, so a populated rules.json cannot break them.
-const ctx = (history = []) => buildSuggestionContext(history);
+// The context builder reads the user's rules and trips from disk; these tests
+// only assert on behaviour that comes from the bundled templates/keywords plus
+// what is passed in explicitly, so a populated rules.json or travels.json
+// cannot break them. Trips are injected because they are date-driven, and the
+// fixture dates would otherwise land inside whichever holiday is on file.
+const ctx = (history = [], travels = []) => buildSuggestionContext(history, { travels });
 
 const tx = (description, extra = {}) => ({
   id: extra.id || description,
@@ -64,6 +66,59 @@ test('a university payment is suggested as education', () => {
   const s = suggestForTransaction(tx('PAG SERV 10316/208858552 UNIVERSIDADE DO PORTO'), ctx());
   assert.equal(s[0].category, 'education');
   assert.equal(s[0].source, 'keyword');
+});
+
+const TRIP = [
+  {
+    id: 'trip-1',
+    name: 'Leste Europeu',
+    startDate: '2025-02-12',
+    endDate: '2025-03-04',
+    forgivingDays: 2,
+    status: 'confirmed',
+    category: 'travel',
+  },
+];
+
+test('spending on a date inside a trip is suggested as travel', () => {
+  const s = suggestForTransaction(tx('COMPRA 0412 ZING BURGER BUDAPEST HU', { date: '2025-02-20' }), ctx([], TRIP));
+  const travel = s.find((x) => x.source === 'travel');
+  assert.equal(travel.category, 'travel');
+  assert.match(travel.reason, /Leste Europeu/);
+});
+
+test('spending outside every trip window gets no travel suggestion', () => {
+  const s = suggestForTransaction(tx('COMPRA 0412 ZING BURGER BUDAPEST HU', { date: '2025-06-20' }), ctx([], TRIP));
+  assert.equal(s.find((x) => x.source === 'travel'), undefined);
+});
+
+test('a rejected trip never suggests anything', () => {
+  const rejected = [{ ...TRIP[0], status: 'rejected' }];
+  const s = suggestForTransaction(tx('COMPRA 0412 LOJA', { date: '2025-02-20' }), ctx([], rejected));
+  assert.equal(s.find((x) => x.source === 'travel'), undefined);
+});
+
+test('a merchant you already filed by hand outranks the trip you were on', () => {
+  const history = [
+    {
+      id: 'h1',
+      description: 'COMPRA 0412 CONTINENTE PORTO',
+      merchant: '',
+      amount: -30,
+      date: '2024-01-01',
+      category: 'food',
+      status: 'overridden',
+      overridden: true,
+    },
+  ];
+  const s = suggestForTransaction(
+    tx('COMPRA 0412 CONTINENTE PORTO', { date: '2025-02-20' }),
+    ctx(history, TRIP)
+  );
+  assert.equal(s[0].category, 'food');
+  assert.equal(s[0].source, 'history');
+  // Travel is still offered, just not first — both are one click away.
+  assert.ok(s.some((x) => x.source === 'travel'));
 });
 
 test('templates classify transactions without any rule being accepted first', () => {

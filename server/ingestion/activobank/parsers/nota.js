@@ -149,6 +149,49 @@ function directionOf(lines) {
   return -1; // Advice notes overwhelmingly report debits.
 }
 
+/**
+ * The letterhead identifies the account the note belongs to.
+ *
+ * An advice note is always about one account, named in a fixed block at the top:
+ *
+ *   Conta Depósitos à Ordem nº: 45600427404
+ *   Moeda da Conta: EUR
+ *   EDUARDO DUARTE SILVA          <- the holder, always just above the IBAN
+ *   IBAN: PT50002300004560042740494
+ *
+ * The number matters because it is the only thing that ties this note to the
+ * same account on a statement, which calls it "CONTA SIMPLES" instead. The
+ * holder matters because the *other* account's statement describes transfers to
+ * here as going to that name.
+ */
+export function parseNoteAccount(lines) {
+  const label = /\bConta\s+Dep[oó]sitos\s+[aà]\s+Ordem\s*(?:n[ºo°]?\s*:?)?/i;
+  let name = null;
+  let number = null;
+
+  for (const line of lines) {
+    const m = line.match(label);
+    if (!m) continue;
+    name = 'Conta Depósitos à Ordem';
+    const digits = line.slice(m.index + m[0].length).match(/(\d{6,})/);
+    if (digits) number = digits[1];
+    if (number) break;
+  }
+
+  const ibanIndex = lines.findIndex((l) => /^IBAN\s*:/i.test(l.trim()));
+  const holder =
+    ibanIndex > 0 ? lines.slice(0, ibanIndex).reverse().find((l) => l.trim())?.trim() || null : null;
+
+  if (!number && ibanIndex >= 0) {
+    // PT IBANs end with the account number and two check digits.
+    const iban = lines[ibanIndex].replace(/\s+/g, '');
+    const m = iban.match(/PT50\d{8}(\d{11})\d{2}/);
+    if (m) number = String(Number(m[1]));
+  }
+
+  return name || number || holder ? { name, number, holder } : null;
+}
+
 function parseNote(lines) {
   const operation =
     field(lines, /Opera[çc][ãa]o\s*:/i) || field(lines, /ASSUNTO\s*:/i) || null;
@@ -202,7 +245,15 @@ function parseNote(lines) {
   };
 }
 
-/** Splits the document text into one block per advice note. */
+/**
+ * Splits the document text into one block per advice note.
+ *
+ * A PDF that carries the same note on two pages — the bank's own duplicate
+ * copy, which several of these attachments contain — would otherwise be read as
+ * two separate movements. Blocks with identical content are collapsed; a PDF
+ * genuinely bundling two different notes still yields two blocks, because their
+ * text differs.
+ */
 function splitNotes(lines) {
   const blocks = [];
   let current = null;
@@ -214,7 +265,14 @@ function splitNotes(lines) {
     if (current) current.push(line);
   }
   if (current && current.length) blocks.push(current);
-  return blocks;
+
+  const seen = new Set();
+  return blocks.filter((block) => {
+    const fingerprint = block.join('\n').replace(/\s+/g, ' ').trim();
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
 }
 
 export function parseNotaText(text) {
@@ -222,11 +280,19 @@ export function parseNotaText(text) {
   const blocks = splitNotes(lines);
   const transactions = [];
   const unparsedLines = [];
+  // Every note in one PDF shares a letterhead, so the account is read once.
+  const account = parseNoteAccount(lines);
 
   for (const block of blocks.length ? blocks : [lines]) {
     const note = parseNote(block);
-    if (note) transactions.push(note);
-    else {
+    if (note) {
+      if (account) {
+        note.account = account.name;
+        note.accountNumber = account.number;
+        note.accountHolder = account.holder;
+      }
+      transactions.push(note);
+    } else {
       const summary = block.find((l) => /Opera[çc][ãa]o\s*:|ASSUNTO\s*:/i.test(l));
       if (summary) unparsedLines.push(summary);
     }

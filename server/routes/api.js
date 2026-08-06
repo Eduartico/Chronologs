@@ -3,7 +3,7 @@ import multer from 'multer';
 import { ingestManualTransaction, ingestManualAsset } from '../ingestion/manual.js';
 import { ingestActivobank, reprocessStoredDocuments } from '../ingestion/activobank/index.js';
 import { loadSyncState } from '../ingestion/activobank/gmail.js';
-import { ingestPricempire, fetchPortfolioList } from '../ingestion/pricempire/index.js';
+import { ingestPricempire, syncPricempire, fetchPortfolioList } from '../ingestion/pricempire/index.js';
 import { importPricempireCsv } from '../ingestion/pricempire/importer.js';
 import {
   computePositions,
@@ -49,7 +49,7 @@ import {
   deleteRule,
   reorderRules,
   runRules,
-  learnFromCorrection,
+  noteCorrection,
   suggestFromTemplates,
   suggestFromLlm,
   emitTagAssignment,
@@ -70,8 +70,59 @@ import {
 } from '../engines/correlation.js';
 import { computeAmortizedView } from '../engines/amortization.js';
 import {
+  computeSecurityPositions,
+  computeSecuritySummary,
+  matchOrders,
+  linkSecurityOrders,
+  loadSecurities,
+  saveSecurities,
+  recordManualPrice,
+} from '../engines/securities.js';
+import { refreshQuotes, quotesEnabled } from '../ingestion/quotes/yahoo.js';
+import { analyzeAccounts, deriveSelfNames, DEFAULT_PROFILE } from '../engines/accounts.js';
+import { refreshRate, currentRate } from '../ingestion/quotes/fx.js';
+import {
+  collapseCandidates,
+  applyCollapse,
+  anomalyCandidates,
+  applyAnomalyInverse,
+  ambiguousRoots,
+  patternCandidates,
+  applyPattern,
+  shadowedRules,
+  applyShadowedFix,
+  compactLearnedRules,
+  applyCompaction,
+  askLlm,
+  recordFeedback,
+  loadFeedback,
+} from '../engines/advisor.js';
+import {
+  loadTravels,
+  createTravel,
+  updateTravel,
+  deleteTravel,
+  detectTravels,
+  transactionsInTravel,
+  travelWindow,
+  travelAnomalies,
+  countryName,
+  syncTravelTag,
+  removeTravelTag,
+  markTransactionAsTravel,
+} from '../engines/travel.js';
+import {
+  findDuplicateCandidates,
+  verifyAgainstDocument,
+  voidTransactions,
+  restoreTransactions,
+  dismissGroup,
+} from '../engines/duplicates.js';
+import {
   computeMonthlyCashflow,
   computeCategoryBreakdown,
+  computeCategoryShifts,
+  projectCurrentMonth,
   computeNetWorthEvolution,
   computeAssetAllocation,
   computeROI,
@@ -81,8 +132,9 @@ import {
   computeCumulativeBalance,
   computeSavingsRate,
   filterTransactions,
+  applyTransactionFilters,
 } from '../engines/analytics.js';
-import { getProjections } from '../projections/cache.js';
+import { getProjections, invalidateProjections } from '../projections/cache.js';
 import { replayEvents } from '../ledger/eventStore.js';
 import { listNotifications, markRead, markAllRead } from '../lib/notify.js';
 import { loadSettings, saveSettings } from '../lib/settings.js';
@@ -163,9 +215,12 @@ router.post('/ingest/activobank/upload', upload.array('documents', 20), async (r
   }
 });
 
+// Resync = download each selected portfolio's CSV export and import it. The
+// old scraper stays reachable for debugging via ?method=scrape.
 router.post('/ingest/pricempire', async (req, res) => {
   try {
-    const result = await ingestPricempire();
+    const result =
+      req.query.method === 'scrape' ? await ingestPricempire() : await syncPricempire();
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -318,11 +373,31 @@ router.post('/llm/test', async (req, res) => {
 
 // ---------- CATEGORIZATION ENDPOINTS ----------
 
-router.get('/categories', (req, res) => {
+/**
+ * `?withUsage=true` adds a transaction count per category and sorts by it.
+ * The review queue picks the category list up in that order — after a thousand
+ * transactions, the six categories actually in use should not be buried
+ * alphabetically among fifteen.
+ */
+router.get('/categories', async (req, res) => {
   try {
     ensureDefaultCategories();
     const cats = getCategories();
-    res.json(cats);
+
+    if (req.query.withUsage !== 'true') return res.json(cats);
+
+    const projections = await getProjections();
+    const counts = new Map();
+    for (const tx of projections.transactions) {
+      const name = tx.category || 'uncategorized';
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+
+    res.json(
+      cats
+        .map((c) => ({ ...c, count: counts.get(c.name) || 0 }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -330,8 +405,8 @@ router.get('/categories', (req, res) => {
 
 router.post('/categories', (req, res) => {
   try {
-    const { name, parent } = req.body;
-    const cat = createCategory(name, parent);
+    const { name, parent, icon } = req.body;
+    const cat = createCategory(name, parent, icon);
     if (!cat) return res.status(409).json({ error: 'Category already exists' });
     res.json(cat);
   } catch (err) {
@@ -417,7 +492,7 @@ router.post('/categorize/bulk', async (req, res) => {
     const result = await applyCategorizationBulk(transactionIds, category);
 
     if (learn && sample && transactionIds.length >= 2) {
-      learnFromCorrection(sample.description, sample.merchant, category);
+      noteCorrection(sample.description, sample.merchant, category);
     }
 
     res.json(result);
@@ -477,7 +552,7 @@ router.post('/categorize', async (req, res) => {
     const result = await applyCategorization(tx.id, category, confidence, ruleId);
 
     if (tx.status === 'pending' || tx.status === 'categorized') {
-      learnFromCorrection(tx.description, tx.merchant, category);
+      noteCorrection(tx.description, tx.merchant, category);
     }
 
     res.json(result);
@@ -494,7 +569,7 @@ router.post('/categorize/override', async (req, res) => {
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
 
     const result = await applyManualOverride(tx.id, tx.category, newCategory);
-    learnFromCorrection(tx.description, tx.merchant, newCategory);
+    noteCorrection(tx.description, tx.merchant, newCategory);
 
     res.json(result);
   } catch (err) {
@@ -580,6 +655,193 @@ router.post('/rules/suggestions/accept', (req, res) => {
   }
 });
 
+// ---------- RULE ADVISOR ----------
+
+/**
+ * Both passes run deterministically; `?llm=true` adds the local model's opinion
+ * on top of what was already found, never as a source of its own.
+ */
+router.get('/advisor', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const collapses = collapseCandidates(getRulesV2(), projections.transactions);
+    const anomalies = anomalyCandidates(projections.transactions);
+    const ambiguous = ambiguousRoots(projections.transactions);
+    const shadowed = shadowedRules(getRulesV2(), projections.transactions);
+    const patterns = patternCandidates(getRulesV2(), projections.transactions);
+
+    let llm = { enabled: false, findings: [] };
+    if (req.query.llm === 'true') {
+      llm = await askLlm({
+        collapses,
+        anomalies,
+        ambiguous,
+        shadowed,
+        categories: getCategories().map((c) => c.name),
+      });
+    }
+
+    res.json({
+      collapses,
+      anomalies,
+      ambiguous,
+      shadowed,
+      patterns,
+      llm,
+      totalRules: getRulesV2().length,
+      feedback: loadFeedback().length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/advisor/pattern/accept', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+
+    const projections = await getProjections();
+    const finding = patternCandidates(getRulesV2(), projections.transactions).find((f) => f.id === id);
+    if (!finding) return res.status(404).json({ error: 'Padrão não encontrado — pode já ter sido resolvido' });
+
+    const result = applyPattern(finding);
+    recordFeedback({ id: finding.id, kind: 'pattern', subject: finding.subject, verdict: 'accepted' });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/advisor/collapse/accept', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const candidate = collapseCandidates(getRulesV2(), projections.transactions).find(
+      (c) => c.id === req.body?.id
+    );
+    if (!candidate) return res.status(404).json({ error: 'Sugestão não encontrada' });
+
+    const result = applyCollapse(candidate, { force: req.body?.force === true });
+    recordFeedback({
+      id: candidate.id,
+      kind: 'collapse',
+      subject: candidate.subject,
+      verdict: 'accepted',
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * Fixes a rule that never gets to decide anything — by promoting it above
+ * whichever rule is stealing its transactions, by redirecting that general
+ * rule to the category its own matches mostly resolve to, or by deleting the
+ * shadowed rule outright when the two already agree and it is pure clutter.
+ */
+router.post('/advisor/shadowed/resolve', async (req, res) => {
+  try {
+    const { id, action } = req.body || {};
+    if (!id || !action) return res.status(400).json({ error: 'id e action são obrigatórios' });
+
+    const projections = await getProjections();
+    const finding = shadowedRules(getRulesV2(), projections.transactions).find((f) => f.id === id);
+    if (!finding) return res.status(404).json({ error: 'Sugestão não encontrada — pode já ter sido resolvida' });
+
+    const result = applyShadowedFix(finding, action, projections.transactions);
+    recordFeedback({ id: finding.id, kind: 'shadowed', subject: finding.subject, verdict: 'accepted' });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Preview and apply are the same computation — the route never trusts a
+// client-supplied group list, so what was shown before the click is exactly
+// what happens on it.
+router.post('/advisor/compact/preview', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    res.json(compactLearnedRules(getRulesV2(), projections.transactions));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/advisor/compact/apply', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const preview = compactLearnedRules(getRulesV2(), projections.transactions);
+    const result = applyCompaction(preview);
+    recordFeedback({
+      id: 'compact-' + Date.now(),
+      kind: 'compact',
+      subject: `${result.removed} regras`,
+      verdict: 'accepted',
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/advisor/reject', (req, res) => {
+  try {
+    const { id, kind, subject, note } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    res.json(recordFeedback({ id, kind: kind || 'unknown', subject: subject || id, verdict: 'rejected', note }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Accepting an anomaly means the majority category was right — recategorize.
+router.post('/advisor/anomaly/accept', async (req, res) => {
+  try {
+    const { id, transactionId, category } = req.body || {};
+    if (!transactionId || !category) {
+      return res.status(400).json({ error: 'transactionId e category são obrigatórios' });
+    }
+    const projections = await getProjections();
+    const tx = projections.transactions.find((t) => t.id === transactionId);
+    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+
+    const result = await applyManualOverride(tx.id, tx.category, category);
+    if (id) recordFeedback({ id, kind: 'anomaly', subject: transactionId, verdict: 'accepted' });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The other direction: the flagged transaction was right, the majority of its
+// merchant group was wrong — move the group to match it instead.
+router.post('/advisor/anomaly/inverse', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+
+    const projections = await getProjections();
+    const finding = anomalyCandidates(projections.transactions).find((f) => f.id === id);
+    if (!finding) return res.status(404).json({ error: 'Achado não encontrado — pode já ter sido resolvido' });
+
+    const result = await applyAnomalyInverse(finding, projections.transactions);
+    recordFeedback({ id: finding.id, kind: 'anomaly', subject: finding.subject, verdict: 'accepted' });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/advisor/feedback', (req, res) => {
+  try {
+    res.json(loadFeedback());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- TAGS ENDPOINTS ----------
 
 router.get('/tags', (req, res) => {
@@ -592,8 +854,8 @@ router.get('/tags', (req, res) => {
 
 router.post('/tags', (req, res) => {
   try {
-    const tag = createTag(req.body.name, req.body.color);
-    if (!tag) return res.status(409).json({ error: 'Tag already exists' });
+    const tag = createTag(req.body.name, { color: req.body.color, icon: req.body.icon });
+    if (!tag) return res.status(409).json({ error: 'Já existe uma subcategoria com esse nome' });
     res.json(tag);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -628,6 +890,48 @@ router.post('/transactions/:id/tags', async (req, res) => {
     if (tx.tags.includes(req.body.tagId)) return res.json({ success: true, alreadyTagged: true });
     emitTagAssignment(tx.id, req.body.tagId, 'manual');
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Tags many transactions at once. Accepting a merchant group in the review
+ * queue and then tagging it one row at a time was the only way to do this.
+ * Transactions that already carry the tag are counted, not re-emitted.
+ */
+router.post('/transactions/tags/bulk', async (req, res) => {
+  try {
+    const { transactionIds, tagId, remove = false } = req.body || {};
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+    }
+    if (!tagId) return res.status(400).json({ error: 'tagId is required' });
+    if (!loadTags().some((t) => t.id === tagId)) {
+      return res.status(404).json({ error: 'Tag not found' });
+    }
+
+    const projections = await getProjections();
+    const byId = new Map(projections.transactions.map((t) => [t.id, t]));
+    const result = { applied: 0, unchanged: 0, skipped: 0 };
+
+    for (const id of transactionIds) {
+      const tx = byId.get(id);
+      if (!tx) {
+        result.skipped++;
+        continue;
+      }
+      const has = (tx.tags || []).includes(tagId);
+      if (remove ? !has : has) {
+        result.unchanged++;
+        continue;
+      }
+      if (remove) emitTagRemoval(tx.id, tagId, 'manual');
+      else emitTagAssignment(tx.id, tagId, 'manual');
+      result.applied++;
+    }
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -723,32 +1027,41 @@ router.post('/correlations/:id/reject', (req, res) => {
 
 // ---------- TRANSACTIONS ENDPOINTS ----------
 
+/**
+ * Every filter the transactions page offers is applied here, in one place.
+ *
+ * Category and tag used to be filtered in the browser over whatever the last
+ * request happened to return, while status and search were filtered here. The
+ * two halves disagreed constantly — picking a category while the status filter
+ * still said "pending" could only ever return nothing, because a pending
+ * transaction has no category yet. `total` comes back alongside the rows so the
+ * UI can say "0 of 1417" instead of showing a blank table.
+ */
 router.get('/transactions', async (req, res) => {
   try {
     const projections = await getProjections();
-    let transactions = projections.transactions;
-
-    const { status, search, startDate, endDate } = req.query;
-
-    if (status) {
-      transactions = transactions.filter((t) => t.status === status);
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      transactions = transactions.filter(
-        (t) =>
-          (t.description || '').toLowerCase().includes(q) ||
-          (t.merchant || '').toLowerCase().includes(q)
-      );
-    }
-    if (startDate) {
-      transactions = transactions.filter((t) => (t.date || '') >= startDate);
-    }
-    if (endDate) {
-      transactions = transactions.filter((t) => (t.date || '') <= endDate);
-    }
-
+    const transactions = applyTransactionFilters(projections.transactions, req.query);
     res.json(transactions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Same filters, but with the unfiltered totals and date bounds the filter bar
+// needs to render presets and counts.
+router.get('/transactions/search', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const all = projections.transactions;
+    const matched = applyTransactionFilters(all, req.query);
+    const dates = all.map((t) => (t.date || '').slice(0, 10)).filter(Boolean).sort();
+    res.json({
+      transactions: matched,
+      matched: matched.length,
+      total: all.length,
+      earliest: dates[0] || null,
+      latest: dates[dates.length - 1] || null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -788,6 +1101,274 @@ router.get('/transactions/pending', async (req, res) => {
   }
 });
 
+// ---------- TRAVEL ----------
+
+router.get('/travels', async (req, res) => {
+  try {
+    const travels = loadTravels();
+    const projections = await getProjections();
+    // Each trip carries its own totals: a calendar entry with no money attached
+    // to it is not worth confirming.
+    res.json(
+      travels.map((t) => {
+        const inWindow = transactionsInTravel(t, projections.transactions);
+        return {
+          ...t,
+          countryName: countryName(t.country),
+          window: travelWindow(t),
+          transactionCount: inWindow.length,
+          total: inWindow.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0),
+        };
+      })
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/travels', async (req, res) => {
+  try {
+    const travel = createTravel(req.body || {});
+    const sync = await syncTravelTagFromLedger(travel);
+    res.json({ ...travel, ...sync });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+router.put('/travels/:id', async (req, res) => {
+  try {
+    const travel = updateTravel(req.params.id, req.body || {});
+    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    // Dates or name may have moved, so the tag has to follow.
+    const sync = await syncTravelTagFromLedger(travel);
+    res.json({ ...travel, ...sync });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.delete('/travels/:id', async (req, res) => {
+  try {
+    const travel = loadTravels().find((t) => t.id === req.params.id);
+    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    // Untag before deleting: once the trip is gone there is nothing left that
+    // knows which tag was its own.
+    const { transactions } = await getProjections();
+    const { untagged } = removeTravelTag(travel, transactions);
+    deleteTravel(req.params.id);
+    if (untagged) invalidateProjections();
+    res.json({ success: true, untagged });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Makes sure the trip has its subcategory, and that its name still matches.
+ *
+ * It does not touch a single transaction: which ones belong to the trip is the
+ * owner's call, made row by row on the trip's own screen.
+ */
+async function syncTravelTagFromLedger(travel) {
+  return syncTravelTag(travel);
+}
+
+router.post('/travels/detect', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    res.json({ proposals: detectTravels(projections.transactions) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/travels/:id/transactions', async (req, res) => {
+  try {
+    const travel = loadTravels().find((t) => t.id === req.params.id);
+    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    const projections = await getProjections();
+    res.json(transactionsInTravel(travel, projections.transactions));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * One transaction in or out of a trip.
+ *
+ * Category and subcategory move together because they are the same decision:
+ * "this was part of the trip". Taking it out sends the category back to
+ * `uncategorized` rather than guessing what it was before the trip claimed it.
+ */
+router.post('/travels/:id/transactions/:txId', async (req, res) => {
+  try {
+    const travel = loadTravels().find((t) => t.id === req.params.id);
+    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+
+    const on = req.body?.on !== false;
+    const projections = await getProjections();
+    const tx = projections.transactions.find((t) => t.id === req.params.txId);
+    if (!tx) return res.status(404).json({ error: 'Transacção não encontrada' });
+
+    const { tagId, changed } = markTransactionAsTravel(travel, tx, on);
+    await applyCategorizationBulk([tx.id], on ? travel.category || 'travel' : 'uncategorized', 'manual');
+    if (changed) invalidateProjections();
+
+    res.json({ success: true, tagId, marked: on });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Labels everything inside a trip's window in one go — the shortcut for a trip
+ * where nearly everything really was travel. It is deliberately opt-in and
+ * defaults to only touching what is still unclassified; the row-by-row route
+ * above is the normal way in. Manual overrides are respected by
+ * applyCategorizationBulk, so a decision made by hand is never undone here.
+ */
+router.post('/travels/:id/apply', async (req, res) => {
+  try {
+    const travel = loadTravels().find((t) => t.id === req.params.id);
+    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+
+    const { category = travel.category || 'travel', onlyUncategorized = true } = req.body || {};
+    // The trip may never have been opened, in which case its subcategory does
+    // not exist yet. Ask for it rather than reading a field that can be null.
+    const tagId = req.body?.tagId ?? syncTravelTag(travel).tagId;
+
+    const projections = await getProjections();
+    let targets = transactionsInTravel(travel, projections.transactions);
+    if (onlyUncategorized) targets = targets.filter((t) => t.status === 'pending');
+
+    const ids = targets.map((t) => t.id);
+    const result = { matched: ids.length, categorized: 0, tagged: 0 };
+
+    if (category && ids.length > 0) {
+      const applied = await applyCategorizationBulk(ids, category, 'travel');
+      result.categorized = applied.applied;
+    }
+    if (tagId) {
+      for (const tx of targets) {
+        if (!(tx.tags || []).includes(tagId)) {
+          emitTagAssignment(tx.id, tagId, 'travel');
+          result.tagged++;
+        }
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/travels/anomalies', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const { missing, stray } = travelAnomalies(projections.transactions);
+    res.json({
+      missing: missing.slice(0, 200).map((m) => ({
+        transaction: m.transaction,
+        travelId: m.travel.id,
+        travelName: m.travel.name,
+      })),
+      stray: stray.slice(0, 200).map((s) => s.transaction),
+      missingTotal: missing.length,
+      strayTotal: stray.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- DUPLICATES ----------
+
+router.get('/duplicates', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const groups = findDuplicateCandidates(projections.transactions);
+    res.json({
+      groups,
+      totalGroups: groups.length,
+      // What would actually disappear if every group were reduced to one row.
+      surplus: groups.reduce((sum, g) => sum + g.count - 1, 0),
+      voided: projections.voidedTransactions.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Re-reads the source PDF so the decision rests on the document, not a guess.
+router.post('/duplicates/verify', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const groups = findDuplicateCandidates(projections.transactions);
+    // The key is derived from the group's first member, so anything that shifts
+    // membership — an earlier void, a dismissal, a fresh ingest — renames the
+    // group out from under the card the user is still looking at. Falling back
+    // to the ids the client sent finds it again instead of 404ing at them.
+    const wanted = new Set(req.body?.transactionIds || []);
+    const group =
+      groups.find((g) => g.key === req.body?.key) ||
+      (wanted.size ? groups.find((g) => g.transactions.some((t) => wanted.has(t.id))) : null);
+    if (!group) return res.status(404).json({ error: 'Grupo não encontrado' });
+    res.json(await verifyAgainstDocument(group));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/duplicates/void', async (req, res) => {
+  try {
+    const { transactionIds, keepId } = req.body || {};
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+    }
+    const toVoid = [...new Set(transactionIds)].filter((id) => id !== keepId);
+    // Nothing left to void is not an error: the group had already collapsed to a
+    // single movement, which is exactly the state the user was asking for. Say
+    // so and let the screen refresh rather than showing them a red failure.
+    if (toVoid.length === 0) return res.json({ voided: 0, collapsed: true });
+    res.json(await voidTransactions(toVoid, { reason: 'duplicate', duplicateOf: keepId || null }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/duplicates/restore', async (req, res) => {
+  try {
+    const { transactionIds } = req.body || {};
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+    }
+    res.json(await restoreTransactions(transactionIds));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/duplicates/dismiss', (req, res) => {
+  try {
+    if (!req.body?.key) return res.status(400).json({ error: 'key is required' });
+    dismissGroup(req.body.key);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/duplicates/voided', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    res.json(projections.voidedTransactions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- INVESTMENTS (CS2 / Pricempire) ----------
 
 router.post('/investments/import', upload.single('file'), async (req, res) => {
@@ -813,6 +1394,15 @@ router.get('/investments', async (req, res) => {
     }));
 
     const positions = computePositions(investments, prices);
+
+    // ETFs bought at the bank live alongside the CS2 holdings: same page, two
+    // sections, because they are answers to the same question.
+    const securityPositions = computeSecurityPositions(
+      projections.securityOrders || [],
+      projections.transactions,
+      projections.priceMap
+    );
+
     res.json({
       summary: computeSummary(positions),
       positions,
@@ -820,6 +1410,12 @@ router.get('/investments', async (req, res) => {
       cashTimeline: computeCashTimeline(investments),
       valueTimeline: computeValueTimeline(projections.assetSnapshots),
       transactionCount: investments.length,
+      securities: {
+        positions: securityPositions,
+        summary: computeSecuritySummary(securityPositions, projections.transactions),
+        registry: loadSecurities(),
+        quotesEnabled: quotesEnabled(),
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -838,6 +1434,82 @@ router.get('/investments/transactions', async (req, res) => {
     if (type) list = list.filter((t) => t.type === type);
     if (marketplace) list = list.filter((t) => t.marketplace === marketplace);
     res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- SECURITIES (ETFs via ActivoBank) ----------
+
+router.get('/securities', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const orders = projections.securityOrders || [];
+    const { matches, unmatchedOrders, orphanTransactions } = matchOrders(
+      orders,
+      projections.transactions
+    );
+    res.json({
+      registry: loadSecurities(),
+      orders,
+      positions: computeSecurityPositions(orders, projections.transactions, projections.priceMap),
+      // Surfaced rather than hidden: an unmatched order or an orphan statement
+      // line is exactly what a wrong entry in the registry looks like.
+      matched: matches.length,
+      unmatchedOrders,
+      orphanTransactions: orphanTransactions.map((o) => ({ ...o.tx, parsed: o.parsed })),
+      quotesEnabled: quotesEnabled(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/securities', (req, res) => {
+  try {
+    if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Esperado um array' });
+    res.json(saveSecurities(req.body));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/securities/link', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    res.json(await linkSecurityOrders(projections.securityOrders || [], projections.transactions));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/securities/quotes/refresh', async (req, res) => {
+  try {
+    res.json(await refreshQuotes({ force: req.body?.force === true }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** What the app is converting with, and how old it is. */
+router.get('/currency/rate', (req, res) => {
+  res.json(currentRate());
+});
+
+router.post('/currency/rate/refresh', async (req, res) => {
+  try {
+    res.json(await refreshRate({ force: req.body?.force === true }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/securities/price', async (req, res) => {
+  try {
+    const { symbol, price, currency } = req.body || {};
+    if (!symbol || price == null) return res.status(400).json({ error: 'symbol e price são obrigatórios' });
+    await recordManualPrice(symbol, price, currency || 'EUR');
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -862,6 +1534,22 @@ router.get('/assets', async (req, res) => {
  * The unfiltered date bounds come back too, so the UI can offer sensible
  * presets without a second round trip.
  */
+/**
+ * The span immediately before the one being shown, of the same length.
+ *
+ * With no explicit range the whole history is on screen and there is nothing
+ * before it, so the comparison is simply skipped rather than faked.
+ */
+function previousPeriod(current, all, { from, to }) {
+  if (!from || !to) return [];
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  const priorTo = new Date(Date.parse(from) - 86400000).toISOString().slice(0, 10);
+  const priorFrom = new Date(Date.parse(priorTo) - (days - 1) * 86400000).toISOString().slice(0, 10);
+  return all.filter((t) => {
+    const d = String(t.date).slice(0, 10);
+    return d >= priorFrom && d <= priorTo;
+  });
+}
 router.get('/analytics', async (req, res) => {
   try {
     const { from, to, granularity = 'month' } = req.query;
@@ -869,7 +1557,7 @@ router.get('/analytics', async (req, res) => {
 
     const projections = await getProjections();
     const categorizedMap = projections.categoryMap;
-    const all = projections.transactions;
+    const all = projections.spendingTransactions;
     const transactions = filterTransactions(all, {
       from,
       to,
@@ -884,6 +1572,12 @@ router.get('/analytics', async (req, res) => {
     const allocation = computeAssetAllocation(projections.assets);
     const roi = computeROI(projections.assets);
     const insights = computeInsights(transactions, categorizedMap, monthlyCashflow);
+
+    // The same span again, immediately before this one, so every figure can be
+    // shown against what it was rather than on its own.
+    const previous = previousPeriod(transactions, all, { from, to });
+    const shifts = computeCategoryShifts(transactions, previous, categorizedMap);
+    const projection = projectCurrentMonth(monthlyCashflow);
 
     const dates = all.map((t) => (t.date || '').slice(0, 10)).filter(Boolean).sort();
 
@@ -908,6 +1602,10 @@ router.get('/analytics', async (req, res) => {
       allocation,
       roi,
       insights,
+      shifts,
+      projection,
+      vaults: projections.vaults,
+      vaultTotal: projections.vaultTotal,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -917,7 +1615,7 @@ router.get('/analytics', async (req, res) => {
 router.get('/analytics/cashflow', async (req, res) => {
   try {
     const projections = await getProjections();
-    const result = computeMonthlyCashflow(projections.transactions);
+    const result = computeMonthlyCashflow(projections.spendingTransactions);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -927,13 +1625,131 @@ router.get('/analytics/cashflow', async (req, res) => {
 router.get('/analytics/insights', async (req, res) => {
   try {
     const projections = await getProjections();
-    const cashflow = computeMonthlyCashflow(projections.transactions);
+    const cashflow = computeMonthlyCashflow(projections.spendingTransactions);
     const insights = computeInsights(
-      projections.transactions,
+      projections.spendingTransactions,
       projections.categoryMap,
       cashflow
     );
     res.json(insights);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- ACCOUNTS & VAULTS ----------
+
+/**
+ * Where the money actually sits.
+ *
+ * Both the accounts and the savings vaults inside them are discovered from the
+ * documents, never configured, so a newly opened vault shows up on its own.
+ */
+router.get('/accounts', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    res.json({
+      accounts: projections.accounts,
+      holders: projections.accountHolders,
+      vaults: projections.vaults,
+      vaultTotal: projections.vaultTotal,
+      needsAttribution: projections.vaultsNeedAttribution,
+      reconciliation: projections.vaultReconciliation,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** The paired-up internal movements, newest first, with both legs named. */
+router.get('/accounts/movements', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const { vault } = req.query;
+    let movements = [...projections.internalMovements].reverse();
+    if (vault) movements = movements.filter((m) => m.vault === vault);
+    res.json(movements);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * How this institution spells "money left the account", "this is the savings
+ * product", "this was cash from an ATM" — the five patterns that let internal
+ * transfers be recognised. `null` in the response means the ActivoBank
+ * default is in effect; the shape either way is `DEFAULT_PROFILE`'s.
+ */
+router.get('/accounts/profile', (req, res) => {
+  try {
+    res.json({ profile: loadSettings().internal?.profile || null, default: DEFAULT_PROFILE });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/accounts/profile', (req, res) => {
+  try {
+    const settings = loadSettings();
+    const merged = saveSettings({ internal: { ...settings.internal, profile: req.body?.profile || null } });
+    invalidateProjections();
+    res.json({ profile: merged.internal.profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Tries a candidate profile against the real ledger without saving it —
+ * how many internal movements and vaults it would recognise, so a typo in a
+ * hand-edited regex shows up as "0 movimentos reconhecidos" before it is ever
+ * applied, rather than after.
+ */
+router.post('/accounts/profile/preview', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const settings = loadSettings();
+    const selfNames = [
+      ...new Set([...deriveSelfNames(projections.transactions), ...(settings.internal?.selfNames || [])]),
+    ];
+    const result = analyzeAccounts(projections.transactions, {
+      selfNames,
+      windowDays: settings.internal?.windowDays ?? 3,
+      profile: req.body?.profile || null,
+    });
+    res.json({
+      internalMovements: result.movements.length,
+      vaults: result.vaults.map((v) => ({ vault: v.vault, balance: v.balance })),
+      accountsFound: result.accounts.length,
+      reconciled: result.reconciliation?.balanced ?? null,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * Points an unnamed savings pool at the vault it really belonged to.
+ *
+ * The bank only began naming vaults partway through, so early deposits carry no
+ * name and only the owner knows where they went. Stored as a setting rather
+ * than rewritten into the ledger: it is an interpretation, not a new fact.
+ */
+router.post('/accounts/vaults/alias', async (req, res) => {
+  try {
+    const { from, to } = req.body || {};
+    if (!from) return res.status(400).json({ error: 'from is required' });
+
+    const settings = loadSettings();
+    const vaultAliases = { ...(settings.internal?.vaultAliases || {}) };
+    if (to) vaultAliases[from] = to;
+    else delete vaultAliases[from];
+
+    saveSettings({ internal: { ...settings.internal, vaultAliases } });
+    invalidateProjections();
+
+    const projections = await getProjections();
+    res.json({ vaultAliases, vaults: projections.vaults, vaultTotal: projections.vaultTotal });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

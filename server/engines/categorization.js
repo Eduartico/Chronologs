@@ -21,6 +21,18 @@ const DEFAULT_CATEGORIES_FILE = join(__dirname, '..', 'config', 'defaults', 'cat
 export const PROTECTED_CATEGORY = 'uncategorized';
 
 /**
+ * System categories carry meaning the engines rely on, so their names are
+ * fixed: `internal_transfer` is what keeps money moved between the owner's own
+ * accounts out of the spending totals, and renaming it would quietly turn that
+ * off. Colour and icon stay editable — only the identity is locked.
+ */
+export const SYSTEM_CATEGORIES = ['internal_transfer', 'cash_withdrawal'];
+
+export function isSystemCategory(cat) {
+  return !!cat && (cat.system === true || cat.name === PROTECTED_CATEGORY);
+}
+
+/**
  * Seeds the built-in categories, matching on `id` rather than `name`.
  *
  * Matching on name would resurrect a default the moment the user renamed it —
@@ -32,9 +44,25 @@ export function ensureDefaultCategories() {
   const cats = loadCategories();
   let changed = false;
   for (const d of defaults) {
-    if (!cats.some((c) => c.id === d.id)) {
+    const existing = cats.find((c) => c.id === d.id);
+    if (!existing) {
       cats.push({ ...d, created: new Date().toISOString() });
       changed = true;
+    } else {
+      // Icons and system flags arrived after these categories were seeded;
+      // backfill without touching anything the user has since edited.
+      if (!existing.icon && d.icon) {
+        existing.icon = d.icon;
+        changed = true;
+      }
+      if (d.system && !existing.system) {
+        existing.system = true;
+        changed = true;
+      }
+      if (d.excludeFromSpending && !existing.excludeFromSpending) {
+        existing.excludeFromSpending = true;
+        changed = true;
+      }
     }
   }
   if (changed) saveCategories(cats);
@@ -54,7 +82,7 @@ function slugify(name) {
     .replace(/^-|-$/g, '') || 'categoria';
 }
 
-export function createCategory(name, parent = null) {
+export function createCategory(name, parent = null, icon = null) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return null;
   const cats = loadCategories();
@@ -67,6 +95,7 @@ export function createCategory(name, parent = null) {
     id,
     name: trimmed,
     color: `hsl(${Math.floor(Math.random() * 360)}, 50%, 60%)`,
+    icon: icon || 'tag',
     created: new Date().toISOString(),
     parent,
   };
@@ -140,7 +169,7 @@ export async function updateCategory(id, patch = {}) {
   const newName = patch.name != null ? String(patch.name).trim() : null;
 
   if (newName && newName !== cat.name) {
-    if (cat.name === PROTECTED_CATEGORY) return { error: 'protected' };
+    if (isSystemCategory(cat)) return { error: 'protected' };
     if (cats.some((c) => !c.deleted && c.id !== id && c.name.toLowerCase() === newName.toLowerCase())) {
       return { error: 'duplicate' };
     }
@@ -151,6 +180,7 @@ export async function updateCategory(id, patch = {}) {
   }
 
   if (patch.color) cat.color = patch.color;
+  if (patch.icon !== undefined) cat.icon = patch.icon || null;
   if (patch.parent !== undefined) cat.parent = patch.parent;
 
   cat.updated = new Date().toISOString();
@@ -162,7 +192,7 @@ export async function deleteCategory(id) {
   const cats = loadCategories();
   const cat = cats.find((c) => c.id === id && !c.deleted);
   if (!cat) return { error: 'not_found' };
-  if (cat.name === PROTECTED_CATEGORY) return { error: 'protected' };
+  if (isSystemCategory(cat)) return { error: 'protected' };
 
   const { moved, rulesTouched } = await repointCategory(cat.name, PROTECTED_CATEGORY);
 

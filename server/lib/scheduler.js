@@ -8,7 +8,14 @@ let jobs = [];
 const REGISTRY = {
   activobank: async () =>
     (await import('../ingestion/activobank/index.js')).ingestActivobank({ origin: 'gmail' }),
-  pricempire: async () => (await import('../ingestion/pricempire/index.js')).ingestPricempire(),
+  pricempire: async () => (await import('../ingestion/pricempire/index.js')).syncPricempire(),
+  // Quotes only run when the user has opted into online price lookups; the
+  // fetcher enforces that itself, and this reports the skip rather than erroring.
+  quotes: async () => {
+    const { refreshQuotes, quotesEnabled } = await import('../ingestion/quotes/yahoo.js');
+    if (!quotesEnabled()) return { skipped: true, reason: 'cotações online desligadas' };
+    return refreshQuotes();
+  },
   correlations: async () => {
     const { runCorrelations } = await import('../engines/correlation.js');
     const result = await runCorrelations();

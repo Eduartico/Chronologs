@@ -380,7 +380,10 @@
       "interactive brokers",
       "binance",
       "coinbase",
-      "kraken"
+      "kraken",
+      "unlimint",
+      "bitcoin",
+      "crypto.com"
     ]
   },
   {
@@ -410,7 +413,6 @@
       "revolut",
       "paypal",
       "poupeup",
-      "unlimint",
       "trf p/",
       "trf. p/",
       "trf de",

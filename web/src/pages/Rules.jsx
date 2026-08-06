@@ -1,16 +1,33 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api.js';
+import { formatDate } from '../lib/format.js';
+import Icon from '../components/Icon.jsx';
 import CorrelationReview from '../components/CorrelationReview.jsx';
+import InstitutionProfile from '../components/InstitutionProfile.jsx';
+import RuleAdvisor from '../components/RuleAdvisor.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import RowActions from '../components/ui/RowActions.jsx';
+import EditableField from '../components/ui/EditableField.jsx';
+import { DateRangeField } from '../components/ui/DateField.jsx';
+import Switch from '../components/ui/Switch.jsx';
+import RuleConditionTree, { emptyGroup, pruneTree, describeTree } from '../components/RuleConditionTree.jsx';
+import { useRowEditor } from '../lib/useRowEditor.js';
 
 const EMPTY_RULE = {
   name: '',
   stopProcessing: false,
+  // `tree` sits alongside the flat fields in the draft but is only ever saved
+  // when advanced mode is on — see `cleanRule`. Keeping both in one draft
+  // means switching the toggle back and forth does not lose what was typed
+  // into either form.
+  advanced: false,
   conditions: {
     text: [{ field: 'any', op: 'contains', value: '' }],
     dateRange: { from: '', to: '' },
     amountRange: { min: '', max: '' },
     direction: 'any',
     sources: [],
+    tree: emptyGroup('all'),
   },
   actions: { setCategory: '', addTags: [] },
 };
@@ -19,6 +36,23 @@ const SOURCES = ['activobank', 'pricempire', 'manual'];
 
 function cleanRule(draft) {
   const c = draft.conditions;
+
+  // Advanced mode saves the tree and nothing else — the two forms edit the
+  // same draft object but are never combined into one rule, which would make
+  // "what actually has to be true" impossible to read back from either view.
+  if (draft.advanced) {
+    const tree = pruneTree(c.tree);
+    return {
+      name: draft.name || 'Unnamed rule',
+      stopProcessing: draft.stopProcessing,
+      conditions: tree ? { tree } : {},
+      actions: {
+        setCategory: draft.actions.setCategory || null,
+        addTags: draft.actions.addTags,
+      },
+    };
+  }
+
   const conditions = {};
   const text = (c.text || []).filter((t) => t.value.trim());
   if (text.length) conditions.text = text;
@@ -49,9 +83,13 @@ function cleanRule(draft) {
 
 function describeConditions(rule) {
   const c = rule.conditions || {};
+  if (c.tree) return describeTree(c.tree);
   const parts = [];
   if (c.text?.length) parts.push(c.text.map((t) => `${t.field} ${t.op} "${t.value}"`).join(' OR '));
-  if (c.dateRange) parts.push(`date ${c.dateRange.from || '…'} → ${c.dateRange.to || '…'}`);
+  if (c.dateRange)
+    parts.push(
+      `data ${c.dateRange.from ? formatDate(c.dateRange.from) : '…'} → ${c.dateRange.to ? formatDate(c.dateRange.to) : '…'}`
+    );
   if (c.amountRange) parts.push(`|amount| ${c.amountRange.min ?? 0}–${c.amountRange.max ?? '∞'}`);
   if (c.direction) parts.push(c.direction);
   if (c.sources?.length) parts.push(`from ${c.sources.join('/')}`);
@@ -97,11 +135,22 @@ export default function Rules() {
     load();
   };
 
-  const remove = async (rule) => {
-    if (!confirm(`Delete rule "${rule.name}"?`)) return;
-    await api.deleteRule(rule.id).catch((e) => showToast('Error: ' + e.message));
+  // The browser's own confirm() used to guard this: a modal dialog that blocks
+  // the tab, for a rule that takes five seconds to rewrite. The bin arms itself
+  // instead — one press to load it, a second to fire.
+  const remove = async (id) => {
+    await api.deleteRule(id).catch((e) => showToast('Error: ' + e.message));
     load();
   };
+
+  const rename = async (id, changes) => {
+    const name = String(changes.name || '').trim();
+    if (!name) return;
+    await api.updateRule(id, { name }).catch((e) => showToast('Error: ' + e.message));
+    load();
+  };
+
+  const editor = useRowEditor({ onSave: rename, onDelete: remove });
 
   const runNow = async () => {
     try {
@@ -160,8 +209,16 @@ export default function Rules() {
       <div className="page-header">
         <h2>Rules</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" onClick={loadSuggestions}>💡 Suggestions</button>
-          <button className="btn-ghost" onClick={runNow}>▶ Run rules now</button>
+          <button className="btn-ghost" onClick={loadSuggestions}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="lightbulb" size={15} /> Suggestions
+            </span>
+          </button>
+          <button className="btn-ghost" onClick={runNow}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="play" size={15} /> Run rules now
+            </span>
+          </button>
           <button className="btn-primary" onClick={() => setDraft(structuredClone(EMPTY_RULE))}>
             + New rule
           </button>
@@ -173,6 +230,8 @@ export default function Rules() {
         <strong> stop</strong> enabled halts processing of later rules — like Outlook inbox rules.
         Manual category choices are never overwritten.
       </p>
+
+      <RuleAdvisor categories={categories} onChanged={load} />
 
       {suggestions && (
         <div className="card" style={{ marginBottom: 12 }}>
@@ -223,13 +282,29 @@ export default function Rules() {
 
       {draft && (
         <div className="card" style={{ marginBottom: 12 }}>
-          <h3>New rule</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h3 style={{ flex: 1 }}>New rule</h3>
+            <Switch
+              checked={draft.advanced}
+              onChange={(advanced) => setDraft({ ...draft, advanced })}
+              label="Condições avançadas"
+              title="(A ou B) e não C, em vez de só texto + filtros"
+            />
+          </div>
           <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
             <input
               placeholder="Rule name"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             />
+
+            {draft.advanced ? (
+              <RuleConditionTree
+                tree={draft.conditions.tree}
+                onChange={(tree) => setDraft({ ...draft, conditions: { ...draft.conditions, tree } })}
+              />
+            ) : (
+              <>
             {draft.conditions.text.map((t, i) => (
               <div key={i} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <select
@@ -286,24 +361,13 @@ export default function Rules() {
             ))}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
               <span style={{ color: 'var(--text-muted)' }}>Date</span>
-              <input
-                type="date"
-                value={draft.conditions.dateRange.from}
-                onChange={(e) =>
+              <DateRangeField
+                from={draft.conditions.dateRange.from}
+                to={draft.conditions.dateRange.to}
+                onChange={({ from, to }) =>
                   setDraft({
                     ...draft,
-                    conditions: { ...draft.conditions, dateRange: { ...draft.conditions.dateRange, from: e.target.value } },
-                  })
-                }
-              />
-              <span>→</span>
-              <input
-                type="date"
-                value={draft.conditions.dateRange.to}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    conditions: { ...draft.conditions, dateRange: { ...draft.conditions.dateRange, to: e.target.value } },
+                    conditions: { ...draft.conditions, dateRange: { from, to } },
                   })
                 }
               />
@@ -358,6 +422,9 @@ export default function Rules() {
               ))}
               <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>(none = all)</span>
             </div>
+              </>
+            )}
+
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-muted)' }}>Then:</span>
               <select
@@ -381,18 +448,16 @@ export default function Rules() {
                   </span>
                 </label>
               ))}
-              <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
-                <input
-                  type="checkbox"
+              <div style={{ marginLeft: 'auto' }}>
+                <Switch
                   checked={draft.stopProcessing}
-                  onChange={(e) => setDraft({ ...draft, stopProcessing: e.target.checked })}
+                  onChange={(stopProcessing) => setDraft({ ...draft, stopProcessing })}
+                  label="stop processing further rules"
                 />
-                stop processing further rules
-              </label>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn-ghost" onClick={() => setDraft(null)}>Cancel</button>
-              <button className="btn-green" onClick={saveDraft}>Create rule</button>
+              <RowActions editing onSave={saveDraft} onCancel={() => setDraft(null)} />
             </div>
           </div>
         </div>
@@ -420,12 +485,30 @@ export default function Rules() {
             <tbody>
               {rules.map((rule, i) => (
                 <tr key={rule.id} style={{ opacity: rule.enabled ? 1 : 0.5 }}>
+                  {/* This table is deliberately not sortable: the order of the
+                      rows is the order the rules run in, so re-sorting it would
+                      show a sequence the engine does not use. */}
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost btn-sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                    <button className="btn-ghost btn-sm" onClick={() => move(i, 1)} disabled={i === rules.length - 1}>↓</button>
+                    <IconButton icon="arrowUp" label="Subir" onClick={() => move(i, -1)} disabled={i === 0} />
+                    <IconButton
+                      icon="arrowDown"
+                      label="Descer"
+                      onClick={() => move(i, 1)}
+                      disabled={i === rules.length - 1}
+                    />
                   </td>
                   <td>
-                    <strong>{rule.name}</strong>
+                    <strong>
+                      <EditableField
+                        editing={editor.isEditing(rule.id)}
+                        value={editor.isEditing(rule.id) ? editor.draft?.name : rule.name}
+                        autoFocus
+                        onChange={(name) => editor.patch({ name })}
+                        onStartEdit={() => editor.start(rule, { name: rule.name })}
+                        onCommit={editor.commit}
+                        onCancel={editor.cancel}
+                      />
+                    </strong>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{rule.origin}</div>
                   </td>
                   <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{describeConditions(rule)}</td>
@@ -441,21 +524,30 @@ export default function Rules() {
                     })}
                   </td>
                   <td>
-                    <input
-                      type="checkbox"
+                    <Switch
                       checked={!!rule.stopProcessing}
-                      onChange={(e) => patch(rule, { stopProcessing: e.target.checked })}
+                      onChange={(stopProcessing) => patch(rule, { stopProcessing })}
+                      title="Parar de avaliar regras depois desta"
                     />
                   </td>
                   <td>
-                    <input
-                      type="checkbox"
+                    <Switch
                       checked={!!rule.enabled}
-                      onChange={(e) => patch(rule, { enabled: e.target.checked })}
+                      onChange={(enabled) => patch(rule, { enabled })}
+                      title="Regra activa"
                     />
                   </td>
                   <td>
-                    <button className="btn-red btn-sm" onClick={() => remove(rule)}>Delete</button>
+                    <RowActions
+                      editing={editor.isEditing(rule.id)}
+                      deleting={editor.isDeleting(rule.id)}
+                      busy={editor.busy}
+                      onEdit={() => editor.start(rule, { name: rule.name })}
+                      onSave={editor.commit}
+                      onCancel={editor.cancel}
+                      onAskDelete={() => editor.askDelete(rule.id)}
+                      onConfirmDelete={() => editor.confirmDelete(rule.id)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -465,6 +557,7 @@ export default function Rules() {
       )}
 
       <CorrelationReview showToast={showToast} />
+      <InstitutionProfile showToast={showToast} />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

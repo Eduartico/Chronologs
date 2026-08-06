@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { usePersistentState } from '../lib/usePersistentState.js';
+import { formatDate } from '../lib/format.js';
 import {
   AreaChart,
   Area,
@@ -19,6 +21,9 @@ import {
 import { api } from '../lib/api.js';
 import ChartCard from '../components/charts/ChartCard.jsx';
 import ChartTooltip from '../components/charts/ChartTooltip.jsx';
+import ChartTypeToggle from '../components/charts/ChartTypeToggle.jsx';
+import { useSeriesToggle } from '../components/charts/useSeriesToggle.jsx';
+import { DateRangeField } from '../components/ui/DateField.jsx';
 import {
   SERIES,
   STATUS,
@@ -79,12 +84,33 @@ function Stat({ label, value, tone, hint }) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState('12m');
-  const [range, setRange] = useState(rangeFor('12m'));
-  const [granularity, setGranularity] = useState('month');
+  // Persist the *choice*, derive the range from it.
+  //
+  // These used to be the other way round: the range was persisted and the preset
+  // was not, so coming back to the tab showed all-time charts under a label that
+  // read "Últimos 12 meses" — and re-picking that same label fired no change
+  // event, leaving no way to put it right. Whatever the control's active state
+  // is read from is what has to survive the trip to another tab.
+  const [preset, setPreset] = usePersistentState('dashboard.preset', '12m');
+  const [customRange, setCustomRange] = usePersistentState('dashboard.customRange', {
+    from: '',
+    to: '',
+  });
+  const range = useMemo(
+    () => (preset === 'custom' ? customRange : rangeFor(preset)),
+    [preset, customRange]
+  );
+  const [granularity, setGranularity] = usePersistentState('dashboard.granularity', 'month');
   const [categories, setCategories] = useState([]);
-  const [selectedCats, setSelectedCats] = useState([]);
+  const [selectedCats, setSelectedCats] = usePersistentState('dashboard.categories', []);
   const [error, setError] = useState(null);
+
+  // How each card draws its numbers. Income against expense reads better as two
+  // lines than as pairs of bars — the year has a shape, and bars chop it into
+  // twelve separate comparisons — so that is what it opens as.
+  const [cashflowType, setCashflowType] = usePersistentState('dashboard.cashflowType', 'line');
+  const [cumulativeType, setCumulativeType] = usePersistentState('dashboard.cumulativeType', 'area');
+  const [breakdownType, setBreakdownType] = usePersistentState('dashboard.breakdownType', 'pie');
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
@@ -113,16 +139,24 @@ export default function Dashboard() {
     load();
   }, [load]);
 
-  function applyPreset(id) {
-    setPreset(id);
-    setRange(rangeFor(id));
+  /** Switches to a hand-picked range, seeded from whatever is on screen now. */
+  function setCustomBound(bound, value) {
+    setCustomRange({ ...range, [bound]: value });
+    setPreset('custom');
   }
 
   const cashflow = data?.monthlyCashflow || [];
   const trend = data?.categoryTrend || { categories: [], rows: [] };
   const trendColor = useMemo(() => colorScale(trend.categories), [trend.categories]);
 
-  const breakdown = useMemo(
+  const savingsRate = data?.savingsRate || [];
+  const clampedMonths = savingsRate.filter((r) => r.clamped).length;
+
+  // The legend is the filter, on every chart that has one.
+  const trendFilter = useSeriesToggle('dashboard.hiddenCats', trend.categories);
+  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', ['Receitas', 'Despesas']);
+
+  const breakdownAll = useMemo(
     () =>
       capSeries(
         (data?.categoryBreakdown || [])
@@ -132,7 +166,17 @@ export default function Dashboard() {
       ),
     [data]
   );
-  const breakdownColor = useMemo(() => colorScale(breakdown.map((b) => b.name)), [breakdown]);
+  const breakdownColor = useMemo(() => colorScale(breakdownAll.map((b) => b.name)), [breakdownAll]);
+  // A pie has no per-series `hide` prop — the slice has to be gone from the
+  // data itself, so the toggle filters here rather than in the chart markup.
+  const breakdownFilter = useSeriesToggle(
+    'dashboard.hiddenBreakdown',
+    breakdownAll.map((b) => b.name)
+  );
+  const breakdown = useMemo(
+    () => breakdownAll.filter((b) => !breakdownFilter.hidden.has(b.name)),
+    [breakdownAll, breakdownFilter.hidden]
+  );
 
   const totals = useMemo(() => {
     const income = cashflow.reduce((s, m) => s + m.income, 0);
@@ -165,7 +209,7 @@ export default function Dashboard() {
           {data?.range && (
             <p style={{ color: INK.secondary, fontSize: 13, marginTop: 2 }}>
               {data.range.matched} de {data.range.total} transacções
-              {data.range.earliest && ` · histórico desde ${data.range.earliest}`}
+              {data.range.earliest && ` · histórico desde ${formatDate(data.range.earliest)}`}
             </p>
           )}
         </div>
@@ -174,28 +218,20 @@ export default function Dashboard() {
 
       {/* One control row above the charts drives every series on the page. */}
       <div className="filter-bar">
-        <select value={preset} onChange={(e) => applyPreset(e.target.value)}>
+        <select value={preset} onChange={(e) => setPreset(e.target.value)}>
           {PRESETS.map((p) => (
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
+          {/* Named, so a hand-picked range never leaves the control blank. */}
+          <option value="custom">Intervalo à escolha</option>
         </select>
-        <input
-          type="date"
-          value={range.from}
-          onChange={(e) => {
-            setRange({ ...range, from: e.target.value });
-            setPreset('custom');
+        <DateRangeField
+          from={range.from}
+          to={range.to}
+          onChange={({ from, to }) => {
+            if (from !== range.from) setCustomBound('from', from);
+            else setCustomBound('to', to);
           }}
-          title="De"
-        />
-        <input
-          type="date"
-          value={range.to}
-          onChange={(e) => {
-            setRange({ ...range, to: e.target.value });
-            setPreset('custom');
-          }}
-          title="Até"
         />
         <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
           {GRANULARITIES.map((g) => (
@@ -225,50 +261,131 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-2" style={{ marginBottom: 16 }}>
-        <ChartCard title="Receitas e despesas" subtitle={`Por ${periodWord}`} loading={loading} empty={!cashflow.length} height={280}>
-          <BarChart data={cashflow} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid {...cartesianDefaults.grid} />
-            <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-            <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-            <Tooltip
-              content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />}
-              cursor={{ fill: 'rgba(139,148,158,0.08)' }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="income" name="Receitas" fill={SERIES[2]} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expense" name="Despesas" fill={SERIES[1]} radius={[4, 4, 0, 0]} />
-          </BarChart>
+        <ChartCard
+          title="Receitas e despesas"
+          subtitle={`Por ${periodWord} — clica na legenda para isolar uma série`}
+          loading={loading}
+          empty={!cashflow.length}
+          height={280}
+          controls={<ChartTypeToggle value={cashflowType} onChange={setCashflowType} options={['line', 'bar']} />}
+        >
+          {cashflowType === 'line' ? (
+            <LineChart data={cashflow} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid {...cartesianDefaults.grid} />
+              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
+              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
+              <Legend {...cashflowFilter.legendProps} />
+              <Line
+                type="monotone"
+                dataKey="income"
+                name="Receitas"
+                stroke={SERIES[2]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+                hide={cashflowFilter.hidden.has('Receitas')}
+              />
+              <Line
+                type="monotone"
+                dataKey="expense"
+                name="Despesas"
+                stroke={SERIES[1]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+                hide={cashflowFilter.hidden.has('Despesas')}
+              />
+            </LineChart>
+          ) : (
+            <BarChart data={cashflow} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid {...cartesianDefaults.grid} />
+              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
+              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+              <Tooltip
+                content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />}
+                cursor={{ fill: 'rgba(139,148,158,0.08)' }}
+              />
+              <Legend {...cashflowFilter.legendProps} />
+              <Bar
+                dataKey="income"
+                name="Receitas"
+                fill={SERIES[2]}
+                radius={[4, 4, 0, 0]}
+                hide={cashflowFilter.hidden.has('Receitas')}
+              />
+              <Bar
+                dataKey="expense"
+                name="Despesas"
+                fill={SERIES[1]}
+                radius={[4, 4, 0, 0]}
+                hide={cashflowFilter.hidden.has('Despesas')}
+              />
+            </BarChart>
+          )}
         </ChartCard>
 
-        <ChartCard title="Saldo acumulado" subtitle="Soma corrente do saldo de cada período" loading={loading} empty={!data?.cumulative?.length} height={280}>
-          <AreaChart data={data?.cumulative || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid {...cartesianDefaults.grid} />
-            <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-            <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-            <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
-            <ReferenceLine y={0} stroke={INK.axis} />
-            <Area
-              type="monotone"
-              dataKey="cumulative"
-              name="Saldo acumulado"
-              stroke={SERIES[0]}
-              strokeWidth={2}
-              fill="url(#gCum)"
-            />
-          </AreaChart>
+        <ChartCard
+          title="Saldo acumulado"
+          subtitle="Soma corrente do saldo de cada período"
+          loading={loading}
+          empty={!data?.cumulative?.length}
+          height={280}
+          controls={
+            <ChartTypeToggle value={cumulativeType} onChange={setCumulativeType} options={['area', 'line']} />
+          }
+        >
+          {cumulativeType === 'area' ? (
+            <AreaChart data={data?.cumulative || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid {...cartesianDefaults.grid} />
+              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
+              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
+              <ReferenceLine y={0} stroke={INK.axis} />
+              <Area
+                type="monotone"
+                dataKey="cumulative"
+                name="Saldo acumulado"
+                stroke={SERIES[0]}
+                strokeWidth={2}
+                fill="url(#gCum)"
+              />
+            </AreaChart>
+          ) : (
+            <LineChart data={data?.cumulative || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid {...cartesianDefaults.grid} />
+              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
+              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
+              <ReferenceLine y={0} stroke={INK.axis} />
+              <Line
+                type="monotone"
+                dataKey="cumulative"
+                name="Saldo acumulado"
+                stroke={SERIES[0]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          )}
         </ChartCard>
       </div>
 
       <div style={{ marginBottom: 16 }}>
         <ChartCard
           title="Despesa por categoria ao longo do tempo"
-          subtitle="Área empilhada — mostra o que mudou, não só o total"
+          subtitle={
+            trendFilter.hidden.size
+              ? `${trendFilter.hidden.size} categoria(s) escondida(s) — clica na legenda para repor`
+              : 'Área empilhada — clica numa categoria da legenda para a esconder, duplo clique para a isolar'
+          }
           loading={loading}
           empty={!trend.rows.length}
           height={300}
@@ -278,7 +395,10 @@ export default function Dashboard() {
             <XAxis dataKey="period" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
             <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
             <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} total />} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {/* The legend is the filter. On a stack of eight bands it is the
+                first thing anyone tries to click, and doing nothing was the
+                surprise. */}
+            <Legend {...trendFilter.legendProps} />
             {trend.categories.map((cat) => (
               <Area
                 key={cat}
@@ -286,6 +406,7 @@ export default function Dashboard() {
                 dataKey={cat}
                 name={cat}
                 stackId="spend"
+                hide={trendFilter.hidden.has(cat)}
                 stroke={trendColor(cat)}
                 fill={trendColor(cat)}
                 fillOpacity={0.75}
@@ -300,26 +421,67 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-2" style={{ marginBottom: 16 }}>
-        <ChartCard title="Repartição da despesa" subtitle="No período seleccionado" loading={loading} empty={!breakdown.length} height={280}>
-          <PieChart>
-            <Pie
+        <ChartCard
+          title="Repartição da despesa"
+          subtitle={
+            breakdownFilter.hidden.size
+              ? `${breakdownFilter.hidden.size} categoria(s) escondida(s) — clica na legenda para repor`
+              : 'Clica numa categoria da legenda para a esconder, duplo clique para a isolar'
+          }
+          loading={loading}
+          empty={!breakdown.length}
+          height={280}
+          controls={<ChartTypeToggle value={breakdownType} onChange={setBreakdownType} options={['pie', 'bar']} />}
+        >
+          {breakdownType === 'pie' ? (
+            <PieChart>
+              <Pie
+                data={breakdown}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={104}
+                dataKey="value"
+                paddingAngle={2}
+                stroke={INK.surface}
+                strokeWidth={2}
+              >
+                {breakdown.map((b) => (
+                  <Cell key={b.name} fill={breakdownColor(b.name)} />
+                ))}
+              </Pie>
+              <Tooltip content={<ChartTooltip formatValue={tooltipMoney} />} />
+              <Legend
+                payload={breakdownAll.map((b) => ({
+                  value: b.name,
+                  type: 'circle',
+                  color: breakdownColor(b.name),
+                }))}
+                {...breakdownFilter.legendProps}
+              />
+            </PieChart>
+          ) : (
+            /* Shares are easier to rank as bars and easier to judge as a
+               circle, so the reader picks. */
+            <BarChart
               data={breakdown}
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={104}
-              dataKey="value"
-              paddingAngle={2}
-              stroke={INK.surface}
-              strokeWidth={2}
+              layout="vertical"
+              margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
             >
-              {breakdown.map((b) => (
-                <Cell key={b.name} fill={breakdownColor(b.name)} />
-              ))}
-            </Pie>
-            <Tooltip content={<ChartTooltip formatValue={tooltipMoney} />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-          </PieChart>
+              <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
+              <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} />
+              <YAxis type="category" dataKey="name" width={110} {...cartesianDefaults.axis} />
+              <Tooltip
+                content={<ChartTooltip formatValue={tooltipMoney} />}
+                cursor={{ fill: 'rgba(139,148,158,0.08)' }}
+              />
+              <Bar dataKey="value" name="Despesa" radius={[0, 4, 4, 0]}>
+                {breakdown.map((b) => (
+                  <Cell key={b.name} fill={breakdownColor(b.name)} />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
         </ChartCard>
 
         <ChartCard title="Onde gastas mais" subtitle="Top 10 comerciantes" loading={loading} empty={!data?.topMerchants?.length} height={280}>
@@ -348,18 +510,38 @@ export default function Dashboard() {
 
       <ChartCard
         title="Taxa de poupança"
-        subtitle="Percentagem das receitas que sobrou em cada período"
+        subtitle={
+          clampedMonths
+            ? `Percentagem das receitas que sobrou · ${clampedMonths} mês(es) abaixo de −100% desenhados no limite`
+            : 'Percentagem das receitas que sobrou em cada período'
+        }
         loading={loading}
-        empty={!data?.savingsRate?.some((r) => r.rate != null)}
+        empty={!savingsRate.some((r) => r.rate != null)}
         emptyMessage="Sem receitas registadas neste período — a taxa de poupança precisa delas."
         height={220}
       >
-        <LineChart data={data?.savingsRate || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <LineChart data={savingsRate} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={(v) => `${v}%`} {...cartesianDefaults.axis} width={44} />
+          {/* Fixed to ±100%. One student month at −733% used to squash every
+              other month into a flat line at the top of the chart. */}
+          <YAxis
+            domain={[-100, 100]}
+            ticks={[-100, -50, 0, 50, 100]}
+            tickFormatter={(v) => `${v}%`}
+            {...cartesianDefaults.axis}
+            width={44}
+          />
           <Tooltip
-            content={<ChartTooltip formatLabel={axisMonth} formatValue={(v) => `${v}%`} />}
+            content={
+              <ChartTooltip
+                formatLabel={axisMonth}
+                // The line is clamped; the number never is.
+                formatValue={(v, entry) =>
+                  entry?.payload?.clamped ? `${entry.payload.trueRate}%` : `${v}%`
+                }
+              />
+            }
           />
           <ReferenceLine y={0} stroke={INK.axis} />
           <Line
@@ -368,7 +550,23 @@ export default function Dashboard() {
             name="Taxa de poupança"
             stroke={SERIES[2]}
             strokeWidth={2}
-            dot={{ r: 3, strokeWidth: 0, fill: SERIES[2] }}
+            // A hollow dot marks a month drawn at the limit rather than at its
+            // real value, so a clipped point never reads as an ordinary one.
+            dot={(props) =>
+              props.payload?.clamped ? (
+                <circle
+                  key={props.payload.month}
+                  cx={props.cx}
+                  cy={props.cy}
+                  r={4}
+                  fill={STATUS.critical}
+                  stroke={SERIES[2]}
+                  strokeWidth={2}
+                />
+              ) : (
+                <circle key={props.payload.month} cx={props.cx} cy={props.cy} r={3} fill={SERIES[2]} />
+              )
+            }
             activeDot={{ r: 5 }}
             connectNulls
           />

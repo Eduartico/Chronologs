@@ -46,7 +46,10 @@ export default function ChartTooltip({ active, payload, label, formatLabel, form
           />
           <span style={{ color: INK.secondary }}>{row.name}</span>
           <span style={{ color: INK.primary, marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
-            {formatValue ? formatValue(row.value) : row.value}
+            {/* The row goes along too, so a formatter can reach the datum —
+                a clamped savings rate shows its real value here, not the
+                value the line was drawn at. */}
+            {formatValue ? formatValue(row.value, row) : row.value}
           </span>
         </div>
       ))}

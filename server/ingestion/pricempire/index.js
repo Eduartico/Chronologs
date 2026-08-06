@@ -5,6 +5,8 @@ import { notify } from '../../lib/notify.js';
 import { runRules } from '../../engines/rules.js';
 import { ensureSession, loadPricempireState, savePricempireState } from './browser.js';
 import { listPortfolios, scrapePortfolio } from './scrape.js';
+import { downloadPortfolioCsv } from './export.js';
+import { importPricempireCsv } from './importer.js';
 
 function makeTransactionId(portfolioId, name, buyDate, buyPrice) {
   const digest = createHash('sha1')
@@ -17,6 +19,82 @@ function makeTransactionId(portfolioId, name, buyDate, buyPrice) {
 export async function fetchPortfolioList() {
   const page = await ensureSession({ interactive: false });
   return listPortfolios(page);
+}
+
+/**
+ * Resyncs by downloading each portfolio's CSV export and running it through the
+ * importer used for manual uploads.
+ *
+ * This is the path the "Ressincronizar" button takes. The export is the site's
+ * own view of the portfolio — buys, sells, fees, marketplaces and current
+ * prices — whereas the scraper below can only see what a page happened to fetch
+ * while it was open. When the export button cannot be found, the scraper runs
+ * as a fallback and the notification says so, because a silent downgrade to
+ * worse data is the failure that would be hardest to notice.
+ */
+export async function syncPricempire({ allowScrapeFallback = true } = {}) {
+  const state = loadPricempireState();
+  if (!state.selectedPortfolios || state.selectedPortfolios.length === 0) {
+    throw new Error('Nenhum portefólio seleccionado — escolhe-os em Ligações');
+  }
+
+  const page = await ensureSession({ interactive: false });
+  const result = {
+    method: 'csv-export',
+    portfolios: 0,
+    parsed: 0,
+    new: 0,
+    duplicates: 0,
+    prices: 0,
+    items: 0,
+    files: [],
+    errors: [],
+  };
+
+  const failures = [];
+
+  for (const portfolioId of state.selectedPortfolios) {
+    try {
+      const { buffer, filename, path } = await downloadPortfolioCsv(page, portfolioId);
+      const imported = await importPricempireCsv(buffer, { filename });
+      result.portfolios++;
+      result.parsed += imported.parsed;
+      result.new += imported.new;
+      result.duplicates += imported.duplicates;
+      result.prices += imported.prices;
+      result.items += imported.summary?.positions ?? 0;
+      result.files.push(path);
+    } catch (err) {
+      failures.push(`${portfolioId}: ${err.message}`);
+    }
+  }
+
+  // Nothing came through at all — fall back rather than leave the user with an
+  // empty portfolio and no explanation.
+  if (result.portfolios === 0 && allowScrapeFallback) {
+    notify(
+      'warning',
+      'Pricempire: export indisponível',
+      `Não foi possível descarregar o CSV (${failures.join('; ')}). A usar o scraper como alternativa — os dados podem estar incompletos.`,
+      { module: 'pricempire', failures }
+    );
+    const scraped = await ingestPricempire();
+    return { ...scraped, method: 'scrape-fallback', errors: failures };
+  }
+
+  result.errors = failures;
+  savePricempireState({ lastSync: new Date().toISOString(), sessionOk: true });
+
+  notify(
+    failures.length > 0 ? 'warning' : 'success',
+    'Pricempire ressincronizado',
+    `${result.new} novas transacções de ${result.parsed} linhas em ${result.portfolios} portefólio(s)` +
+      (result.duplicates ? `, ${result.duplicates} já registadas` : '') +
+      (failures.length ? ` · ${failures.length} falha(s)` : ''),
+    { module: 'pricempire', ...result }
+  );
+
+  return result;
 }
 
 /**

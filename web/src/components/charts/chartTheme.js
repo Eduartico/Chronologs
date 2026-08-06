@@ -11,6 +11,7 @@
  * 19.3) and ≥3:1 contrast all pass. Slots are assigned in fixed order and never
  * cycled — a ninth series folds into "Outros" instead.
  */
+import { baseCurrency } from '../../lib/money.js';
 
 export const SERIES = [
   '#3987e5', // blue
@@ -69,13 +70,20 @@ export function capSeries(rows, { key = 'name', value = 'value', max = MAX_SERIE
 const compact = new Intl.NumberFormat('pt-PT', { notation: 'compact', maximumFractionDigits: 1 });
 const exact = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 2 });
 
-/** Axis ticks: "€1,2 mil" rather than "1240" — readable at tick density. */
-export function axisMoney(value, currency = 'EUR') {
+/**
+ * Axis ticks: "€1,2 mil" rather than "1240" — readable at tick density.
+ *
+ * The currency follows the display setting rather than the axis's own data, so
+ * a chart drawn from dollar amounts has to convert before it gets here. That is
+ * deliberate: one screen, one currency, and the conversion happens once where
+ * the series is built instead of in every formatter.
+ */
+export function axisMoney(value, currency = baseCurrency()) {
   const symbol = currency === 'USD' ? '$' : '€';
   return `${symbol}${compact.format(value || 0)}`;
 }
 
-export function tooltipMoney(value, currency = 'EUR') {
+export function tooltipMoney(value, currency = baseCurrency()) {
   const symbol = currency === 'USD' ? '$' : '€';
   return `${symbol}${exact.format(value || 0)}`;
 }

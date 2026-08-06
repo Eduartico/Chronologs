@@ -6,6 +6,7 @@
  * This engine draws on four sources, strongest first:
  *
  *   history   — the same merchant was already categorized by the user
+ *   travel    — the date falls inside a trip on the calendar
  *   rules     — the user's own rules (rules.js)
  *   templates — merchant templates, applied directly instead of only being
  *               offered as rules to accept
@@ -17,6 +18,7 @@
 import { loadTemplates, loadKeywords, matchesPattern } from '../config/knowledge.js';
 import { cleanDescription, normalizeMerchantKey, stripAccents } from '../lib/merchant.js';
 import { loadRules, ruleMatches } from './rules.js';
+import { loadTravels, travelWindow } from './travel.js';
 
 export { cleanDescription, normalizeMerchantKey };
 
@@ -24,6 +26,10 @@ const CONFIDENCE = {
   historyManual: 0.95,
   historyAuto: 0.88,
   template: 0.85,
+  // Being abroad on a trip is strong evidence, but weaker than having filed the
+  // same merchant by hand: a supermarket run during a holiday is still
+  // groceries if that is what you called it last time.
+  travel: 0.82,
 };
 
 function haystackFor(tx) {
@@ -34,7 +40,7 @@ function haystackFor(tx) {
  * Indexes everything the per-transaction lookups need. `transactions` should be
  * the full projection so already-categorized history can inform pending ones.
  */
-export function buildSuggestionContext(transactions = []) {
+export function buildSuggestionContext(transactions = [], { travels = loadTravels() } = {}) {
   const history = new Map();
 
   for (const tx of transactions) {
@@ -54,6 +60,11 @@ export function buildSuggestionContext(transactions = []) {
       .sort((a, b) => (a.order || 0) - (b.order || 0)),
     templates: loadTemplates(),
     keywords: loadKeywords(),
+    // Windows rather than a per-transaction index, so the context stays useful
+    // for a transaction that was not in the list it was built from.
+    travelWindows: travels
+      .filter((t) => t.status !== 'rejected')
+      .map((t) => ({ travel: t, ...travelWindow(t) })),
     llmByKey: new Map(),
   };
 }
@@ -84,6 +95,12 @@ export function suggestForTransaction(tx, ctx) {
     }
   }
 
+  // If the calendar says you were away, money spent that day was probably spent
+  // travelling. The trip is the user's own answer about those dates, which is
+  // why this outranks a rule or a keyword guess.
+  const trip = tripFor(tx, ctx);
+  if (trip) add(trip.category || 'travel', CONFIDENCE.travel, 'travel', `durante "${trip.name}"`);
+
   const llm = ctx.llmByKey.get(key);
   if (llm) add(llm.category, llm.confidence ?? 0.8, 'llm', 'sugestão do modelo local');
 
@@ -103,6 +120,14 @@ export function suggestForTransaction(tx, ctx) {
   }
 
   return [...found.values()].sort((a, b) => b.confidence - a.confidence);
+}
+
+/** The trip covering this transaction's date, if the calendar knows of one. */
+function tripFor(tx, ctx) {
+  if (!ctx.travelWindows?.length) return null;
+  const date = String(tx.date || '').slice(0, 10);
+  if (!date) return null;
+  return ctx.travelWindows.find((w) => date >= w.from && date <= w.to)?.travel || null;
 }
 
 const SORTERS = {

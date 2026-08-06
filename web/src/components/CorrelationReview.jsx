@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api.js';
+import Icon from './Icon.jsx';
+import IconButton from './ui/IconButton.jsx';
+import Switch from './ui/Switch.jsx';
+import { useRowEditor } from '../lib/useRowEditor.js';
 
 const EMPTY = {
   name: '',
@@ -66,16 +70,21 @@ export default function CorrelationReview({ showToast }) {
     }
   };
 
-  const removeRule = async (rule) => {
-    if (!confirm(`Delete correlation rule "${rule.name}"?`)) return;
-    await api.deleteCorrelationRule(rule.id).catch(() => {});
+  // The armed bin, not a blocking browser dialog: one press loads it, a second
+  // fires, and it forgets after a few seconds.
+  const removeRule = async (id) => {
+    await api.deleteCorrelationRule(id).catch(() => {});
     load();
   };
+
+  const editor = useRowEditor({ onDelete: removeRule });
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3>🔗 Correlations</h3>
+        <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="link" size={16} /> Correlations
+        </h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost btn-sm" onClick={run}>▶ Run now</button>
           <button className="btn-primary btn-sm" onClick={() => setDraft({ ...EMPTY })}>+ New correlation rule</button>
@@ -119,7 +128,7 @@ export default function CorrelationReview({ showToast }) {
             <label>tolerance % <input type="number" value={draft.amountTolerancePct} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountTolerancePct: e.target.value })} /></label>
             <label>tolerance € <input type="number" value={draft.amountToleranceAbs} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountToleranceAbs: e.target.value })} /></label>
             <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input type="checkbox" checked={draft.allowAggregate} onChange={(e) => setDraft({ ...draft, allowAggregate: e.target.checked })} />
+              <Switch checked={draft.allowAggregate} onChange={(allowAggregate) => setDraft({ ...draft, allowAggregate })} />
               allow combining up to
               <input type="number" value={draft.maxAggregateSize} style={{ width: 50 }} onChange={(e) => setDraft({ ...draft, maxAggregateSize: e.target.value })} />
               transactions
@@ -142,15 +151,23 @@ export default function CorrelationReview({ showToast }) {
                 {r.textHint && ` · "${r.textHint}"`} · ±{r.dateWindowDays}d · ±{r.amountTolerancePct}%/€{r.amountToleranceAbs}
                 {r.allowAggregate && ` · combines ≤${r.maxAggregateSize}`}
               </span>
-              <label style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
-                <input
-                  type="checkbox"
+              <span style={{ marginLeft: 'auto' }}>
+                <Switch
                   checked={!!r.enabled}
-                  onChange={(e) => api.updateCorrelationRule(r.id, { enabled: e.target.checked }).then(load)}
+                  onChange={(enabled) => api.updateCorrelationRule(r.id, { enabled }).then(load)}
+                  label="enabled"
                 />
-                enabled
-              </label>
-              <button className="btn-red btn-sm" onClick={() => removeRule(r)}>Delete</button>
+              </span>
+              {editor.isDeleting(r.id) ? (
+                <IconButton
+                  icon="check"
+                  tone="armed"
+                  label="Confirmar — apaga a regra"
+                  onClick={() => editor.confirmDelete(r.id)}
+                />
+              ) : (
+                <IconButton icon="trash" tone="danger" label="Apagar" onClick={() => editor.askDelete(r.id)} />
+              )}
             </div>
           ))}
         </div>
@@ -181,8 +198,8 @@ export default function CorrelationReview({ showToast }) {
             {p.partial && <span className="badge badge-pending">partial</span>}
             <span style={{ color: 'var(--text-muted)' }}>score {p.score}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <button className="btn-green btn-sm" onClick={() => decide(p, true)}>Confirm</button>
-              <button className="btn-red btn-sm" onClick={() => decide(p, false)}>Reject</button>
+              <IconButton icon="check" tone="good" label="Confirmar" onClick={() => decide(p, true)} />
+              <IconButton icon="close" tone="danger" label="Rejeitar" onClick={() => decide(p, false)} />
             </span>
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>

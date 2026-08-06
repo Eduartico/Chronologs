@@ -135,6 +135,75 @@ function matchText(tx, cond) {
   });
 }
 
+// ---------- nested condition trees ----------
+//
+// The flat shape below — groups AND together, `text` entries OR together —
+// cannot say "(A or B) and not C". `conditions.tree` can: a recursive
+// `{ op: 'all'|'any'|'not', children }`, where a child is another group or a
+// leaf `{ field, op, value }`. It is entirely opt-in. A rule with no `tree`
+// runs through the flat evaluator exactly as it always has — every rule the
+// correction-learning path has ever written stays in that shape, unmigrated,
+// forever; only a rule built through the tree editor carries one.
+
+function evalLeaf(tx, leaf, { lenient }) {
+  const field = leaf.field || 'any';
+
+  if (field === 'any' || field === 'description' || field === 'merchant') {
+    return matchText(tx, leaf);
+  }
+
+  if (field === 'amount') {
+    if (tx.amount == null) return lenient;
+    const abs = Math.abs(tx.amount);
+    if (leaf.op === 'gt') return abs > Number(leaf.value);
+    if (leaf.op === 'lt') return abs < Number(leaf.value);
+    if (leaf.op === 'between') {
+      const min = leaf.value?.min !== '' && leaf.value?.min != null ? Number(leaf.value.min) : -Infinity;
+      const max = leaf.value?.max !== '' && leaf.value?.max != null ? Number(leaf.value.max) : Infinity;
+      return abs >= min && abs <= max;
+    }
+    return false;
+  }
+
+  if (field === 'date') {
+    if (tx.date == null) return lenient;
+    const d = String(tx.date).slice(0, 10);
+    if (leaf.op === 'after') return d > String(leaf.value);
+    if (leaf.op === 'before') return d < String(leaf.value);
+    if (leaf.op === 'between') {
+      const from = leaf.value?.from || '0000-00-00';
+      const to = leaf.value?.to || '9999-99-99';
+      return d >= from && d <= to;
+    }
+    return false;
+  }
+
+  if (field === 'direction') {
+    if (tx.amount == null) return lenient;
+    if (leaf.value === 'debit') return tx.amount < 0;
+    if (leaf.value === 'credit') return tx.amount >= 0;
+    return true;
+  }
+
+  if (field === 'source') {
+    if (tx.source == null) return lenient;
+    return tx.source === leaf.value;
+  }
+
+  return false;
+}
+
+function evalNode(tx, node, opts) {
+  if (!node) return true;
+  // A leaf carries `field`; a group carries `children`. That is the only
+  // distinction the evaluator needs to tell them apart.
+  if (!Array.isArray(node.children)) return evalLeaf(tx, node, opts);
+
+  if (node.op === 'any') return node.children.some((c) => evalNode(tx, c, opts));
+  if (node.op === 'not') return !node.children.every((c) => evalNode(tx, c, opts));
+  return node.children.every((c) => evalNode(tx, c, opts)); // 'all', and the default
+}
+
 /**
  * Evaluates one rule's conditions against a transaction. Condition groups AND
  * together; entries inside `text` OR together. Groups referencing fields the
@@ -143,6 +212,8 @@ function matchText(tx, cond) {
  */
 export function ruleMatches(tx, rule, { lenient = false } = {}) {
   const c = rule.conditions || {};
+
+  if (c.tree) return evalNode(tx, c.tree, { lenient });
 
   if (c.text && c.text.length > 0) {
     if (!c.text.some((cond) => matchText(tx, cond))) return false;
@@ -279,17 +350,23 @@ export async function runRules({ transactionIds = null } = {}) {
 // ---------- suggestions ----------
 
 /**
- * Turns a user correction into a rule.
+ * Reinforces a rule that already covers this pattern. Never creates one.
  *
- * The pattern comes from the *cleaned* merchant name, not the raw description:
- * learning "compra 3465 sp esl shop eu koln de" produces a rule that only ever
- * matches purchases made on that one card, whereas "sp esl shop" matches the
- * merchant however the bank formats it next time.
+ * This used to write a brand-new one-pattern rule on every single correction
+ * — `learnFromCorrection`, before this — which is how a real ledger ended up
+ * with hundreds of rules that each match exactly one transaction: correcting
+ * "spar supermarket cais do sodré" taught the system nothing about Spar, it
+ * just created a rule that would never fire again. A rule is evidence of an
+ * observed pattern now, not a receipt for a click — evidence accumulates in
+ * the ledger itself, and `advisor.js`'s `pattern` finding proposes a rule
+ * once enough corrections agree. See docs/rules-model.md.
+ *
+ * The only thing left to do reactively, on the correction itself, is nudge
+ * the confidence of a rule that is already doing this job correctly.
  */
-export function learnFromCorrection(description, merchant, category) {
+export function noteCorrection(description, merchant, category) {
   const pattern = cleanDescription(description || merchant || '').toLowerCase().trim();
   if (!pattern || pattern.length < 3) return null;
-  const field = 'any';
 
   const rules = loadRules();
   const existing = rules.find(
@@ -297,21 +374,12 @@ export function learnFromCorrection(description, merchant, category) {
       r.actions?.setCategory === category &&
       (r.conditions?.text || []).some((c) => c.value === pattern)
   );
-  if (existing) {
-    existing.confidence = Math.min(1, (existing.confidence || 0.5) + 0.1);
-    existing.updated = new Date().toISOString();
-    saveRules(rules);
-    return existing;
-  }
+  if (!existing) return null;
 
-  return createRule({
-    name: pattern,
-    conditions: { text: [{ field, op: 'contains', value: pattern }] },
-    actions: { setCategory: category, addTags: [] },
-    origin: 'learned',
-    confidence: 0.7,
-    stopProcessing: false,
-  });
+  existing.confidence = Math.min(1, (existing.confidence || 0.5) + 0.1);
+  existing.updated = new Date().toISOString();
+  saveRules(rules);
+  return existing;
 }
 
 /**

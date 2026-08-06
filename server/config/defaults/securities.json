@@ -1,0 +1,23 @@
+[
+  {
+    "title": "iShares Core MSCI World ETF USD Acc",
+    "isin": "IE00B4L5Y983",
+    "symbol": "IWDA.AS",
+    "currency": "EUR",
+    "market": "AMS"
+  },
+  {
+    "title": "Vanguard FTSE All-World ETF USD Acc",
+    "isin": "IE00BK5BQT80",
+    "symbol": "VWCE.DE",
+    "currency": "EUR",
+    "market": "FRA"
+  },
+  {
+    "title": "iShares MSCI EM ETF USD Acc",
+    "isin": "IE00B4L5YC18",
+    "symbol": "IQQE.DE",
+    "currency": "EUR",
+    "market": "FRA"
+  }
+]

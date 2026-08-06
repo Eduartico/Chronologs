@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api.js';
+import { formatDateTime } from '../lib/format.js';
+import Icon from './Icon.jsx';
 
 const TYPE_COLORS = {
   info: 'var(--accent)',
@@ -49,9 +51,9 @@ export default function NotificationBell() {
       <button
         className="bell-button"
         onClick={() => setOpen(!open)}
-        title="Notifications"
+        title="Notificações"
       >
-        <span>🔔</span>
+        <Icon name="bell" size={19} />
         {unread.length > 0 && <span className="bell-badge">{unread.length}</span>}
       </button>
       {open && (
@@ -81,7 +83,7 @@ export default function NotificationBell() {
                 <div className="bell-item-title">{n.title}</div>
                 {n.body && <div className="bell-item-body">{n.body}</div>}
                 <div className="bell-item-time">
-                  {new Date(n.timestamp).toLocaleString()}
+                  {formatDateTime(n.timestamp)}
                 </div>
               </div>
             </div>
