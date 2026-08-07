@@ -109,8 +109,8 @@ export async function importPricempireCsv(buffer, { filename = 'export.csv' } = 
 
   notify(
     'success',
-    'Import Pricempire',
-    `${result.new} novas transacções de ${result.parsed} linhas · ${held.length} itens em carteira`,
+    'notify.pricempire.import',
+    { imported: result.new, rows: result.parsed, holdings: held.length },
     { module: 'pricempire-csv', ...result }
   );
 

@@ -1,5 +1,6 @@
 import { useState, Fragment } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import { formatDate } from '../lib/format.js';
 import { money as displayMoney, nativeOf } from '../lib/money.js';
 import Icon from './Icon.jsx';
@@ -37,6 +38,7 @@ function Pnl({ value, roi }) {
 }
 
 export default function SecuritiesPanel({ securities, onChanged }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
   const [expanded, setExpanded] = useState(null);
@@ -49,10 +51,10 @@ export default function SecuritiesPanel({ securities, onChanged }) {
   if (positions.length === 0) {
     return (
       <div className="card" style={{ marginBottom: 20 }}>
-        <h3>ETFs / Bolsa</h3>
+        <h3>{t('securities.title')}</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
           Nenhuma ordem de bolsa encontrada. Os comprovativos de operação chegam por email do
-          ActivoBank — carrega em <strong>Re-processar documentos guardados</strong> em Ligações
+          ActivoBank — carrega em <strong>{t('securities.reprocess')}</strong> em Ligações
           para os voltar a ler.
         </p>
       </div>
@@ -70,7 +72,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
       );
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -83,7 +85,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
       setMessage(`${r.matched} ordens ligadas ao extrato.`);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -98,7 +100,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
       setPriceDraft((prev) => ({ ...prev, [position.name]: '' }));
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -112,14 +114,14 @@ export default function SecuritiesPanel({ securities, onChanged }) {
         which sat at a different height from the headings above and below it.
       */}
       <div className="section-title">
-        <Icon name="investments" size={17} /> ETFs / Bolsa
+        <Icon name="investments" size={17} /> {t('securities.title')}
         <span className="section-title-aside">
           {summary.positions} posições · {money(summary.invested)} investidos
           {summary.fees > 0 && <> · {money(summary.fees)} em comissões</>}
         </span>
         <IconButton
           icon="link"
-          label="Religar ao extrato: volta a casar cada ordem com o débito que a pagou"
+          label={t('securities.relinkHelp')}
           onClick={relink}
           disabled={busy === 'link'}
         />
@@ -147,11 +149,11 @@ export default function SecuritiesPanel({ securities, onChanged }) {
       <div className="grid-3" style={{ marginBottom: 16 }}>
         <div className="card stat">
           <div className="stat-value" style={{ fontSize: 20 }}>{money(summary.invested)}</div>
-          <div className="stat-label">Investido</div>
+          <div className="stat-label">{t('securities.invested')}</div>
         </div>
         <div className="card stat">
           <div className="stat-value" style={{ fontSize: 20 }}>{money(summary.marketValue)}</div>
-          <div className="stat-label">Valor de mercado</div>
+          <div className="stat-label">{t('securities.marketValue')}</div>
         </div>
         <div className="card stat">
           <div
@@ -168,7 +170,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
           >
             {summary.pnl == null ? '—' : money(summary.pnl)}
           </div>
-          <div className="stat-label">Ganho não realizado</div>
+          <div className="stat-label">{t('securities.unrealised')}</div>
         </div>
       </div>
 
@@ -176,13 +178,13 @@ export default function SecuritiesPanel({ securities, onChanged }) {
         <table>
           <thead>
             <tr>
-              <th>Título</th>
-              <th>Símbolo</th>
-              <th style={{ textAlign: 'right' }}>Qtd.</th>
-              <th style={{ textAlign: 'right' }}>Custo médio</th>
-              <th style={{ textAlign: 'right' }}>Investido</th>
-              <th style={{ textAlign: 'right' }}>Cotação</th>
-              <th style={{ textAlign: 'right' }}>Valor</th>
+              <th>{t('securities.security')}</th>
+              <th>{t('securities.symbol')}</th>
+              <th style={{ textAlign: 'right' }}>{t('securities.quantity')}</th>
+              <th style={{ textAlign: 'right' }}>{t('securities.averageCost')}</th>
+              <th style={{ textAlign: 'right' }}>{t('securities.invested')}</th>
+              <th style={{ textAlign: 'right' }}>{t('securities.quote')}</th>
+              <th style={{ textAlign: 'right' }}>{t('securities.value')}</th>
               <th style={{ textAlign: 'right' }}>P&L</th>
               <th></th>
             </tr>
@@ -198,9 +200,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
                         className="evidence strong"
                         style={{ marginLeft: 6 }}
                         title="Alguma ordem não foi ligada a um débito do extrato — o custo dessa parte é estimado pela cotação"
-                      >
-                        custo estimado
-                      </span>
+                      >{t('securities.estimatedCost')}</span>
                     )}
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>{p.symbol || '—'}</td>
@@ -217,7 +217,7 @@ export default function SecuritiesPanel({ securities, onChanged }) {
                         <input
                           type="number"
                           step="0.01"
-                          placeholder="preço"
+                          placeholder={t('securities.price')}
                           value={priceDraft[p.name] || ''}
                           onChange={(e) =>
                             setPriceDraft((prev) => ({ ...prev, [p.name]: e.target.value }))
@@ -259,10 +259,9 @@ export default function SecuritiesPanel({ securities, onChanged }) {
                           <span style={{ flex: 1 }}>{money(o.cost)}</span>
                           {o.linked ? (
                             <span className="evidence">
-                              <Icon name="link" size={11} /> ligada ao extrato
-                            </span>
+                              <Icon name="link" size={11} />{t('securities.linkedToStatement')}</span>
                           ) : (
-                            <span className="evidence strong">sem débito correspondente</span>
+                            <span className="evidence strong">{t('securities.noMatchingDebit')}</span>
                           )}
                         </div>
                       ))}

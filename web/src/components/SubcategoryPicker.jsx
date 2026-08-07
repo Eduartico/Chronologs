@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useT } from '../i18n/index.js';
 import Icon from './Icon.jsx';
 import Popover from './ui/Popover.jsx';
 import IconButton from './ui/IconButton.jsx';
@@ -53,6 +54,7 @@ export default function SubcategoryPicker({
   onRemove,
   disabled,
 }) {
+  const { t } = useT();
   const anchor = useRef(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -82,7 +84,7 @@ export default function SubcategoryPicker({
         <IconButton
           icon="plus"
           size={12}
-          label="Juntar subcategoria"
+          label={t('picker.addSubcategory')}
           disabled={disabled}
           onClick={() => (open ? close() : setOpen(true))}
         />
@@ -92,7 +94,7 @@ export default function SubcategoryPicker({
           <input
             autoFocus
             value={query}
-            placeholder="Procurar…"
+            placeholder={t('common.search')}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && close()}
           />

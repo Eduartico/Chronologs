@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import IconButton from './ui/IconButton.jsx';
 
 /**
@@ -28,6 +29,7 @@ const FIELDS = [
 ];
 
 export default function InstitutionProfile({ showToast }) {
+  const { t } = useT();
   const [defaultProfile, setDefaultProfile] = useState(null);
   const [saved, setSaved] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -53,7 +55,7 @@ export default function InstitutionProfile({ showToast }) {
     try {
       setPreview(await api.previewInstitutionProfile(draft));
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -66,7 +68,7 @@ export default function InstitutionProfile({ showToast }) {
       setSaved(draft);
       showToast(`Perfil «${draft.name}» guardado — a recalcular o ledger`);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -80,7 +82,7 @@ export default function InstitutionProfile({ showToast }) {
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <h3 style={{ flex: 1 }}>Banco</h3>
+        <h3 style={{ flex: 1 }}>{t('institution.bank')}</h3>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {isCustom ? `perfil «${saved.name}»` : `omissão (${defaultProfile?.name})`}
         </span>
@@ -100,7 +102,7 @@ export default function InstitutionProfile({ showToast }) {
           </p>
           <div style={{ display: 'grid', gap: 10 }}>
             <input
-              placeholder="Nome do banco"
+              placeholder={t('institution.bankName')}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               style={{ maxWidth: 260 }}
@@ -123,13 +125,9 @@ export default function InstitutionProfile({ showToast }) {
             <button className="btn-ghost btn-sm" onClick={test} disabled={busy === 'test'}>
               {busy === 'test' ? 'A testar…' : 'Testar contra o ledger'}
             </button>
-            <button className="btn-primary btn-sm" onClick={save} disabled={!dirty || busy === 'save'}>
-              Guardar
-            </button>
+            <button className="btn-primary btn-sm" onClick={save} disabled={!dirty || busy === 'save'}>{t('common.save')}</button>
             {isCustom && (
-              <button className="btn-ghost btn-sm" onClick={resetToDefault} disabled={busy != null}>
-                Repor ActivoBank
-              </button>
+              <button className="btn-ghost btn-sm" onClick={resetToDefault} disabled={busy != null}>{t('institution.resetActivobank')}</button>
             )}
             {preview && (
               <span className="evidence" style={{ marginLeft: 'auto' }}>

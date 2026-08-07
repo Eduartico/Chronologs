@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n/index.js';
 import Icon from '../Icon.jsx';
 import Calendar from './Calendar.jsx';
 import Popover from './Popover.jsx';
@@ -36,6 +37,7 @@ export default function DateField({
   className = '',
   style,
 }) {
+  const { t } = useT();
   const [text, setText] = useState(() => displayDate(value));
   const [open, setOpen] = useState(false);
   const [bad, setBad] = useState(false);
@@ -112,7 +114,7 @@ export default function DateField({
         className="icon-btn date-field-cal"
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
-        aria-label="Abrir calendário"
+        aria-label={t('calendar.open')}
       >
         <Icon name="calendar" size={15} />
       </button>

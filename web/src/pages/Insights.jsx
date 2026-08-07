@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useT } from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatCurrency, formatDate, formatMonth } from '../lib/format.js';
@@ -66,6 +67,7 @@ function Delta({ value }) {
 }
 
 export default function Insights() {
+  const { t, tx } = useT();
   const [rangeId, setRangeId] = usePersistentState('insights.range', '12m');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +122,7 @@ export default function Insights() {
     dir: 'desc',
   });
 
-  if (loading) return <div className="empty-state"><p>A carregar…</p></div>;
+  if (loading) return <div className="empty-state"><p>{t('common.loading')}</p></div>;
   if (error) return <div className="empty-state"><p>Erro: {error}</p></div>;
   if (!data) return null;
 
@@ -131,8 +133,7 @@ export default function Insights() {
     <>
       <div className="page-header">
         <h2>
-          <Icon name="insights" size={22} /> Análises
-        </h2>
+          <Icon name="insights" size={22} />{t('nav.insights')}</h2>
         <div className="filter-chips">
           {RANGES.map((r) => (
             <button
@@ -177,17 +178,23 @@ export default function Insights() {
       {projection && (
         <div className="card">
           <div className="section-title">
-            <Icon name="calendar" size={17} /> Este mês, ao ritmo actual
-          </div>
+            <Icon name="calendar" size={17} />{t('insights.thisMonthAtPace')}</div>
           <p className="hint" style={{ margin: 0 }}>
-            Vais em <strong>{formatCurrency(projection.expenseSoFar)}</strong> ao dia{' '}
-            {projection.dayOfMonth} de {projection.daysInMonth}. A este ritmo o mês fecha em{' '}
-            <strong>{formatCurrency(projection.projectedExpense)}</strong>
+            {tx('insights.projection', {
+              soFar: <strong>{formatCurrency(projection.expenseSoFar)}</strong>,
+              day: projection.dayOfMonth,
+              days: projection.daysInMonth,
+              projected: <strong>{formatCurrency(projection.projectedExpense)}</strong>,
+            })}
             {averageMonth > 0 && (
               <>
                 {' '}
-                — {projection.projectedExpense > averageMonth ? 'acima' : 'abaixo'} da tua média de{' '}
-                {formatCurrency(averageMonth)}
+                {tx('insights.versusAverage', {
+                  direction: projection.projectedExpense > averageMonth
+                    ? t('insights.above')
+                    : t('insights.below'),
+                  average: formatCurrency(averageMonth),
+                })}
               </>
             )}
             .
@@ -198,8 +205,7 @@ export default function Insights() {
       {topCategories.length > 0 && (
         <div className="card">
           <div className="section-title">
-            <Icon name="categories" size={17} /> Para onde foi o dinheiro
-          </div>
+            <Icon name="categories" size={17} />{t('insights.whereItWent')}</div>
           <table>
             <tbody>
               {topCategories.map((c) => (
@@ -234,8 +240,7 @@ export default function Insights() {
       {shifts.length > 0 && (
         <div className="card">
           <div className="section-title">
-            <Icon name="transactions" size={17} /> O que mudou
-            <span className="section-title-aside">face ao período anterior de igual duração</span>
+            <Icon name="transactions" size={17} />{t('insights.whatChanged')}<span className="section-title-aside">{t('insights.versusPrevious')}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
@@ -271,8 +276,7 @@ export default function Insights() {
       {recurring.length > 0 && (
         <div className="card">
           <div className="section-title">
-            <Icon name="subscriptions" size={17} /> Compromissos recorrentes
-            <span className="section-title-aside">{formatCurrency(committedMonthly)}/mês</span>
+            <Icon name="subscriptions" size={17} />{t('insights.recurring')}<span className="section-title-aside">{formatCurrency(committedMonthly)}/mês</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
@@ -313,8 +317,7 @@ export default function Insights() {
       {vaults.length > 0 && (
         <div className="card">
           <div className="section-title">
-            <Icon name="vault" size={17} /> Poupança
-            <span className="section-title-aside">{formatCurrency(vaultTotal)} guardados</span>
+            <Icon name="vault" size={17} />{t('insights.savings')}<span className="section-title-aside">{formatCurrency(vaultTotal)} guardados</span>
           </div>
           <table>
             <tbody>

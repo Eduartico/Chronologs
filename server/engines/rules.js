@@ -439,15 +439,11 @@ export async function suggestFromLlm() {
     .slice(0, 50)
     .map((t) => ({ description: t.description, merchant: t.merchant, amount: t.amount }));
 
-  const prompt = `You are helping categorize personal-finance transactions.
-Available categories: ${categories.join(', ')}.
-Sample uncategorized transactions (Portuguese bank data):
-${JSON.stringify(samples, null, 1)}
-
-Propose AT MOST 5 high-confidence categorization rules — quality over quantity.
-Only suggest a rule when the merchant/keyword is unambiguous. You may also
-include well-known Portuguese merchants that are missing from the samples.
-Reply with STRICT JSON: {"rules": [{"name": "...", "patterns": ["keyword"], "category": "one of the categories"}]}`;
+  // Same rule as the advisor: the prompt language follows the reader's, and the
+  // wording lives in server/engines/prompts/ rather than in this function.
+  const { pick } = await import('./prompts/index.js');
+  const { currentLocale } = await import('../lib/settings.js');
+  const prompt = pick('ruleSuggest', currentLocale())(samples, categories);
 
   let parsed;
   try {

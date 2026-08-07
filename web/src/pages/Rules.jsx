@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import { formatDate } from '../lib/format.js';
 import Icon from '../components/Icon.jsx';
 import CorrelationReview from '../components/CorrelationReview.jsx';
@@ -97,6 +98,7 @@ function describeConditions(rule) {
 }
 
 export default function Rules() {
+  const { t, tx } = useT();
   const [rules, setRules] = useState([]);
   const [tags, setTags] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -131,7 +133,7 @@ export default function Rules() {
   };
 
   const patch = async (rule, changes) => {
-    await api.updateRule(rule.id, changes).catch((e) => showToast('Error: ' + e.message));
+    await api.updateRule(rule.id, changes).catch((e) => showToast(errText(e)));
     load();
   };
 
@@ -139,14 +141,14 @@ export default function Rules() {
   // the tab, for a rule that takes five seconds to rewrite. The bin arms itself
   // instead — one press to load it, a second to fire.
   const remove = async (id) => {
-    await api.deleteRule(id).catch((e) => showToast('Error: ' + e.message));
+    await api.deleteRule(id).catch((e) => showToast(errText(e)));
     load();
   };
 
   const rename = async (id, changes) => {
     const name = String(changes.name || '').trim();
     if (!name) return;
-    await api.updateRule(id, { name }).catch((e) => showToast('Error: ' + e.message));
+    await api.updateRule(id, { name }).catch((e) => showToast(errText(e)));
     load();
   };
 
@@ -159,7 +161,7 @@ export default function Rules() {
         `Rules run: ${result.evaluated} evaluated, ${result.categorized} categorized, ${result.tagged} tagged`
       );
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
@@ -169,12 +171,12 @@ export default function Rules() {
       const s = await api.getRuleSuggestions(!!settings?.llm?.enabled);
       setSuggestions([...(s.static || []), ...(s.llm || [])]);
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
   const accept = async (suggestion) => {
-    await api.acceptRuleSuggestion(suggestion).catch((e) => showToast('Error: ' + e.message));
+    await api.acceptRuleSuggestion(suggestion).catch((e) => showToast(errText(e)));
     setSuggestions((prev) => prev.filter((s) => s !== suggestion));
     load();
   };
@@ -186,7 +188,7 @@ export default function Rules() {
       showToast('Rule created');
       load();
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
@@ -207,27 +209,26 @@ export default function Rules() {
   return (
     <div>
       <div className="page-header">
-        <h2>Rules</h2>
+        <h2>{t('rules.title')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost" onClick={loadSuggestions}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="lightbulb" size={15} /> Suggestions
+              <Icon name="lightbulb" size={15} /> {t('rules.suggestions')}
             </span>
           </button>
           <button className="btn-ghost" onClick={runNow}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="play" size={15} /> Run rules now
+              <Icon name="play" size={15} /> {t('rules.runNow')}
             </span>
           </button>
           <button className="btn-primary" onClick={() => setDraft(structuredClone(EMPTY_RULE))}>
-            + New rule
+            + {t('rules.new')}
           </button>
         </div>
       </div>
 
       <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
-        Rules run top-to-bottom on every new transaction (and on demand). A rule with
-        <strong> stop</strong> enabled halts processing of later rules — like Outlook inbox rules.
+        {tx('rules.help', { stop: <strong>{t('rules.stop')}</strong> })}
         Manual category choices are never overwritten.
       </p>
 
@@ -235,10 +236,10 @@ export default function Rules() {
 
       {suggestions && (
         <div className="card" style={{ marginBottom: 12 }}>
-          <h3>Suggested rules</h3>
+          <h3>{t('rules.suggestedRules')}</h3>
           {suggestions.length === 0 && (
             <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-              No new suggestions — all templates are covered by existing rules.
+              {t('rules.noSuggestions')}
             </p>
           )}
           {suggestions.map((s, i) => (
@@ -265,17 +266,17 @@ export default function Rules() {
                 </span>
               </span>
               <span className="badge">{s.origin === 'suggested-llm' ? 'AI' : 'template'}</span>
-              <button className="btn-green btn-sm" onClick={() => accept(s)}>Accept</button>
+              <button className="btn-green btn-sm" onClick={() => accept(s)}>{t('rules.accept')}</button>
               <button
                 className="btn-ghost btn-sm"
                 onClick={() => setSuggestions((prev) => prev.filter((x) => x !== s))}
               >
-                Dismiss
+                {t('rules.dismiss')}
               </button>
             </div>
           ))}
           <button className="btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setSuggestions(null)}>
-            Close
+            {t('common.close')}
           </button>
         </div>
       )}
@@ -283,17 +284,17 @@ export default function Rules() {
       {draft && (
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h3 style={{ flex: 1 }}>New rule</h3>
+            <h3 style={{ flex: 1 }}>{t('rules.new')}</h3>
             <Switch
               checked={draft.advanced}
               onChange={(advanced) => setDraft({ ...draft, advanced })}
-              label="Condições avançadas"
-              title="(A ou B) e não C, em vez de só texto + filtros"
+              label={t('rules.advanced')}
+              title={t('rules.advancedHelp')}
             />
           </div>
           <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
             <input
-              placeholder="Rule name"
+              placeholder={t('rules.namePlaceholder')}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             />
@@ -315,7 +316,7 @@ export default function Rules() {
                     setDraft({ ...draft, conditions: { ...draft.conditions, text } });
                   }}
                 >
-                  <option value="any">description or merchant</option>
+                  <option value="any">{t('rules.textPlaceholder')}</option>
                   <option value="description">description</option>
                   <option value="merchant">merchant</option>
                 </select>
@@ -332,7 +333,7 @@ export default function Rules() {
                   <option value="regex">regex</option>
                 </select>
                 <input
-                  placeholder="text…"
+                  placeholder={t('rules.textShort')}
                   value={t.value}
                   style={{ flex: 1, minWidth: 140 }}
                   onChange={(e) => {
@@ -360,7 +361,7 @@ export default function Rules() {
               </div>
             ))}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Date</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('common.date')}</span>
               <DateRangeField
                 from={draft.conditions.dateRange.from}
                 to={draft.conditions.dateRange.to}
@@ -371,7 +372,7 @@ export default function Rules() {
                   })
                 }
               />
-              <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>Amount</span>
+              <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{t('common.amount')}</span>
               <input
                 type="number"
                 placeholder="min"
@@ -403,13 +404,13 @@ export default function Rules() {
                   setDraft({ ...draft, conditions: { ...draft.conditions, direction: e.target.value } })
                 }
               >
-                <option value="any">debit or credit</option>
-                <option value="debit">debit only</option>
-                <option value="credit">credit only</option>
+                <option value="any">{t('rules.anyDirection')}</option>
+                <option value="debit">{t('rules.debitOnly')}</option>
+                <option value="credit">{t('rules.creditOnly')}</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Sources:</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('rules.sources')}</span>
               {SOURCES.map((s) => (
                 <label key={s} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
                   <input
@@ -426,7 +427,7 @@ export default function Rules() {
             )}
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Then:</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('rules.then')}</span>
               <select
                 value={draft.actions.setCategory}
                 onChange={(e) => setDraft({ ...draft, actions: { ...draft.actions, setCategory: e.target.value } })}
@@ -452,7 +453,7 @@ export default function Rules() {
                 <Switch
                   checked={draft.stopProcessing}
                   onChange={(stopProcessing) => setDraft({ ...draft, stopProcessing })}
-                  label="stop processing further rules"
+                  label={t('rules.stopHelp')}
                 />
               </div>
             </div>
@@ -465,20 +466,20 @@ export default function Rules() {
 
       {rules.length === 0 ? (
         <div className="empty-state">
-          <h3>No rules yet</h3>
-          <p>Create rules or accept suggestions to auto-organize your transactions.</p>
+          <h3>{t('rules.emptyTitle')}</h3>
+          <p>{t('rules.emptyBody')}</p>
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'auto' }}>
           <table>
             <thead>
               <tr>
-                <th style={{ width: 70 }}>Order</th>
-                <th>Rule</th>
-                <th>Conditions</th>
-                <th>Actions</th>
-                <th style={{ width: 60 }}>Stop</th>
-                <th style={{ width: 70 }}>Enabled</th>
+                <th style={{ width: 70 }}>{t('rules.order')}</th>
+                <th>{t('rules.rule')}</th>
+                <th>{t('rules.conditions')}</th>
+                <th>{t('common.actions')}</th>
+                <th style={{ width: 60 }}>{t('rules.stop')}</th>
+                <th style={{ width: 70 }}>{t('rules.enabled')}</th>
                 <th style={{ width: 90 }}></th>
               </tr>
             </thead>
@@ -489,10 +490,10 @@ export default function Rules() {
                       rows is the order the rules run in, so re-sorting it would
                       show a sequence the engine does not use. */}
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <IconButton icon="arrowUp" label="Subir" onClick={() => move(i, -1)} disabled={i === 0} />
+                    <IconButton icon="arrowUp" label={t('rules.moveUp')} onClick={() => move(i, -1)} disabled={i === 0} />
                     <IconButton
                       icon="arrowDown"
-                      label="Descer"
+                      label={t('rules.moveDown')}
                       onClick={() => move(i, 1)}
                       disabled={i === rules.length - 1}
                     />
@@ -527,14 +528,14 @@ export default function Rules() {
                     <Switch
                       checked={!!rule.stopProcessing}
                       onChange={(stopProcessing) => patch(rule, { stopProcessing })}
-                      title="Parar de avaliar regras depois desta"
+                      title={t('rules.stopHelp')}
                     />
                   </td>
                   <td>
                     <Switch
                       checked={!!rule.enabled}
                       onChange={(enabled) => patch(rule, { enabled })}
-                      title="Regra activa"
+                      title={t('rules.enabledHelp')}
                     />
                   </td>
                   <td>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import Icon from './Icon.jsx';
 import IconButton from './ui/IconButton.jsx';
 import { useLlmStatus } from '../lib/useLlmStatus.js';
@@ -28,7 +29,21 @@ const NO_LLM_LABEL = 'Liga um modelo local em Definições para usar isto';
  * reason is replayed into the next model prompt — which is the whole point of
  * asking for a note.
  */
+/**
+ * A finding's explanation.
+ *
+ * The engine now sends `{rationaleKey, rationaleParams}` beside the sentence it
+ * has always sent. Preferring the key is what makes the advisor speak the reader's
+ * language; falling back to the sentence is what keeps a finding that was fetched
+ * before this change — or produced by an older server — readable rather than blank.
+ */
+function explain(finding, t, prefix = 'rationale') {
+  const key = finding?.[`${prefix}Key`];
+  return key ? t(key, finding[`${prefix}Params`] || {}) : finding?.[prefix];
+}
+
 export default function RuleAdvisor({ categories = [], onChanged }) {
+  const { t } = useT();
   const llm = useLlmStatus();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -52,7 +67,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
     try {
       setData(await api.getAdvisor(useLlm));
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -83,7 +98,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       dismiss(candidate.id);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -97,7 +112,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       dismiss(finding.id);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -111,7 +126,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       dismiss(finding.id);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -126,7 +141,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       dismiss(finding.id);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -151,7 +166,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       dismiss(finding.id);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -165,7 +180,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       setRejecting(null);
       setNote('');
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(null);
     }
@@ -176,7 +191,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
     try {
       setCompaction(await api.previewCompaction());
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setCompacting(false);
     }
@@ -190,7 +205,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       setCompaction(null);
       onChanged?.();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setCompacting(false);
     }
@@ -201,7 +216,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 260 }}>
-            <h3>Conselheiro</h3>
+            <h3>{t('advisor.title')}</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
               Procura regras que dizem a mesma coisa e podem ser fundidas, e classificações que
               destoam do resto do comerciante. Tem em conta as viagens: um supermercado marcado
@@ -209,15 +224,13 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-primary" onClick={() => load(false)}>Analisar</button>
+            <button className="btn-primary" onClick={() => load(false)}>{t('advisor.analyse')}</button>
             <button
               className="btn-ghost"
               onClick={() => load(true)}
               disabled={!llm.ready}
               title={llm.ready ? 'Junta a opinião do modelo local' : NO_LLM_LABEL}
-            >
-              Analisar com IA
-            </button>
+            >{t('advisor.analyseWithAi')}</button>
             <button className="btn-ghost" onClick={previewCompaction} disabled={compacting}>
               {compacting ? 'A ver…' : 'Compactar regras aprendidas'}
             </button>
@@ -239,9 +252,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
   if (loading) {
     return (
       <div className="card" style={{ marginBottom: 12 }}>
-        <p style={{ color: 'var(--text-muted)' }}>
-          A simular o motor de regras sobre todo o histórico… isto demora alguns segundos.
-        </p>
+        <p style={{ color: 'var(--text-muted)' }}>{t('advisor.simulating')}</p>
       </div>
     );
   }
@@ -259,7 +270,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h3 style={{ flex: 1 }}>Conselheiro</h3>
+        <h3 style={{ flex: 1 }}>{t('advisor.title')}</h3>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {data.totalRules} regras · {data.feedback} decisões memorizadas
         </span>
@@ -270,13 +281,12 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
           title={llm.ready ? undefined : NO_LLM_LABEL}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="brain" size={14} /> Pedir opinião à IA
-          </span>
+            <Icon name="brain" size={14} />{t('advisor.askAi')}</span>
         </button>
         <button className="btn-ghost btn-sm" onClick={previewCompaction} disabled={compacting}>
           {compacting ? 'A ver…' : 'Compactar regras aprendidas'}
         </button>
-        <button className="btn-ghost btn-sm" onClick={() => setData(null)}>Fechar</button>
+        <button className="btn-ghost btn-sm" onClick={() => setData(null)}>{t('common.close')}</button>
       </div>
 
       {compaction && (
@@ -297,9 +307,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
         Colapsar regras ({data.collapses.length})
       </h4>
       {data.collapses.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          Nada para fundir — as regras já estão suficientemente compactas.
-        </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('advisor.nothingToMerge')}</p>
       )}
       {data.collapses.map((c) => {
         const llm = llmNoteFor(c.id);
@@ -307,18 +315,16 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
         return (
           <div key={c.id} className="advice-item" style={{ opacity: busy === c.id ? 0.5 : 1 }}>
             {/* The reasoning first. The counts are the footnote, not the headline. */}
-            <p className="advice-lead">{c.rationale}</p>
+            <p className="advice-lead">{explain(c, t)}</p>
 
             <div className="advice-actions">
               <span className="evidence">
                 {c.replaces.length} regras → 1 · {c.category}
               </span>
               {c.ambiguous ? (
-                <span className="evidence strong" title={c.ambiguous.summary}>
-                  raiz ambígua — não vale a pena
-                </span>
+                <span className="evidence strong" title={c.ambiguous.summary}>{t('advisor.ambiguousRoot')}</span>
               ) : c.lossless ? (
-                <span className="evidence">nada muda de categoria</span>
+                <span className="evidence">{t('advisor.noCategoryChange')}</span>
               ) : (
                 <span className="evidence strong">{c.changed} transacções mudariam</span>
               )}
@@ -342,7 +348,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
               <IconButton
                 icon="close"
                 tone="danger"
-                label="Rejeitar e memorizar"
+                label={t('advisor.rejectAndRemember')}
                 disabled={busy === c.id}
                 onClick={() => setRejecting(c)}
               />
@@ -352,7 +358,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
 
             {expanded === c.id && (
               <div className="advice-details">
-                <strong>Comerciantes</strong>
+                <strong>{t('advisor.merchants')}</strong>
                 <div className="advice-details-grid">
                   {merchants.slice(0, 40).map((m) => (
                     <span key={m}>{m}</span>
@@ -361,7 +367,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
                 </div>
                 {c.changes?.length > 0 && (
                   <>
-                    <strong style={{ marginTop: 8, display: 'block' }}>Mudanças que isto provocaria</strong>
+                    <strong style={{ marginTop: 8, display: 'block' }}>{t('advisor.changesThisWouldCause')}</strong>
                     <div className="advice-details-grid">
                       {c.changes.map((ch) => (
                         <span key={ch.id}>
@@ -390,7 +396,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
             const llm = llmNoteFor(s.id);
             return (
               <div key={s.id} className="advice-item" style={{ opacity: busy === s.id ? 0.5 : 1 }}>
-                <p className="advice-lead">{s.rationale}</p>
+                <p className="advice-lead">{explain(s, t)}</p>
                 <div className="advice-actions">
                   <span className="evidence">
                     {s.matched} transacções · ordem {s.rule.order} depois de {s.shadowedBy.order}
@@ -443,7 +449,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
                   <IconButton
                     icon="close"
                     tone="danger"
-                    label="Está bem assim — não voltar a avisar, ou explicar porquê"
+                    label={t('advisor.fineAsIs')}
                     disabled={busy === s.id}
                     onClick={() => setRejecting(s)}
                   />
@@ -481,7 +487,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
                   <IconButton
                     icon="close"
                     tone="danger"
-                    label="Não voltar a avisar sobre esta raiz"
+                    label={t('advisor.dontWarnRoot')}
                     disabled={busy === a.id}
                     onClick={() => setRejecting(a)}
                   />
@@ -508,7 +514,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
             const llm = llmNoteFor(p.id);
             return (
               <div key={p.id} className="advice-item" style={{ opacity: busy === p.id ? 0.5 : 1 }}>
-                <p className="advice-lead">{p.rationale}</p>
+                <p className="advice-lead">{explain(p, t)}</p>
                 <div className="advice-actions">
                   <span className="evidence">{p.share}% concordam · {p.sample.slice(0, 2).join(' · ')}</span>
                   <span style={{ flex: 1 }} />
@@ -522,7 +528,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
                   <IconButton
                     icon="close"
                     tone="danger"
-                    label="Não, obrigado — não voltar a avisar"
+                    label={t('advisor.noThanks')}
                     disabled={busy === p.id}
                     onClick={() => setRejecting(p)}
                   />
@@ -538,16 +544,14 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
         Achados estranhos ({data.anomalies.length})
       </h4>
       {data.anomalies.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          Nenhuma classificação destoa do seu comerciante.
-        </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('advisor.noAnomalies')}</p>
       )}
       {data.anomalies.map((a) => {
         const llm = llmNoteFor(a.id);
         return (
           <div key={a.id} className="advice-item" style={{ opacity: busy === a.id ? 0.5 : 1 }}>
             <p className="advice-lead">
-              <strong>{a.transaction.description}</strong> — {a.reason}
+              <strong>{a.transaction.description}</strong> — {explain(a, t, 'reason')}
             </p>
             <div className="advice-actions">
               {a.travel && (
@@ -575,7 +579,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
               <IconButton
                 icon="close"
                 tone="danger"
-                label="Está correcto — não voltar a avisar, ou explicar porquê"
+                label={t('advisor.isCorrect')}
                 disabled={busy === a.id}
                 onClick={() => setRejecting(a)}
               />
@@ -588,7 +592,7 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
       {rejecting && (
         <div className="modal-overlay" onClick={() => setRejecting(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Porque é que isto está errado?</h3>
+            <h3>{t('advisor.whyWrong')}</h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
               Opcional, mas o motivo fica guardado e entra no contexto da próxima análise — a
               sugestão não voltará a aparecer.
@@ -597,14 +601,12 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
               rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="ex.: este supermercado é mesmo despesa de casa, não de viagem"
+              placeholder={t('advisor.notePlaceholder')}
               style={{ width: '100%' }}
             />
             <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setRejecting(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={() => reject(rejecting)}>
-                Rejeitar e memorizar
-              </button>
+              <button className="btn-ghost" onClick={() => setRejecting(null)}>{t('common.cancel')}</button>
+              <button className="btn-primary" onClick={() => reject(rejecting)}>{t('advisor.rejectAndRemember')}</button>
             </div>
           </div>
         </div>
@@ -620,11 +622,12 @@ export default function RuleAdvisor({ categories = [], onChanged }) {
  * actually change category as a result.
  */
 function CompactionPreview({ preview, busy, onApply, onCancel }) {
+  const { t } = useT();
   if (preview.groups.length === 0) {
     return (
       <div className="advisor-overlay" style={{ position: 'static', marginTop: 12 }}>
-        <p>Nada para compactar — as regras aprendidas já não têm raízes repetidas.</p>
-        <button className="btn-ghost btn-sm" onClick={onCancel}>Fechar</button>
+        <p>{t('advisor.nothingToCompact')}</p>
+        <button className="btn-ghost btn-sm" onClick={onCancel}>{t('common.close')}</button>
       </div>
     );
   }
@@ -651,9 +654,7 @@ function CompactionPreview({ preview, busy, onApply, onCancel }) {
         </div>
         {preview.changes.length > 0 && (
           <>
-            <strong style={{ marginTop: 10, display: 'block', fontSize: 13 }}>
-              Transacções que mudariam
-            </strong>
+            <strong style={{ marginTop: 10, display: 'block', fontSize: 13 }}>{t('advisor.transactionsThatWouldChange')}</strong>
             <div className="advice-details-grid" style={{ maxHeight: 160, overflowY: 'auto' }}>
               {preview.changes.map((ch) => (
                 <span key={ch.id}>
@@ -664,10 +665,8 @@ function CompactionPreview({ preview, busy, onApply, onCancel }) {
           </>
         )}
         <div className="modal-actions">
-          <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
-          <button className="btn-primary" disabled={busy} onClick={onApply}>
-            Compactar
-          </button>
+          <button className="btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className="btn-primary" disabled={busy} onClick={onApply}>{t('advisor.compact')}</button>
         </div>
       </div>
     </div>

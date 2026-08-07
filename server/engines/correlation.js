@@ -216,8 +216,16 @@ export async function runCorrelations() {
 
       notify(
         'correlation',
-        'Possible transaction link found',
-        `${a.amount.toFixed(2)}€ ${rule.sourceA} (${a.date?.slice(0, 10)}) ↔ ${bIds.length} ${rule.sourceB} transaction(s) ≈ ${match.sum.toFixed(2)}€${match.partial ? ' (partial — rest may be site balance)' : ''}`,
+        'notify.correlation.found',
+        {
+          amount: a.amount.toFixed(2),
+          sourceA: rule.sourceA,
+          date: a.date?.slice(0, 10),
+          count: bIds.length,
+          sourceB: rule.sourceB,
+          sum: match.sum.toFixed(2),
+          partial: match.partial ? 1 : 0,
+        },
         { proposalId: proposal.id, ruleId: rule.id }
       );
     }

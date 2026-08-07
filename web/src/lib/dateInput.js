@@ -16,8 +16,25 @@
  *
  * Pure functions, no React, so the rules can be tested on their own.
  */
+import { firstDayOfWeek } from './locale.js';
 
-const KEYWORDS = ['hoje', 'ontem', 'amanha', 'amanhã'];
+/**
+ * Words that mean a date.
+ *
+ * Both languages are accepted whichever one the interface is in, and they always
+ * have been for Portuguese — someone who types `hoje` out of habit should not be
+ * told it is unreadable because the app is showing English that day. Accents are
+ * optional on the way in; nothing here is ever displayed.
+ */
+const KEYWORDS = {
+  hoje: 0,
+  today: 0,
+  ontem: -1,
+  yesterday: -1,
+  amanha: 1,
+  'amanhã': 1,
+  tomorrow: 1,
+};
 
 /** Today, as the ISO day the rest of the app speaks. */
 export function todayIso(now = new Date()) {
@@ -132,10 +149,8 @@ export function parseDateInput(text, { anchor = '', role = 'end', today = todayI
 
   const base = partsOf(anchor) ? anchor : today;
 
-  if (KEYWORDS.includes(input)) {
-    if (input === 'hoje') return today;
-    if (input === 'ontem') return shiftDays(today, -1);
-    return shiftDays(today, 1);
+  if (input in KEYWORDS) {
+    return KEYWORDS[input] === 0 ? today : shiftDays(today, KEYWORDS[input]);
   }
 
   // `+3` / `-2`: relative to the paired field when there is one, otherwise to
@@ -225,9 +240,13 @@ export function maskDateTyping(text) {
 }
 
 /** The days a month grid needs, Monday first, with the neighbours it borrows. */
-export function monthGrid(year, month) {
+export function monthGrid(year, month, firstDay = firstDayOfWeek()) {
   const first = new Date(Date.UTC(year, month - 1, 1));
-  const lead = (first.getUTCDay() + 6) % 7; // Monday = 0
+  // The lead-in used to be hardcoded to Monday, which is right for both locales
+  // the app ships and wrong the moment en-US is added. `firstDayOfWeek()` is a
+  // data lookup, so adding a locale that starts on Sunday becomes a one-line
+  // change rather than a hunt through calendar maths.
+  const lead = (first.getUTCDay() - firstDay + 7) % 7;
   const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const cells = [];
   for (let i = 0; i < lead; i += 1) cells.push({ iso: null, day: null, outside: true });

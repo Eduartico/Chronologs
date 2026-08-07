@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { statePath } from './paths.js';
+import { english } from './httpError.js';
 
 const MAX_NOTIFICATIONS = 500;
 
@@ -19,16 +20,34 @@ function save(notifications) {
 }
 
 /**
- * type: 'info' | 'success' | 'warning' | 'error' | 'correlation'
- * data: free-form payload (counts, ids, link targets for the UI)
+ * Record something worth telling the user about.
+ *
+ *   type: 'info' | 'success' | 'warning' | 'error' | 'correlation'
+ *   key:  a translation key stem, e.g. 'notify.quotes.fetched' — the client
+ *         renders `${key}.title` and `${key}.body`
+ *   params: the numbers and names those two strings interpolate
+ *   data: free-form payload (ids, link targets) the UI acts on
+ *
+ * The reason this takes a key rather than a sentence: notifications are written
+ * to disk and read weeks later. When the text was composed here, it was frozen in
+ * whatever language the server happened to use that day — half of them English,
+ * half Portuguese — and no later translation could reach them.
+ *
+ * `title` and `body` are still stored, rendered in English, as a fallback for
+ * anything reading notifications.json directly and for exports. The client
+ * prefers the key when it is present. Rows written before this change have no
+ * key and keep displaying exactly the sentence they stored, which is the only
+ * honest thing to do with them.
  */
-export function notify(type, title, body = '', data = {}) {
+export function notify(type, key, params = {}, data = {}) {
   const notification = {
     id: uuidv4(),
     timestamp: new Date().toISOString(),
     type,
-    title,
-    body,
+    key,
+    params,
+    title: english(`${key}.title`, params),
+    body: english(`${key}.body`, params),
     data,
     read: false,
   };

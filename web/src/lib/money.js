@@ -12,9 +12,19 @@
  * for the times it matters.
  */
 
+import { nf } from './locale.js';
+import { t } from '../i18n/index.js';
+
 let rate = 0.92;
 let base = 'EUR';
 
+/**
+ * Set the display currency and the rate.
+ *
+ * This used to be called from Investments.jsx alone, which meant the rate the
+ * whole app formatted with depended on whether you had visited that page yet.
+ * `SettingsProvider` is now the only caller, once, before the first paint.
+ */
 export function configureMoney(settings) {
   if (settings?.currency?.usdToEur) rate = settings.currency.usdToEur;
   if (settings?.currency?.base) base = settings.currency.base;
@@ -43,7 +53,7 @@ export function convert(value, from, to = base) {
 }
 
 function fmt(value, currency) {
-  return new Intl.NumberFormat('pt-PT', {
+  return nf({
     style: 'currency',
     currency,
     maximumFractionDigits: Math.abs(value) >= 1000 ? 0 : 2,
@@ -67,7 +77,12 @@ export function money(value, { from = base, signed = false } = {}) {
 /** The original amount as the market quoted it, for a `title` attribute. */
 export function nativeOf(value, from) {
   if (!from || from === base) return undefined;
-  return `${fmt(value, from)} à taxa de ${rate.toFixed(4)}`;
+  return t('money.atRate', { amount: fmt(value, from), rate: rate.toFixed(4) });
+}
+
+/** The rate currently in use, for the few places that show it. */
+export function currentRate() {
+  return rate;
 }
 
 export function eur(value) {

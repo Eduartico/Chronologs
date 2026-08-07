@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useT } from '../i18n/index.js';
 import { formatDate } from '../lib/format.js';
 import { usePersistentState } from '../lib/usePersistentState.js';
-import { api } from '../lib/api.js';
+import { api, errText } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 
 /**
@@ -39,6 +40,7 @@ function formatAmount(amount) {
 }
 
 export default function Duplicates({ onCountChange }) {
+  const { t } = useT();
   const [data, setData] = useState({ groups: [], surplus: 0, voided: 0 });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
@@ -59,7 +61,7 @@ export default function Duplicates({ onCountChange }) {
       setData(result);
       onCountChange?.(result.groups.length);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ export default function Duplicates({ onCountChange }) {
         );
       }
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -99,7 +101,7 @@ export default function Duplicates({ onCountChange }) {
       );
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -112,7 +114,7 @@ export default function Duplicates({ onCountChange }) {
       showToast('Marcado como não sendo duplicado.');
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -123,7 +125,7 @@ export default function Duplicates({ onCountChange }) {
       setVoided(await api.getVoidedTransactions());
       setShowVoided(true);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -134,7 +136,7 @@ export default function Duplicates({ onCountChange }) {
       setVoided(await api.getVoidedTransactions());
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -142,7 +144,7 @@ export default function Duplicates({ onCountChange }) {
     <div>
       <div className="page-header">
         <div>
-          <h2>Duplicados</h2>
+          <h2>{t('nav.duplicates')}</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
             {loading
               ? 'A analisar…'
@@ -157,28 +159,26 @@ export default function Duplicates({ onCountChange }) {
           )}
           <button className="btn-ghost" onClick={load}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="refresh" size={15} /> Reanalisar
-            </span>
+              <Icon name="refresh" size={15} />{t('duplicates.rescan')}</span>
           </button>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
-        Compras repetidas no mesmo dia costumam ser <strong>reais</strong> — quinze custos de
+        {t('duplicates.help')} <strong>reais</strong> — quinze custos de
         €0,01 ou treze micro-compras no mesmo extrato acontecem mesmo. Antes de anular, usa{' '}
-        <strong>Verificar no documento</strong>: o PDF original é lido outra vez e diz quantas
+        <strong>{t('duplicates.checkDocument')}</strong>: o PDF original é lido outra vez e diz quantas
         cópias é que existem de facto. Nada é apagado do ledger — a anulação é ela própria um
         registo e pode ser revertida.
       </div>
 
       {loading ? (
-        <div className="empty-state"><p>A analisar o ledger…</p></div>
+        <div className="empty-state"><p>{t('duplicates.scanning')}</p></div>
       ) : data.groups.length === 0 ? (
         <div className="empty-state">
           <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="check" size={18} /> Sem duplicados por rever
-          </h3>
-          <p>Nenhum grupo de transacções parecidas ficou por decidir.</p>
+            <Icon name="check" size={18} />{t('duplicates.emptyTitle')}</h3>
+          <p>{t('duplicates.emptyBody')}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -235,7 +235,7 @@ export default function Duplicates({ onCountChange }) {
                         <span className="evidence">ocorrência {t.occurrence}</span>
                       )}
                       {t.ingestions > 1 && (
-                        <span className="evidence" title="O mesmo documento foi lido mais do que uma vez; o movimento conta uma só vez.">
+                        <span className="evidence" title={t('duplicates.sameDocument')}>
                           lido {t.ingestions}×
                         </span>
                       )}
@@ -243,21 +243,15 @@ export default function Duplicates({ onCountChange }) {
                       <button
                         className="btn-ghost btn-sm"
                         onClick={() => keepOnly(g, t.id)}
-                        title="Anula todos os outros registos deste grupo"
-                      >
-                        Manter só esta
-                      </button>
+                        title={t('duplicates.keepOnlyThisHelp')}
+                      >{t('duplicates.keepOnlyThis')}</button>
                     </div>
                   ))}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                  <button className="btn-primary btn-sm" onClick={() => verify(g)} disabled={busy === g.key}>
-                    Verificar no documento
-                  </button>
-                  <button className="btn-ghost btn-sm" onClick={() => dismiss(g)}>
-                    Não são duplicados
-                  </button>
+                  <button className="btn-primary btn-sm" onClick={() => verify(g)} disabled={busy === g.key}>{t('duplicates.checkDocument')}</button>
+                  <button className="btn-ghost btn-sm" onClick={() => dismiss(g)}>{t('duplicates.notDuplicates')}</button>
                 </div>
               </div>
             );
@@ -268,23 +262,19 @@ export default function Duplicates({ onCountChange }) {
       {showVoided && (
         <div className="modal-overlay" onClick={() => setShowVoided(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Transacções anuladas</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-              Continuam no ledger e podem voltar a contar a qualquer momento.
-            </p>
-            {voided.length === 0 && <p>Nenhuma.</p>}
+            <h3>{t('duplicates.voided')}</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>{t('duplicates.voidedHelp')}</p>
+            {voided.length === 0 && <p>{t('duplicates.none')}</p>}
             {voided.map((t) => (
               <div key={t.id} className="dup-row">
                 <span style={{ minWidth: 84 }}>{formatDate(t.date)}</span>
                 <span style={{ flex: 1 }}>{t.description}</span>
                 <span>{formatAmount(t.amount)}</span>
-                <button className="btn-ghost btn-sm" onClick={() => restore(t.id)}>
-                  Repor
-                </button>
+                <button className="btn-ghost btn-sm" onClick={() => restore(t.id)}>{t('duplicates.restore')}</button>
               </div>
             ))}
             <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setShowVoided(false)}>Fechar</button>
+              <button className="btn-ghost" onClick={() => setShowVoided(false)}>{t('common.close')}</button>
             </div>
           </div>
         </div>

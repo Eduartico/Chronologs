@@ -1,45 +1,130 @@
 /**
  * Design tokens.
  *
- * The previous stylesheet had five ad-hoc colours and hard-coded pixel values
- * scattered through every component. These are the primitives everything else
- * is built from: a 4px spacing scale, a type scale, layered surfaces, and one
- * elevation ladder.
+ * Everything visual resolves from four colours per theme: the page background, the
+ * sidebar, the ink, and the accent. `web/src/styles/themes.js` is the registry;
+ * `web/src/styles/derive.js` holds the mix percentages; `web/src/lib/theme.test.js`
+ * checks that this file still spells them the way derive.js says, and that Guardian
+ * still lands within ΔE2000 2.0 of the palette it had before it was derived.
  *
- * The chart series palette deliberately lives in JS (components/charts/
- * chartTheme.js) rather than here — it is validated as a set against the
- * surface colour below, and charts need the values as data, not as CSS.
+ * Structure, in cascade order — do not reorder:
+ *
+ *   1. :root            the derivation. Written once, serves every theme.
+ *   2. [data-theme=…]    seventeen four-line anchor blocks.
+ *   3. [data-mode=…]     the handful of things derivation cannot reach: shadows,
+ *                        scrims, semantic colours, the chart series ramp.
+ *   4. [data-panel=…]    the sidebar's own ink.
+ *   5. overrides         per-theme pins, if a derived value ever misses. Last.
+ *
+ * The one idea worth keeping in your head: elevation is the background mixed
+ * *toward the ink*. On a dark theme the ink is near-white so surfaces rise into the
+ * light; on a light theme the ink is near-black so they sink into grey. Same
+ * declaration, no mode branch, correct in both.
+ *
+ * Mixing space: opaque mixes use `in oklab`, so one percentage behaves the same
+ * under a red accent as under a blue one. Mixes with `transparent` use `in srgb`,
+ * matching the `rgba(…, .14)` values they replace.
  */
+
 :root {
-  /* ---- surfaces: four layers, each a step lighter than the last ---- */
-  --surface-0: #0c1016;   /* app background */
-  --surface-1: #141a22;   /* cards, sidebar */
-  --surface-2: #1b232d;   /* hover, inset controls */
-  --surface-3: #232d39;   /* raised: dropdowns, modals */
+  /* ---- the two intermediates ------------------------------------------------
+     A straight background→ink lerp bleeds the chroma out of the ramp, because the
+     ink is nearly neutral — Guardian's --surface-3 is far bluer than any mix of
+     #0c1016 and #e8eef5. So the ramps run toward accent-tinted versions of the
+     anchors instead, which is what keeps a theme's hue running through its greys.
+     25% and 20% are the smallest tints that reproduce Guardian; see derive.js. */
+  --lift: color-mix(in oklab, var(--anchor-ink) 75%, var(--anchor-accent));
+  --shade: color-mix(in oklab, var(--anchor-bg) 80%, var(--anchor-accent));
+
+  /* ---- surfaces: four layers, each a step further from the background -------- */
+  --surface-0: var(--anchor-bg);
+  --surface-1: color-mix(in oklab, var(--anchor-bg) 94%, var(--lift));
+  --surface-2: color-mix(in oklab, var(--anchor-bg) 88%, var(--lift));
+  --surface-3: color-mix(in oklab, var(--anchor-bg) 82%, var(--lift));
 
   /* ---- ink ---- */
-  --text: #e8eef5;
-  --text-secondary: #a3b0bf;
-  --text-muted: #75828f;
+  --text: var(--anchor-ink);
+  --text-secondary: color-mix(in oklab, var(--anchor-ink) 71%, var(--shade));
+  --text-muted: color-mix(in oklab, var(--anchor-ink) 49%, var(--shade));
 
-  /* ---- borders ---- */
-  --border: #232b35;
-  --border-strong: #33404e;
+  /* ---- borders: a surface tinted toward the ink, not an ink dimmed down ---- */
+  --border: color-mix(in oklab, var(--anchor-bg) 84%, var(--lift));
+  --border-strong: color-mix(in oklab, var(--anchor-bg) 72%, var(--lift));
+
+  /* ---- fields ---------------------------------------------------------------
+     --surface-0 is the extreme of the ladder in both directions: the darkest step
+     on a dark theme, the lightest on a light one. So an input reads as an inset
+     well either way, from one declaration. */
+  --field-bg: var(--surface-0);
+  --field-border: var(--border-strong);
 
   /* ---- accents ---- */
-  --accent: #4b93ec;
-  --accent-hover: #6aa6f0;
-  --accent-soft: rgba(75, 147, 236, 0.14);
+  --accent: var(--anchor-accent);
+  --accent-hover: color-mix(in oklab, var(--anchor-accent) 74%, var(--lift));
+  --accent-soft: color-mix(in srgb, var(--anchor-accent) 14%, transparent);
+  --focus-ring: color-mix(in oklab, var(--anchor-accent) 80%, var(--lift));
 
-  /* ---- semantic: reserved for meaning, never decoration ---- */
+  /* ---- the sidebar's own ladder ---------------------------------------------
+     Four of the seventeen themes pair a light page with a dark rail. Deriving the
+     sidebar from the card ladder would turn every card dark to follow it, so the
+     two never touch: cards climb from --anchor-bg, the rail from --anchor-panel. */
+  --panel-0: var(--anchor-panel);
+  --panel-1: color-mix(in oklab, var(--anchor-panel) 94%, var(--panel-ink));
+  --panel-2: color-mix(in oklab, var(--anchor-panel) 88%, var(--panel-ink));
+  --panel-border: color-mix(in oklab, var(--anchor-panel) 90%, var(--panel-ink));
+  --panel-text: var(--panel-ink);
+  --panel-text-muted: color-mix(in oklab, var(--panel-ink) 55%, var(--anchor-panel));
+
+  /* ---- semantic: reserved for meaning, never decoration ---------------------
+     Not derived. Hue *is* the meaning here — "bad" has to stay red under a green
+     accent — so these are frozen sets, one per [data-ramp] bucket, each validated
+     for 4.5:1 body text against the worst --surface-1 any theme in its bucket
+     produces. This one is `deep`, and it is byte-identical to what the app shipped
+     before themes existed. */
   --good: #35b782;
-  --good-soft: rgba(53, 183, 130, 0.14);
   --warn: #d9a03c;
-  --warn-soft: rgba(217, 160, 60, 0.14);
   --bad: #ef6a63;
-  --bad-soft: rgba(239, 106, 99, 0.14);
   --info: #9085e9;
-  --info-soft: rgba(144, 133, 233, 0.14);
+  --good-soft: color-mix(in srgb, var(--good) 14%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --bad-soft: color-mix(in srgb, var(--bad) 14%, transparent);
+  --info-soft: color-mix(in srgb, var(--info) 14%, transparent);
+
+  /* ---- financial direction --------------------------------------------------
+     Deliberately separate from --good/--bad. The accessibility toggle swaps
+     red/green for blue/orange on money, and it must not repaint an error message
+     while it is at it. See [data-finance='cvd'] below. */
+  --pnl-up: var(--good);
+  --pnl-down: var(--bad);
+
+  /* ---- chart series ---------------------------------------------------------
+     Declared here rather than in JS so every ramp is tuned alongside the rest of
+     the colour system, and so ChartThemeProvider picks them all up through the same
+     probe. Validated as a *set* by scripts/validate_palette.js — pairwise ΔE2000
+     under normal vision and under three kinds of colour blindness — so never edit
+     one of these in isolation. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --chart-grid: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  --chart-axis: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  --chart-cursor: color-mix(in srgb, var(--text-muted) 14%, transparent);
+
+  /* ---- elevation ------------------------------------------------------------
+     Not derived either: correcting a shadow for a light page is not a hue shift,
+     it is an alpha collapse. A rgba(0,0,0,.5) drop on a white card reads as dirt. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* ---- scrims: the wash behind a modal ---- */
+  --scrim: color-mix(in srgb, var(--anchor-bg) 72%, transparent);
+  --scrim-soft: color-mix(in srgb, var(--anchor-bg) 62%, transparent);
 
   /* ---- spacing: 4px base ---- */
   --sp-1: 4px;
@@ -68,15 +153,20 @@
   --r-lg: 12px;
   --r-full: 9999px;
 
-  /* ---- elevation ---- */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35);
-  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5);
-
   /* ---- motion ---- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --t-fast: 120ms;
   --t-base: 180ms;
+
+  /* ---- ink on a filled colour -----------------------------------------------
+     Computed per theme by web/src/lib/contrastInk.js and written onto <html> as
+     inline custom properties, because CSS has no luminance function. These are the
+     fallbacks for the first frame, before the applier runs. */
+  --on-accent: #0b0f14;
+  --on-good: #0b0f14;
+  --on-warn: #0b0f14;
+  --on-bad: #0b0f14;
+  --on-info: #f5f9ff;
 
   /* ---- legacy aliases, so older markup keeps rendering ---- */
   --bg: var(--surface-0);
@@ -88,6 +178,233 @@
   --accent-yellow: var(--warn);
   --accent-purple: var(--info);
 }
+
+/* =============================================================================
+   2. Themes. Four lines each — everything above is derived from them.
+   Names are proper nouns and are never translated.
+   ========================================================================== */
+
+[data-theme='guardian'] {
+  --anchor-bg: #0c1016;
+  --anchor-panel: #141a22;
+  --anchor-ink: #e8eef5;
+  --anchor-accent: #4b93ec;
+}
+
+[data-theme='metro-shift'] {
+  --anchor-bg: #181c25;
+  --anchor-panel: #111217;
+  --anchor-ink: #d0d5db;
+  --anchor-accent: #3b82f6;
+}
+
+[data-theme='jacarina'] {
+  --anchor-bg: #121212;
+  --anchor-panel: #212225;
+  --anchor-ink: #eaeaea;
+  --anchor-accent: #00e5ff;
+}
+
+[data-theme='calus-selected'] {
+  --anchor-bg: #f8f9fa;
+  --anchor-panel: #e9ecef;
+  --anchor-ink: #212529;
+  --anchor-accent: #6a0dad;
+}
+
+[data-theme='dreaming-spectrum'] {
+  --anchor-bg: #e6e1d8;
+  --anchor-panel: #2e273a;
+  --anchor-ink: #1a1625;
+  --anchor-accent: #a98f6b;
+}
+
+[data-theme='gambit-jadestone'] {
+  --anchor-bg: #0d110f;
+  --anchor-panel: #161a18;
+  --anchor-ink: #e0e5e2;
+  --anchor-accent: #39ff14;
+}
+
+[data-theme='precursor-vex-chrome'] {
+  --anchor-bg: #ffffff;
+  --anchor-panel: #242625;
+  --anchor-ink: #1a1a1a;
+  --anchor-accent: #cfb53b;
+}
+
+[data-theme='amethyst-veil'] {
+  --anchor-bg: #08080c;
+  --anchor-panel: #13131a;
+  --anchor-ink: #d1d1d6;
+  --anchor-accent: #8a2be2;
+}
+
+[data-theme='carminica'] {
+  --anchor-bg: #0a0a0a;
+  --anchor-panel: #141010;
+  --anchor-ink: #b3b3b3;
+  --anchor-accent: #d32f2f;
+}
+
+[data-theme='iron-battalion'] {
+  --anchor-bg: #2b2d2f;
+  --anchor-panel: #2c3625;
+  --anchor-ink: #c0c0c0;
+  --anchor-accent: #8c6d46;
+}
+
+[data-theme='vizier-regalia'] {
+  --anchor-bg: #18181a;
+  --anchor-panel: #0f0f11;
+  --anchor-ink: #f5f5f5;
+  --anchor-accent: #e5c158;
+}
+
+[data-theme='new-age-black-armory'] {
+  --anchor-bg: #111111;
+  --anchor-panel: #1e1e1e;
+  --anchor-ink: #a0a0a0;
+  --anchor-accent: #e53935;
+}
+
+[data-theme='satou-tribe'] {
+  --anchor-bg: #f0f4f8;
+  --anchor-panel: #2c3e50;
+  --anchor-ink: #1a252f;
+  --anchor-accent: #00e5ff;
+}
+
+[data-theme='refurbished-black-armory'] {
+  --anchor-bg: #25282a;
+  --anchor-panel: #1e2022;
+  --anchor-ink: #9aa0a6;
+  --anchor-accent: #3e5a5a;
+}
+
+[data-theme='bergusian-night'] {
+  --anchor-bg: #1d1128;
+  --anchor-panel: #120a1a;
+  --anchor-ink: #d8c3e5;
+  --anchor-accent: #d4af37;
+}
+
+[data-theme='rasmussen-clan'] {
+  --anchor-bg: #2c352d;
+  --anchor-panel: #1e241e;
+  --anchor-ink: #e0e2e0;
+  --anchor-accent: #c62828;
+}
+
+[data-theme='house-of-meyrin'] {
+  --anchor-bg: #2a0808;
+  --anchor-panel: #1a0505;
+  --anchor-ink: #e5e5e5;
+  --anchor-accent: #ffd700;
+}
+
+/* =============================================================================
+   3. Mode. Only the things derivation cannot reach.
+   ========================================================================== */
+
+[data-mode='light'] {
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 4px 14px rgba(16, 24, 40, 0.1);
+  --shadow-3: 0 12px 32px rgba(16, 24, 40, 0.18);
+
+  /* A pale scrim is not a scrim — a modal on a white page still has to darken
+     what is behind it, so this one does not follow the background. */
+  --scrim: rgba(28, 34, 44, 0.45);
+  --scrim-soft: rgba(28, 34, 44, 0.35);
+}
+
+/* =============================================================================
+   3b. Ramp buckets — the chart and semantic colour sets.
+
+   Mode alone was not a fine enough split. Backgrounds inside "dark" span an
+   eightfold luminance range, from Amethyst Veil's #08080c to Rasmussen Clan's
+   #2c352d, and a single ramp cannot hold 3:1 across all of it. So the bucket is
+   keyed off what the surfaces actually come out as, not off the mode flag:
+
+     deep   near-black pages. The set the app already shipped, unchanged.
+     dim    mid-grey and mid-green pages — Iron Battalion, Rasmussen Clan,
+            Refurbished Black Armory. Lighter, so it still separates from a
+            --surface-1 that has climbed to L≈0.043.
+     light  every light theme, dark enough for Dreaming Spectrum's beige.
+
+   Each set is generated to sit in a luminance band, then checked pairwise by
+   scripts/validate_palette.js. Editing one value by hand will fail that check.
+   ========================================================================== */
+
+[data-ramp='dim'] {
+  --good: #00cc89;
+  --warn: #eda500;
+  --bad: #ff978d;
+  --info: #b7a8ff;
+
+  --series-1: #4dbfff;
+  --series-2: #ff8e44;
+  --series-3: #00d998;
+  --series-4: #ffc700;
+  --series-5: #ff7cc2;
+  --series-6: #009c00;
+  --series-7: #d3c3ff;
+  --series-8: #ffb3b2;
+}
+
+[data-ramp='light'] {
+  --good: #00652b;
+  --warn: #884500;
+  --bad: #b2000c;
+  --info: #5a41ba;
+
+  --series-1: #005cdb;
+  --series-2: #bd0000;
+  --series-3: #007c43;
+  --series-4: #ba5e00;
+  --series-5: #b40054;
+  --series-6: #004700;
+  --series-7: #775fe6;
+  --series-8: #db2439;
+}
+
+/* Accessible finance colours: up-versus-down is the single most important
+   distinction in the app, and red/green is the exact pair a third of colourblind
+   users cannot separate. Blue/orange survives every common form of CVD. One pair
+   per ramp, for the same contrast reason as everything else in this section. */
+[data-finance='cvd'] {
+  --pnl-up: #3b82f6;
+  --pnl-down: #e07a1f;
+}
+
+[data-ramp='dim'][data-finance='cvd'] {
+  --pnl-up: #5cbbff;
+  --pnl-down: #ff9b19;
+}
+
+[data-ramp='light'][data-finance='cvd'] {
+  --pnl-up: #0046d9;
+  --pnl-down: #a62600;
+}
+
+/* =============================================================================
+   4. Sidebar ink. Tinted a little toward the accent so the rail reads as part of
+   the theme rather than as stock white or black.
+   ========================================================================== */
+
+[data-panel='dark'] {
+  --panel-ink: color-mix(in oklab, white 92%, var(--anchor-accent));
+}
+
+[data-panel='light'] {
+  --panel-ink: color-mix(in oklab, black 88%, var(--anchor-accent));
+}
+
+/* =============================================================================
+   5. Per-theme overrides. Empty on purpose: every Guardian token currently lands
+   within ΔE2000 1.8 of its frozen value. Add one here only when a derived colour
+   genuinely misses, and keep the reason next to it.
+   ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
   :root {

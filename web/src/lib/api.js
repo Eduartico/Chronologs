@@ -1,16 +1,44 @@
+import { t } from '../i18n/index.js';
+
 const BASE = '/api';
 
-// The server puts a readable reason in { error }; surfacing only res.statusText
-// turned every failure into an unhelpful "Bad Request".
+/**
+ * Turn a failed response into an Error the UI can show in the reader's language.
+ *
+ * The server puts a readable reason in `{ error }` — surfacing only
+ * `res.statusText` turned every failure into an unhelpful "Bad Request". It now
+ * also puts a translation key in `{ errorKey, errorParams }`, so the same failure
+ * reads in Portuguese or English depending on the setting rather than on whichever
+ * language the route happened to be written in.
+ *
+ * `error` is still English prose, and is still what gets thrown as the message, so
+ * a route not yet carrying a key keeps working and anything logging `err.message`
+ * keeps saying something true.
+ */
 async function unwrap(res) {
   if (!res.ok) {
-    const detail = await res
-      .json()
-      .then((b) => b?.error)
-      .catch(() => null);
-    throw new Error(detail || res.statusText || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => null);
+    const err = new Error(body?.error || res.statusText || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.key = body?.errorKey;
+    err.params = body?.errorParams;
+    throw err;
   }
   return res.json();
+}
+
+/**
+ * The text to put in a toast. Prefers the key; falls back to whatever the server
+ * said, wrapped so the sentence still reads as a sentence in either language.
+ *
+ * Use this rather than concatenating a prefix onto `e.message`, which is how
+ * every page used to do it — that prefix was itself an untranslated string,
+ * written as "Erro: " in some files and "Error: " in others, seventy-nine times
+ * over.
+ */
+export function errText(e) {
+  if (e?.key) return t(e.key, e.params || {});
+  return t('api.error.unexpected', { detail: e?.message || 'unknown' });
 }
 
 const get = (url) => fetch(`${BASE}${url}`).then(unwrap);

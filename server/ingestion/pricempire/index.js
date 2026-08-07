@@ -74,8 +74,8 @@ export async function syncPricempire({ allowScrapeFallback = true } = {}) {
   if (result.portfolios === 0 && allowScrapeFallback) {
     notify(
       'warning',
-      'Pricempire: export indisponível',
-      `Não foi possível descarregar o CSV (${failures.join('; ')}). A usar o scraper como alternativa — os dados podem estar incompletos.`,
+      'notify.pricempire.exportUnavailable',
+      { detail: failures.join('; ') },
       { module: 'pricempire', failures }
     );
     const scraped = await ingestPricempire();
@@ -87,10 +87,14 @@ export async function syncPricempire({ allowScrapeFallback = true } = {}) {
 
   notify(
     failures.length > 0 ? 'warning' : 'success',
-    'Pricempire ressincronizado',
-    `${result.new} novas transacções de ${result.parsed} linhas em ${result.portfolios} portefólio(s)` +
-      (result.duplicates ? `, ${result.duplicates} já registadas` : '') +
-      (failures.length ? ` · ${failures.length} falha(s)` : ''),
+    'notify.pricempire.resynced',
+    {
+      imported: result.new,
+      rows: result.parsed,
+      portfolios: result.portfolios,
+      duplicates: result.duplicates || 0,
+      failures: failures.length,
+    },
     { module: 'pricempire', ...result }
   );
 
@@ -201,8 +205,8 @@ export async function ingestPricempire() {
 
   notify(
     'success',
-    'Pricempire sync',
-    `${result.items} items across ${result.portfolios} portfolio(s), ${result.new} new purchase transactions`,
+    'notify.sync.pricempire',
+    { imported: result.new, holdings: result.items },
     { module: 'pricempire', ...result }
   );
 

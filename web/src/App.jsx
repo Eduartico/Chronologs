@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePersistentState } from './lib/usePersistentState.js';
+import { useT } from './i18n/index.js';
 import NotificationBell from './components/NotificationBell.jsx';
 import Icon from './components/Icon.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -20,24 +21,27 @@ import Settings from './pages/Settings.jsx';
 // Settings is not in this list — it is not a daily destination, and gets its
 // own gear icon in the footer instead of a twelfth line in the same list as
 // Dashboard and Transactions.
+// The label is a key, not a string: the sidebar has to repaint when the language
+// changes, and a literal here would have been the one place that did not.
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'transactions', label: 'Transacções', icon: 'transactions' },
-  { id: 'pending', label: 'Por rever', icon: 'pending' },
-  { id: 'insights', label: 'Análises', icon: 'insights' },
-  { id: 'accounts', label: 'Contas', icon: 'accounts' },
-  { id: 'investments', label: 'Activos', icon: 'investments' },
-  { id: 'travel', label: 'Viagens', icon: 'travel' },
-  { id: 'categories', label: 'Categorias', icon: 'categories' },
-  { id: 'rules', label: 'Regras', icon: 'rules' },
-  { id: 'duplicates', label: 'Duplicados', icon: 'duplicates' },
-  { id: 'connections', label: 'Ligações', icon: 'connections' },
+  { id: 'dashboard', label: 'nav.dashboard', icon: 'dashboard' },
+  { id: 'transactions', label: 'nav.transactions', icon: 'transactions' },
+  { id: 'pending', label: 'nav.pendingReview', icon: 'pending' },
+  { id: 'insights', label: 'nav.insights', icon: 'insights' },
+  { id: 'accounts', label: 'nav.accounts', icon: 'accounts' },
+  { id: 'investments', label: 'nav.investments', icon: 'investments' },
+  { id: 'travel', label: 'nav.travel', icon: 'travel' },
+  { id: 'categories', label: 'nav.categories', icon: 'categories' },
+  { id: 'rules', label: 'nav.rules', icon: 'rules' },
+  { id: 'duplicates', label: 'nav.duplicates', icon: 'duplicates' },
+  { id: 'connections', label: 'nav.connections', icon: 'connections' },
 ];
 
 const COLLAPSED_KEY = 'chronologs.sidebar.collapsed';
 
 export default function App() {
   const [page, setPage] = usePersistentState('app.page', 'dashboard');
+  const { t } = useT();
   const [pendingCount, setPendingCount] = useState(0);
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [collapsed, setCollapsed] = useState(
@@ -150,14 +154,15 @@ export default function App() {
                 key={item.id}
                 href="#"
                 className={`sidebar-link ${page === item.id ? 'active' : ''}`}
-                title={collapsed ? item.label : undefined}
+                data-page={item.id}
+                title={collapsed ? t(item.label) : undefined}
                 onClick={(e) => {
                   e.preventDefault();
                   setPage(item.id);
                 }}
               >
                 <Icon name={item.icon} size={20} />
-                {!collapsed && <span className="sidebar-label">{item.label}</span>}
+                {!collapsed && <span className="sidebar-label">{t(item.label)}</span>}
                 {count > 0 &&
                   (collapsed ? (
                     <span className="sidebar-dot" />
@@ -178,14 +183,15 @@ export default function App() {
           <a
             href="#"
             className={`sidebar-link ${page === 'settings' ? 'active' : ''}`}
-            title="Definições"
+            data-page="settings"
+            title={t('nav.settings')}
             onClick={(e) => {
               e.preventDefault();
               setPage('settings');
             }}
           >
             <Icon name="settings" size={20} />
-            {!collapsed && <span className="sidebar-label">Definições</span>}
+            {!collapsed && <span className="sidebar-label">{t('nav.settings')}</span>}
           </a>
         </div>
       </nav>

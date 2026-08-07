@@ -44,15 +44,29 @@ const CLUSTER_GAP_DAYS = 6;
 // subscription, not a trip.
 const RECURRING_MONTH_THRESHOLD = 3;
 
+/**
+ * Country names, in English only — and only for the initial write.
+ *
+ * These used to be Portuguese, and they are baked into trip names that are
+ * already saved: a trip detected in Spain is called "Espanha" in the ledger.
+ * Renaming those on a language switch would rewrite the user's own data, which is
+ * not something a display setting is allowed to do.
+ *
+ * It does not have to. Every trip stores its ISO `country` code beside the name,
+ * so the *column* is translated from the code (`country.ES` in the catalogue) with
+ * no migration at all, while the name stays exactly as it was written. This map
+ * survives to fill in `name` and `countryName` when a trip is first detected — a
+ * default the user is expected to overwrite anyway.
+ */
 const COUNTRY_NAMES = {
-  ES: 'Espanha', FR: 'França', IT: 'Itália', DE: 'Alemanha', GB: 'Reino Unido',
-  NL: 'Países Baixos', BE: 'Bélgica', LU: 'Luxemburgo', IE: 'Irlanda',
-  DK: 'Dinamarca', SE: 'Suécia', NO: 'Noruega', FI: 'Finlândia', EE: 'Estónia',
-  LV: 'Letónia', LT: 'Lituânia', PL: 'Polónia', CZ: 'Chéquia', AT: 'Áustria',
-  CH: 'Suíça', GR: 'Grécia', HR: 'Croácia', HU: 'Hungria', RO: 'Roménia',
-  BG: 'Bulgária', SI: 'Eslovénia', SK: 'Eslováquia', MT: 'Malta', CY: 'Chipre',
-  US: 'Estados Unidos', CA: 'Canadá', BR: 'Brasil', MA: 'Marrocos',
-  TR: 'Turquia', JP: 'Japão', TH: 'Tailândia', AE: 'Emirados Árabes Unidos',
+  ES: 'Spain', FR: 'France', IT: 'Italy', DE: 'Germany', GB: 'United Kingdom',
+  NL: 'Netherlands', BE: 'Belgium', LU: 'Luxembourg', IE: 'Ireland',
+  DK: 'Denmark', SE: 'Sweden', NO: 'Norway', FI: 'Finland', EE: 'Estonia',
+  LV: 'Latvia', LT: 'Lithuania', PL: 'Poland', CZ: 'Czechia', AT: 'Austria',
+  CH: 'Switzerland', GR: 'Greece', HR: 'Croatia', HU: 'Hungary', RO: 'Romania',
+  BG: 'Bulgaria', SI: 'Slovenia', SK: 'Slovakia', MT: 'Malta', CY: 'Cyprus',
+  US: 'United States', CA: 'Canada', BR: 'Brazil', MA: 'Morocco',
+  TR: 'Türkiye', JP: 'Japan', TH: 'Thailand', AE: 'United Arab Emirates',
 };
 
 const KNOWN_COUNTRIES = new Set(Object.keys(COUNTRY_NAMES).concat([HOME_COUNTRY]));

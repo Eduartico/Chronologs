@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { usePersistentState } from '../../lib/usePersistentState.js';
 
 // A click has to wait this long to see if a second one is coming before it
@@ -86,18 +86,52 @@ export function useSeriesToggle(storageKey, allKeys) {
     [isolate]
   );
 
+  /*
+   * Hover isolation.
+   *
+   * On a chart with six or eight series, "which one is this" is answered today by
+   * moving the pointer down to the legend and reading a colour swatch. Dropping
+   * everything else to 15% and thickening the one under the pointer answers it
+   * where the eye already is.
+   *
+   * It lives here rather than in a second hook because this one is already
+   * imported at every chart site — a separate `useHoverIsolate` would mean adding
+   * an import and a state variable to a dozen files to get behaviour that belongs
+   * to the same interaction as the click and the double-click.
+   *
+   * Focus is not persisted. Unlike the hidden set, it is a pointer position, and
+   * restoring it on reload would leave a chart mysteriously dimmed.
+   */
+  const [focused, setFocused] = useState(null);
+
+  const focusProps = useMemo(
+    () => ({
+      onMouseEnter: (entry) => setFocused(keyFor(entry) ?? null),
+      onMouseLeave: () => setFocused(null),
+    }),
+    [],
+  );
+
+  /** Opacity for series `key`, given what the pointer is over. */
+  const dimOf = useCallback((key) => (!focused || focused === key ? 1 : 0.15), [focused]);
+
+  /** Stroke width for series `key` — the second, non-colour half of isolation. */
+  const widthOf = useCallback((key, base = 2) => (focused === key ? base + 1 : base), [focused]);
+
   /** Spread onto a recharts `<Legend>` to make it clickable and to dim what is off. */
   const legendProps = useMemo(
     () => ({
       wrapperStyle: { fontSize: 12, cursor: 'pointer' },
       onClick: handleClick,
       onDoubleClick: handleDoubleClick,
+      onMouseEnter: focusProps.onMouseEnter,
+      onMouseLeave: focusProps.onMouseLeave,
       formatter: (value) => (
-        <span style={{ opacity: hidden.has(value) ? 0.35 : 1 }}>{value}</span>
+        <span style={{ opacity: hidden.has(value) ? 0.35 : dimOf(value) }}>{value}</span>
       ),
     }),
-    [handleClick, handleDoubleClick, hidden]
+    [handleClick, handleDoubleClick, hidden, focusProps, dimOf],
   );
 
-  return { hidden, toggle, reset, isolate, legendProps };
+  return { hidden, toggle, reset, isolate, legendProps, focused, focusProps, dimOf, widthOf };
 }

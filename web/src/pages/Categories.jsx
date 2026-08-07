@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { nf } from '../lib/locale.js';
+import { api, errText } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 import { CategoryIcon } from '../components/CategoryPicker.jsx';
 import RowActions from '../components/ui/RowActions.jsx';
@@ -15,22 +17,25 @@ import { useRowEditor } from '../lib/useRowEditor.js';
 const PROTECTED = 'uncategorized';
 
 function formatCurrency(val) {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val || 0);
+  return nf({ style: 'currency', currency: 'EUR' }).format(val || 0);
 }
 
 // One shape for both tables. Categories and subcategories answer different
 // questions but they are the same kind of object, and there is no reason for one
 // to have icons, colours and sortable columns while the other is a row of pills.
-const COLUMNS = [
-  { key: 'name', label: 'Categoria', get: (r) => r.name },
-  { key: 'expense', label: 'Despesa', align: 'right', get: (r) => r.expense, width: 140 },
-  { key: 'count', label: 'Transacções', align: 'right', get: (r) => r.count, width: 130 },
+// A label is a *function* of `t`, not a string. These live at module scope, so a
+// direct t() call here would run at import time — before any provider exists,
+// and before the reader's language is even known.
+const COLUMNS = (t) => [
+  { key: 'name', label: t('common.category'), get: (r) => r.name },
+  { key: 'expense', label: t('categories.expense'), align: 'right', get: (r) => r.expense, width: 140 },
+  { key: 'count', label: t('nav.transactions'), align: 'right', get: (r) => r.count, width: 130 },
   { key: 'actions', label: '', sortable: false, width: 110 },
 ];
 
-const SUB_COLUMNS = [
-  { key: 'name', label: 'Subcategoria', get: (r) => r.name },
-  { key: 'count', label: 'Transacções', align: 'right', get: (r) => r.count, width: 130 },
+const SUB_COLUMNS = (t) => [
+  { key: 'name', label: t('categories.subcategory'), get: (r) => r.name },
+  { key: 'count', label: t('nav.transactions'), align: 'right', get: (r) => r.count, width: 130 },
   { key: 'actions', label: '', sortable: false, width: 110 },
 ];
 
@@ -44,6 +49,7 @@ const SUB_COLUMNS = [
  * is what you get.
  */
 function AddRow({ columns, draft, onChange, onAdd, onClear, placeholder, children }) {
+  const { t } = useT();
   const ready = Boolean(String(draft.name || '').trim());
   return (
     <tr className="add-row">
@@ -54,7 +60,7 @@ function AddRow({ columns, draft, onChange, onAdd, onClear, placeholder, childre
             color={draft.color}
             onPickIcon={(icon) => onChange({ icon })}
             onPickColor={(color) => onChange({ color })}
-            label="Ícone e cor"
+            label={t('categories.iconAndColour')}
             bare
           />
           <span className="autosize" data-value={draft.name || placeholder}>
@@ -73,8 +79,8 @@ function AddRow({ columns, draft, onChange, onAdd, onClear, placeholder, childre
       {children}
       <td>
         <div className="row-actions">
-          <IconButton icon="plus" tone="good" label="Adicionar" disabled={!ready} onClick={onAdd} />
-          <IconButton icon="close" label="Limpar" onClick={onClear} />
+          <IconButton icon="plus" tone="good" label={t('common.add')} disabled={!ready} onClick={onAdd} />
+          <IconButton icon="close" label={t('common.clear')} onClick={onClear} />
         </div>
       </td>
     </tr>
@@ -88,6 +94,7 @@ const emptyDraft = () => ({
 });
 
 export default function Categories() {
+  const { t, tx } = useT();
   const [categories, setCategories] = useState([]);
   const [breakdown, setBreakdown] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +120,7 @@ export default function Categories() {
       setCategories(cats);
       setBreakdown(analytics.categoryBreakdown || []);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -131,7 +138,7 @@ export default function Categories() {
       setDraft(emptyDraft());
       loadData();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -143,12 +150,12 @@ export default function Categories() {
       const r = await api.updateCategory(id, { name });
       showToast(
         r.moved > 0
-          ? `Renomeada para "${name}" — ${r.moved} transacções e ${r.rulesTouched} regras actualizadas`
+          ? t('categories.renamed', { name, moved: r.moved, rules: r.rulesTouched })
           : `Renomeada para "${name}"`
       );
       loadData();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -157,7 +164,7 @@ export default function Categories() {
       await api.updateCategory(cat.id, patch);
       loadData();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -177,11 +184,11 @@ export default function Categories() {
     const { cat } = confirmDelete;
     try {
       const r = await api.deleteCategory(cat.id);
-      showToast(`"${cat.name}" apagada — ${r.moved} transacções voltaram a uncategorized`);
+      showToast(t('categories.deleted', { name: cat.name, moved: r.moved }));
       setConfirmDelete(null);
       loadData();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
       setConfirmDelete(null);
     }
   }
@@ -196,7 +203,7 @@ export default function Categories() {
       setShowMerge(false);
       loadData();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -212,34 +219,35 @@ export default function Categories() {
       }),
     [categories, breakdown]
   );
-  const { rows: sorted, sort, toggleSort } = useSortableRows(rows, COLUMNS, 'categories.sort', {
+  // Rebuilt when the language moves; the descriptor is a function of `t` because
+  // it lives at module scope and cannot call a hook itself.
+  const columns = useMemo(() => COLUMNS(t), [t]);
+  const { rows: sorted, sort, toggleSort } = useSortableRows(rows, columns, 'categories.sort', {
     key: 'expense',
     dir: 'desc',
   });
 
-  if (loading) return <div className="empty-state"><p>A carregar…</p></div>;
+  if (loading) return <div className="empty-state"><p>{t('common.loading')}</p></div>;
 
   return (
     <div>
       <div className="page-header">
-        <h2>Categorias</h2>
-        <button className="btn-ghost" onClick={() => setShowMerge(true)}>Fundir categorias</button>
+        <h2>{t('nav.categories')}</h2>
+        <button className="btn-ghost" onClick={() => setShowMerge(true)}>{t('categories.merge')}</button>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div>
-            <strong style={{ fontSize: 13 }}>Categoria</strong>
+            <strong style={{ fontSize: 13 }}>{t('common.category')}</strong>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0' }}>
-              Uma por transacção. Responde a <em>em quê gastei</em> — mercado, transportes,
-              educação. É o que alimenta os gráficos de despesa.
+              {tx('categories.categoryHelp', { what: <em>{t('categories.categoryHelpEm')}</em> })}
             </p>
           </div>
           <div>
-            <strong style={{ fontSize: 13 }}>Subcategoria</strong>
+            <strong style={{ fontSize: 13 }}>{t('categories.subcategory')}</strong>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0' }}>
-              Várias por transacção, e cruzam categorias. Responde a <em>para quê</em> — "Viagem a
-              Dublin", "Obras em casa". Um jantar e um comboio podem ter a mesma.
+              {tx('categories.subcategoryHelp', { what: <em>{t('categories.subcategoryHelpEm')}</em> })}
             </p>
           </div>
         </div>
@@ -251,10 +259,10 @@ export default function Categories() {
         impact={
           confirmDelete
             ? confirmDelete.count === null
-              ? 'As transacções desta categoria voltam a uncategorized.'
+              ? t('categories.deleteImpactUnknown')
               : confirmDelete.count === 0
-                ? 'Não há transacções nesta categoria.'
-                : `${confirmDelete.count} transacções voltam a uncategorized. As regras que apontam para esta categoria passam a apontar para uncategorized.`
+                ? t('categories.deleteImpactNone')
+                : t('categories.deleteImpact', { count: confirmDelete.count })
             : ''
         }
         onCancel={() => setConfirmDelete(null)}
@@ -264,28 +272,28 @@ export default function Categories() {
       {showMerge && (
         <div className="modal-overlay" onClick={() => setShowMerge(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Fundir categorias</h3>
+            <h3>{t('categories.merge')}</h3>
             <div className="form-group">
-              <label>Origem (desaparece)</label>
+              <label>{t('categories.mergeSource')}</label>
               <select value={mergeSource} onChange={(e) => setMergeSource(e.target.value)}>
-                <option value="">Escolher…</option>
+                <option value="">{t('categories.choose')}</option>
                 {categories.filter((c) => c.name !== PROTECTED).map((c) => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-group">
-              <label>Destino (fica)</label>
+              <label>{t('categories.mergeTarget')}</label>
               <select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
-                <option value="">Escolher…</option>
+                <option value="">{t('categories.choose')}</option>
                 {categories.filter((c) => c.name !== mergeSource).map((c) => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
             <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setShowMerge(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleMerge}>Fundir</button>
+              <button className="btn-ghost" onClick={() => setShowMerge(false)}>{t('common.cancel')}</button>
+              <button className="btn-primary" onClick={handleMerge}>{t('categories.mergeVerb')}</button>
             </div>
           </div>
         </div>
@@ -295,7 +303,7 @@ export default function Categories() {
         <table className="table-fixed">
           <thead>
             <tr>
-              {COLUMNS.map((col) => (
+              {columns.map((col) => (
                 <SortHeader key={col.key} column={col} sort={sort} onToggle={toggleSort} />
               ))}
             </tr>
@@ -332,7 +340,7 @@ export default function Categories() {
                         onCancel={editor.cancel}
                       />
                       {!editing && isProtected && (
-                        <span className="tag" title="Mantida pelo sistema: pode mudar de cor e ícone, mas não de nome">
+                        <span className="tag" title={t('categories.systemHeld')}>
                           sistema
                         </span>
                       )}
@@ -358,9 +366,9 @@ export default function Categories() {
               );
             })}
             <AddRow
-              columns={COLUMNS}
+              columns={columns}
               draft={draft}
-              placeholder="Nova categoria…"
+              placeholder={t('categories.newCategory')}
               onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
               onAdd={handleCreate}
               onClear={() => setDraft(emptyDraft())}
@@ -387,6 +395,7 @@ export default function Categories() {
  * were the least serious thing on the page.
  */
 function SubcategoriesManager({ showToast }) {
+  const { t } = useT();
   const [subcategories, setSubcategories] = useState([]);
   const [usage, setUsage] = useState({});
   const [draft, setDraft] = useState(emptyDraft);
@@ -421,7 +430,7 @@ function SubcategoriesManager({ showToast }) {
       setDraft(emptyDraft());
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   };
 
@@ -433,7 +442,7 @@ function SubcategoriesManager({ showToast }) {
       await api.deleteTag(id);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   };
 
@@ -446,7 +455,7 @@ function SubcategoriesManager({ showToast }) {
       showToast(`Subcategoria renomeada para "${name}"`);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   };
 
@@ -455,7 +464,7 @@ function SubcategoriesManager({ showToast }) {
       await api.updateTag(id, patch);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   };
 
@@ -465,9 +474,10 @@ function SubcategoriesManager({ showToast }) {
     () => subcategories.map((s) => ({ ...s, count: usage[s.id] || 0 })),
     [subcategories, usage]
   );
+  const subColumns = useMemo(() => SUB_COLUMNS(t), [t]);
   const { rows: sorted, sort, toggleSort } = useSortableRows(
     rows,
-    SUB_COLUMNS,
+    subColumns,
     'subcategories.sort',
     { key: 'count', dir: 'desc' }
   );
@@ -475,14 +485,13 @@ function SubcategoriesManager({ showToast }) {
   return (
     <>
       <h3 className="section-title">
-        <Icon name="tag" size={17} /> Subcategorias
-        <span className="section-title-aside">{subcategories.length}</span>
+        <Icon name="tag" size={17} />{t('categories.subcategories')}<span className="section-title-aside">{subcategories.length}</span>
       </h3>
       <div className="card" style={{ padding: 0, overflow: 'auto' }}>
         <table className="table-fixed">
           <thead>
             <tr>
-              {SUB_COLUMNS.map((col) => (
+              {subColumns.map((col) => (
                 <SortHeader key={col.key} column={col} sort={sort} onToggle={toggleSort} />
               ))}
             </tr>
@@ -529,9 +538,9 @@ function SubcategoriesManager({ showToast }) {
               );
             })}
             <AddRow
-              columns={SUB_COLUMNS}
+              columns={subColumns}
               draft={draft}
-              placeholder="Nova subcategoria…"
+              placeholder={t('categories.newSubcategory')}
               onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
               onAdd={create}
               onClear={() => setDraft(emptyDraft())}

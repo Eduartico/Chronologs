@@ -22,22 +22,13 @@ const BATCH_SIZE = 30;
  */
 const LLM_CONFIDENCE = 0.55;
 
-function buildPrompt(batch, categories) {
-  return `Classificas transacções bancárias portuguesas por categoria.
-
-Categorias permitidas (usa exactamente estes nomes): ${categories.join(', ')}.
-
-Comerciantes a classificar:
-${batch.map((g, i) => `${i + 1}. "${g.label}" (${g.count} transacções, total ${g.total.toFixed(2)} EUR)`).join('\n')}
-
-Regras:
-- Responde SÓ com categorias da lista acima.
-- Se não tiveres a certeza razoável sobre um comerciante, omite-o. Preferimos
-  nenhuma sugestão a uma sugestão errada.
-- "confidence" entre 0 e 1.
-
-Responde em JSON estrito:
-{"results": [{"label": "<label exacto>", "category": "<categoria>", "confidence": 0.9}]}`;
+/** The prompt follows the reader's language — see server/engines/prompts/. The
+    category names inside it are the English keys from categories.json either way,
+    because those are what the parser matches the answer against. */
+async function buildPrompt(batch, categories) {
+  const { pick } = await import('./prompts/index.js');
+  const { currentLocale } = await import('../lib/settings.js');
+  return pick('classify', currentLocale())(batch, categories);
 }
 
 /**
@@ -56,7 +47,7 @@ export async function classifyMerchantGroups(groups, categories) {
     const batch = groups.slice(i, i + BATCH_SIZE);
     let parsed;
     try {
-      parsed = await generateJSON(buildPrompt(batch, categories));
+      parsed = await generateJSON(await buildPrompt(batch, categories));
     } catch {
       continue; // Ollama down or model missing — the other sources still stand.
     }

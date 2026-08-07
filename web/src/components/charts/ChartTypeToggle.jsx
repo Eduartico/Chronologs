@@ -1,4 +1,5 @@
 import Icon from '../Icon.jsx';
+import { useT } from '../../i18n/index.js';
 
 /**
  * How the same numbers get drawn.
@@ -25,8 +26,9 @@ const ICONS = {
 };
 
 export default function ChartTypeToggle({ value, onChange, options = ['bar', 'line'] }) {
+  const { t } = useT();
   return (
-    <div className="seg-toggle" role="group" aria-label="Tipo de gráfico">
+    <div className="seg-toggle" role="group" aria-label={t('chart.type')}>
       {options.map((opt) => (
         <button
           key={opt}

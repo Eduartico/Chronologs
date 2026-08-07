@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import Icon from './Icon.jsx';
 import IconButton from './ui/IconButton.jsx';
 import Switch from './ui/Switch.jsx';
@@ -19,6 +20,7 @@ const EMPTY = {
 };
 
 export default function CorrelationReview({ showToast }) {
+  const { t } = useT();
   const [rules, setRules] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [draft, setDraft] = useState(null);
@@ -39,7 +41,7 @@ export default function CorrelationReview({ showToast }) {
       showToast(`Correlation run: ${result.proposals} new proposal(s)`);
       load();
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
@@ -49,7 +51,7 @@ export default function CorrelationReview({ showToast }) {
       else await api.rejectCorrelation(proposal.id);
       load();
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
@@ -66,7 +68,7 @@ export default function CorrelationReview({ showToast }) {
       showToast('Correlation rule created');
       load();
     } catch (e) {
-      showToast('Error: ' + e.message);
+      showToast(errText(e));
     }
   };
 
@@ -83,8 +85,7 @@ export default function CorrelationReview({ showToast }) {
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon name="link" size={16} /> Correlations
-        </h3>
+          <Icon name="link" size={16} />{t('correlations.title')}</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost btn-sm" onClick={run}>▶ Run now</button>
           <button className="btn-primary btn-sm" onClick={() => setDraft({ ...EMPTY })}>+ New correlation rule</button>
@@ -100,7 +101,7 @@ export default function CorrelationReview({ showToast }) {
         <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
             <input
-              placeholder="Rule name (e.g. Bank → CSFloat topups)"
+              placeholder={t('correlations.namePlaceholder')}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               style={{ minWidth: 220 }}
@@ -117,7 +118,7 @@ export default function CorrelationReview({ showToast }) {
               <option value="manual">B: manual</option>
             </select>
             <input
-              placeholder="text hint (e.g. csfloat)"
+              placeholder={t('correlations.hintPlaceholder')}
               value={draft.textHint}
               onChange={(e) => setDraft({ ...draft, textHint: e.target.value })}
               style={{ width: 160 }}
@@ -125,17 +126,15 @@ export default function CorrelationReview({ showToast }) {
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', fontSize: 13, marginTop: 8 }}>
             <label>± days <input type="number" value={draft.dateWindowDays} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, dateWindowDays: e.target.value })} /></label>
-            <label>tolerance % <input type="number" value={draft.amountTolerancePct} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountTolerancePct: e.target.value })} /></label>
-            <label>tolerance € <input type="number" value={draft.amountToleranceAbs} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountToleranceAbs: e.target.value })} /></label>
+            <label>{t('correlations.tolerancePct')}<input type="number" value={draft.amountTolerancePct} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountTolerancePct: e.target.value })} /></label>
+            <label>{t('correlations.toleranceEur')}<input type="number" value={draft.amountToleranceAbs} style={{ width: 60 }} onChange={(e) => setDraft({ ...draft, amountToleranceAbs: e.target.value })} /></label>
             <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <Switch checked={draft.allowAggregate} onChange={(allowAggregate) => setDraft({ ...draft, allowAggregate })} />
-              allow combining up to
-              <input type="number" value={draft.maxAggregateSize} style={{ width: 50 }} onChange={(e) => setDraft({ ...draft, maxAggregateSize: e.target.value })} />
+              <Switch checked={draft.allowAggregate} onChange={(allowAggregate) => setDraft({ ...draft, allowAggregate })} />{t('correlations.allowCombining')}<input type="number" value={draft.maxAggregateSize} style={{ width: 50 }} onChange={(e) => setDraft({ ...draft, maxAggregateSize: e.target.value })} />
               transactions
             </label>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button className="btn-ghost btn-sm" onClick={() => setDraft(null)}>Cancel</button>
-              <button className="btn-green btn-sm" onClick={saveDraft}>Create</button>
+              <button className="btn-ghost btn-sm" onClick={() => setDraft(null)}>{t('common.cancel')}</button>
+              <button className="btn-green btn-sm" onClick={saveDraft}>{t('correlations.create')}</button>
             </span>
           </div>
         </div>
@@ -162,11 +161,11 @@ export default function CorrelationReview({ showToast }) {
                 <IconButton
                   icon="check"
                   tone="armed"
-                  label="Confirmar — apaga a regra"
+                  label={t('correlations.confirmDelete')}
                   onClick={() => editor.confirmDelete(r.id)}
                 />
               ) : (
-                <IconButton icon="trash" tone="danger" label="Apagar" onClick={() => editor.askDelete(r.id)} />
+                <IconButton icon="trash" tone="danger" label={t('common.delete')} onClick={() => editor.askDelete(r.id)} />
               )}
             </div>
           ))}
@@ -177,7 +176,7 @@ export default function CorrelationReview({ showToast }) {
         Pending proposals {proposals.length > 0 && `(${proposals.length})`}
       </h4>
       {proposals.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Nothing to review.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('correlations.nothingToReview')}</p>
       )}
       {proposals.map((p) => (
         <div
@@ -198,8 +197,8 @@ export default function CorrelationReview({ showToast }) {
             {p.partial && <span className="badge badge-pending">partial</span>}
             <span style={{ color: 'var(--text-muted)' }}>score {p.score}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <IconButton icon="check" tone="good" label="Confirmar" onClick={() => decide(p, true)} />
-              <IconButton icon="close" tone="danger" label="Rejeitar" onClick={() => decide(p, false)} />
+              <IconButton icon="check" tone="good" label={t('correlations.confirm')} onClick={() => decide(p, true)} />
+              <IconButton icon="close" tone="danger" label={t('correlations.reject')} onClick={() => decide(p, false)} />
             </span>
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>

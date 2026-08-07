@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { usePersistentState } from './usePersistentState.js';
+import { intlLocale } from './locale.js';
 
 /**
  * Sorting a table by clicking its own headers.
@@ -43,7 +44,9 @@ export function useSortableRows(rows, columns, storageKey, initial = null) {
       if (xEmpty) return 1;
       if (yEmpty) return -1;
       if (typeof x === 'string' && typeof y === 'string') {
-        return x.localeCompare(y, 'pt') * dir;
+        // Collation is language-specific — 'ä' sorts differently in Swedish than
+        // in German — so it follows the reader's locale rather than being pinned.
+        return x.localeCompare(y, intlLocale()) * dir;
       }
       if (x < y) return -1 * dir;
       if (x > y) return 1 * dir;

@@ -1,4 +1,5 @@
 import IconButton from './IconButton.jsx';
+import { useT } from '../../i18n/index.js';
 
 /**
  * The two buttons at the end of a row, and what they become.
@@ -28,8 +29,8 @@ export default function RowActions({
   canDelete = true,
   busy,
   deleteMode = 'inline',
-  editLabel = 'Editar',
-  deleteLabel = 'Apagar',
+  editLabel,
+  deleteLabel,
   confirmDeleteLabel = 'Confirmar — apaga',
   editBlockedReason = 'Não é possível editar isto',
   deleteBlockedReason = 'Não é possível apagar isto',
@@ -40,6 +41,7 @@ export default function RowActions({
   onConfirmDelete,
   extras,
 }) {
+  const { t } = useT();
   if (editing) {
     // Keyed so React remounts the cluster instead of diffing pencil→check,
     // trash→close prop-by-prop — a remount is what makes the CSS entrance
@@ -47,8 +49,8 @@ export default function RowActions({
     return (
       <div className="row-actions" key="edit">
         {extras}
-        <IconButton icon="check" label="Guardar" tone="good" disabled={busy} onClick={onSave} />
-        <IconButton icon="close" label="Cancelar" disabled={busy} onClick={onCancel} />
+        <IconButton icon="check" label={t('common.save')} tone="good" disabled={busy} onClick={onSave} />
+        <IconButton icon="close" label={t('common.cancel')} disabled={busy} onClick={onCancel} />
       </div>
     );
   }
@@ -60,7 +62,7 @@ export default function RowActions({
         {/* The pencil stays — arming is not a different mode, just a second
             press away from either outcome. Hiding it would leave whoever
             armed by mistake with no way back except waiting it out. */}
-        <IconButton icon="pencil" label={editLabel} disabled />
+        <IconButton icon="pencil" label={editLabel ?? t('common.edit')} disabled />
         <IconButton
           icon="check"
           label={confirmDeleteLabel}
@@ -76,7 +78,7 @@ export default function RowActions({
     <div className="row-actions" key="rest">
       {extras}
       {canEdit ? (
-        <IconButton icon="pencil" label={editLabel} disabled={busy} onClick={onEdit} />
+        <IconButton icon="pencil" label={editLabel ?? t('common.edit')} disabled={busy} onClick={onEdit} />
       ) : (
         <IconButton icon="pencil" label={editBlockedReason} disabled />
       )}
@@ -86,7 +88,7 @@ export default function RowActions({
         buttons sit on every other row.
       */}
       {canDelete ? (
-        <IconButton icon="trash" label={deleteLabel} tone="danger" disabled={busy} onClick={onAskDelete} />
+        <IconButton icon="trash" label={deleteLabel ?? t('common.delete')} tone="danger" disabled={busy} onClick={onAskDelete} />
       ) : (
         <IconButton icon="trash" label={deleteBlockedReason} disabled />
       )}

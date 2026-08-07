@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { fail, failFrom } from '../lib/httpError.js';
 import multer from 'multer';
 import { ingestManualTransaction, ingestManualAsset } from '../ingestion/manual.js';
 import { ingestActivobank, reprocessStoredDocuments } from '../ingestion/activobank/index.js';
@@ -149,7 +150,7 @@ router.post('/google/credentials', (req, res) => {
     saveGoogleCredentials(req.body);
     res.json({ success: true });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -157,7 +158,7 @@ router.get('/google/auth-url', (req, res) => {
   try {
     res.json({ url: getGoogleAuthUrl() });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -176,7 +177,7 @@ router.get('/google/status', (req, res) => {
   try {
     res.json({ ...getGoogleStatus(), lastSyncAt: loadSyncState().lastSyncAt });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -187,7 +188,7 @@ router.post('/ingest/activobank', async (req, res) => {
     const result = await ingestActivobank({ origin: 'gmail' });
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -198,20 +199,20 @@ router.post('/ingest/activobank/reprocess', async (req, res) => {
     const result = await reprocessStoredDocuments();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/ingest/activobank/upload', upload.array('documents', 20), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
+      return fail(res, 400, 'api.error.noFiles');
     }
     const files = req.files.map((f) => ({ filename: f.originalname, buffer: f.buffer }));
     const result = await ingestActivobank({ origin: 'upload', files });
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -223,7 +224,7 @@ router.post('/ingest/pricempire', async (req, res) => {
       req.query.method === 'scrape' ? await ingestPricempire() : await syncPricempire();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -234,7 +235,7 @@ router.post('/pricempire/connect', async (req, res) => {
     await ensurePricempireSession({ interactive: true });
     res.json({ sessionOk: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -242,7 +243,7 @@ router.get('/pricempire/status', (req, res) => {
   try {
     res.json(loadPricempireState());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -268,17 +269,17 @@ router.get('/pricempire/portfolios', async (req, res) => {
     savePricempireState({ portfolios, portfoliosFetchedAt: fetchedAt });
     res.json({ portfolios, fetchedAt, cached: false });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/pricempire/portfolios', (req, res) => {
   try {
     const { selected } = req.body;
-    if (!Array.isArray(selected)) return res.status(400).json({ error: 'selected must be an array' });
+    if (!Array.isArray(selected)) return fail(res, 400, 'api.error.selectedMustBeArray');
     res.json(savePricempireState({ selectedPortfolios: selected }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -293,7 +294,7 @@ router.post('/event/manual', async (req, res) => {
       res.json(result);
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -303,17 +304,17 @@ router.get('/notifications', (req, res) => {
   try {
     res.json(listNotifications({ unread: req.query.unread === 'true' }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/notifications/:id/read', (req, res) => {
   try {
     const ok = markRead(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Notification not found' });
+    if (!ok) return fail(res, 404, 'api.error.notificationNotFound');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -321,7 +322,7 @@ router.post('/notifications/read-all', (req, res) => {
   try {
     res.json({ marked: markAllRead() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -331,17 +332,23 @@ router.get('/settings', (req, res) => {
   try {
     res.json(loadSettings());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/settings', (req, res) => {
   try {
+    // The scheduler is torn down and rebuilt only when the schedules actually
+    // moved. This used to run unconditionally, which was harmless while the only
+    // things on this page were cron settings — but picking a theme now writes
+    // here too, and rebuilding five cron jobs because someone tried Jacarina is
+    // both wasteful and, if a job happens to be mid-run, worse than wasteful.
+    const before = loadSettings();
     const merged = saveSettings(req.body);
-    reloadScheduler();
+    if (JSON.stringify(before.schedules) !== JSON.stringify(merged.schedules)) reloadScheduler();
     res.json(merged);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -351,7 +358,7 @@ router.post('/scheduler/run/:module', async (req, res) => {
   try {
     res.json(await runModule(req.params.module));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -359,7 +366,7 @@ router.get('/llm/models', async (req, res) => {
   try {
     res.json({ models: await listLlmModels() });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -367,7 +374,7 @@ router.post('/llm/test', async (req, res) => {
   try {
     res.json(await testLlm());
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -399,7 +406,7 @@ router.get('/categories', async (req, res) => {
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     );
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -407,37 +414,37 @@ router.post('/categories', (req, res) => {
   try {
     const { name, parent, icon } = req.body;
     const cat = createCategory(name, parent, icon);
-    if (!cat) return res.status(409).json({ error: 'Category already exists' });
+    if (!cat) return fail(res, 409, 'api.error.categoryExists');
     res.json(cat);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/categories/:id', async (req, res) => {
   try {
     const result = await updateCategory(req.params.id, req.body || {});
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Categoria não encontrada' });
+    if (result.error === 'not_found') return fail(res, 404, 'api.error.categoryNotFound');
     if (result.error === 'protected') {
-      return res.status(400).json({ error: 'A categoria "uncategorized" não pode ser renomeada' });
+      return fail(res, 400, 'api.error.categoryProtectedRename');
     }
-    if (result.error === 'duplicate') return res.status(409).json({ error: 'Já existe uma categoria com esse nome' });
+    if (result.error === 'duplicate') return fail(res, 409, 'api.error.categoryExists');
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.delete('/categories/:id', async (req, res) => {
   try {
     const result = await deleteCategory(req.params.id);
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Categoria não encontrada' });
+    if (result.error === 'not_found') return fail(res, 404, 'api.error.categoryNotFound');
     if (result.error === 'protected') {
-      return res.status(400).json({ error: 'A categoria "uncategorized" não pode ser apagada' });
+      return fail(res, 400, 'api.error.categoryProtectedDelete');
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -446,7 +453,7 @@ router.get('/categories/:name/usage', async (req, res) => {
   try {
     res.json({ count: await countTransactionsInCategory(req.params.name) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -454,10 +461,10 @@ router.post('/categories/merge', async (req, res) => {
   try {
     const { target, source } = req.body;
     const ok = await mergeCategories(target, source);
-    if (!ok) return res.status(404).json({ error: 'Source or target not found' });
+    if (!ok) return fail(res, 404, 'api.error.sourceOrTargetNotFound');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -465,11 +472,11 @@ router.get('/suggestions/:transactionId', async (req, res) => {
   try {
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === req.params.transactionId);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
     const ctx = buildSuggestionContext(projections.transactions);
     res.json({ transactionId: tx.id, suggestions: suggestForTransaction(tx, ctx) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -482,9 +489,9 @@ router.post('/categorize/bulk', async (req, res) => {
   try {
     const { transactionIds, category, learn = true } = req.body || {};
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
-      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+      return fail(res, 400, 'api.error.transactionIdsRequired');
     }
-    if (!category) return res.status(400).json({ error: 'category is required' });
+    if (!category) return fail(res, 400, 'api.error.categoryRequired');
 
     const projections = await getProjections();
     const sample = projections.transactions.find((t) => t.id === transactionIds[0]);
@@ -497,7 +504,7 @@ router.post('/categorize/bulk', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -508,7 +515,7 @@ router.post('/categorize/bulk', async (req, res) => {
 router.post('/suggest/llm', async (req, res) => {
   try {
     if (!llmEnabled()) {
-      return res.status(400).json({ error: 'Ollama está desligado — activa-o em Settings' });
+      return fail(res, 400, 'api.error.llmDisabled');
     }
     const projections = await getProjections();
     const ctx = buildSuggestionContext(projections.transactions);
@@ -527,7 +534,7 @@ router.post('/suggest/llm', async (req, res) => {
       results: [...classified.entries()].map(([key, v]) => ({ key, ...v })),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -538,7 +545,7 @@ router.get('/llm/status', (req, res) => {
     const { llm } = loadSettings();
     res.json({ enabled: !!llm?.enabled, model: llm?.model || '', baseUrl: llm?.baseUrl || '' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -547,7 +554,7 @@ router.post('/categorize', async (req, res) => {
     const { transactionId, category, confidence, ruleId } = req.body;
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === transactionId);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
 
     const result = await applyCategorization(tx.id, category, confidence, ruleId);
 
@@ -557,7 +564,7 @@ router.post('/categorize', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -566,14 +573,14 @@ router.post('/categorize/override', async (req, res) => {
     const { transactionId, newCategory } = req.body;
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === transactionId);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
 
     const result = await applyManualOverride(tx.id, tx.category, newCategory);
     noteCorrection(tx.description, tx.merchant, newCategory);
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -583,7 +590,7 @@ router.get('/rules', (req, res) => {
   try {
     res.json(getRulesV2().sort((a, b) => (a.order || 0) - (b.order || 0)));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -591,37 +598,37 @@ router.post('/rules', (req, res) => {
   try {
     res.json(createRule(req.body));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/rules/:id', (req, res) => {
   try {
     const rule = updateRule(req.params.id, req.body);
-    if (!rule) return res.status(404).json({ error: 'Rule not found' });
+    if (!rule) return fail(res, 404, 'api.error.ruleNotFound');
     res.json(rule);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.delete('/rules/:id', (req, res) => {
   try {
     const ok = deleteRule(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Rule not found' });
+    if (!ok) return fail(res, 404, 'api.error.ruleNotFound');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/rules/reorder', (req, res) => {
   try {
     const { orderedIds } = req.body;
-    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds must be an array' });
+    if (!Array.isArray(orderedIds)) return fail(res, 400, 'api.error.orderedIdsMustBeArray');
     res.json(reorderRules(orderedIds));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -630,7 +637,7 @@ router.post('/rules/run', async (req, res) => {
     const result = await runRules({ transactionIds: req.body?.transactionIds || null });
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -643,7 +650,7 @@ router.get('/rules/suggestions', async (req, res) => {
     }
     res.json({ static: statics, llm });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -651,7 +658,7 @@ router.post('/rules/suggestions/accept', (req, res) => {
   try {
     res.json(createRule(req.body));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -692,24 +699,24 @@ router.get('/advisor', async (req, res) => {
       feedback: loadFeedback().length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/advisor/pattern/accept', async (req, res) => {
   try {
     const { id } = req.body || {};
-    if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+    if (!id) return fail(res, 400, 'api.error.idRequired');
 
     const projections = await getProjections();
     const finding = patternCandidates(getRulesV2(), projections.transactions).find((f) => f.id === id);
-    if (!finding) return res.status(404).json({ error: 'Padrão não encontrado — pode já ter sido resolvido' });
+    if (!finding) return fail(res, 404, 'api.error.patternNotFound');
 
     const result = applyPattern(finding);
     recordFeedback({ id: finding.id, kind: 'pattern', subject: finding.subject, verdict: 'accepted' });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -719,7 +726,7 @@ router.post('/advisor/collapse/accept', async (req, res) => {
     const candidate = collapseCandidates(getRulesV2(), projections.transactions).find(
       (c) => c.id === req.body?.id
     );
-    if (!candidate) return res.status(404).json({ error: 'Sugestão não encontrada' });
+    if (!candidate) return fail(res, 404, 'api.error.suggestionNotFound');
 
     const result = applyCollapse(candidate, { force: req.body?.force === true });
     recordFeedback({
@@ -730,7 +737,7 @@ router.post('/advisor/collapse/accept', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -743,17 +750,17 @@ router.post('/advisor/collapse/accept', async (req, res) => {
 router.post('/advisor/shadowed/resolve', async (req, res) => {
   try {
     const { id, action } = req.body || {};
-    if (!id || !action) return res.status(400).json({ error: 'id e action são obrigatórios' });
+    if (!id || !action) return fail(res, 400, 'api.error.idAndActionRequired');
 
     const projections = await getProjections();
     const finding = shadowedRules(getRulesV2(), projections.transactions).find((f) => f.id === id);
-    if (!finding) return res.status(404).json({ error: 'Sugestão não encontrada — pode já ter sido resolvida' });
+    if (!finding) return fail(res, 404, 'api.error.suggestionNotFound');
 
     const result = applyShadowedFix(finding, action, projections.transactions);
     recordFeedback({ id: finding.id, kind: 'shadowed', subject: finding.subject, verdict: 'accepted' });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -765,7 +772,7 @@ router.post('/advisor/compact/preview', async (req, res) => {
     const projections = await getProjections();
     res.json(compactLearnedRules(getRulesV2(), projections.transactions));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -782,17 +789,17 @@ router.post('/advisor/compact/apply', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
 router.post('/advisor/reject', (req, res) => {
   try {
     const { id, kind, subject, note } = req.body || {};
-    if (!id) return res.status(400).json({ error: 'id is required' });
+    if (!id) return fail(res, 400, 'api.error.idRequired');
     res.json(recordFeedback({ id, kind: kind || 'unknown', subject: subject || id, verdict: 'rejected', note }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -801,17 +808,17 @@ router.post('/advisor/anomaly/accept', async (req, res) => {
   try {
     const { id, transactionId, category } = req.body || {};
     if (!transactionId || !category) {
-      return res.status(400).json({ error: 'transactionId e category são obrigatórios' });
+      return fail(res, 400, 'api.error.transactionAndCategoryRequired');
     }
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === transactionId);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
 
     const result = await applyManualOverride(tx.id, tx.category, category);
     if (id) recordFeedback({ id, kind: 'anomaly', subject: transactionId, verdict: 'accepted' });
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -820,17 +827,17 @@ router.post('/advisor/anomaly/accept', async (req, res) => {
 router.post('/advisor/anomaly/inverse', async (req, res) => {
   try {
     const { id } = req.body || {};
-    if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+    if (!id) return fail(res, 400, 'api.error.idRequired');
 
     const projections = await getProjections();
     const finding = anomalyCandidates(projections.transactions).find((f) => f.id === id);
-    if (!finding) return res.status(404).json({ error: 'Achado não encontrado — pode já ter sido resolvido' });
+    if (!finding) return fail(res, 404, 'api.error.findingNotFound');
 
     const result = await applyAnomalyInverse(finding, projections.transactions);
     recordFeedback({ id: finding.id, kind: 'anomaly', subject: finding.subject, verdict: 'accepted' });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -838,7 +845,7 @@ router.get('/advisor/feedback', (req, res) => {
   try {
     res.json(loadFeedback());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -848,37 +855,37 @@ router.get('/tags', (req, res) => {
   try {
     res.json(loadTags());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/tags', (req, res) => {
   try {
     const tag = createTag(req.body.name, { color: req.body.color, icon: req.body.icon });
-    if (!tag) return res.status(409).json({ error: 'Já existe uma subcategoria com esse nome' });
+    if (!tag) return fail(res, 409, 'api.error.subcategoryExists');
     res.json(tag);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/tags/:id', (req, res) => {
   try {
     const tag = updateTag(req.params.id, req.body);
-    if (!tag) return res.status(404).json({ error: 'Tag not found' });
+    if (!tag) return fail(res, 404, 'api.error.tagNotFound');
     res.json(tag);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.delete('/tags/:id', (req, res) => {
   try {
     const ok = deleteTag(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Tag not found' });
+    if (!ok) return fail(res, 404, 'api.error.tagNotFound');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -886,12 +893,12 @@ router.post('/transactions/:id/tags', async (req, res) => {
   try {
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === req.params.id);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
     if (tx.tags.includes(req.body.tagId)) return res.json({ success: true, alreadyTagged: true });
     emitTagAssignment(tx.id, req.body.tagId, 'manual');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -904,11 +911,11 @@ router.post('/transactions/tags/bulk', async (req, res) => {
   try {
     const { transactionIds, tagId, remove = false } = req.body || {};
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
-      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+      return fail(res, 400, 'api.error.transactionIdsRequired');
     }
-    if (!tagId) return res.status(400).json({ error: 'tagId is required' });
+    if (!tagId) return fail(res, 400, 'api.error.tagIdRequired');
     if (!loadTags().some((t) => t.id === tagId)) {
-      return res.status(404).json({ error: 'Tag not found' });
+      return fail(res, 404, 'api.error.tagNotFound');
     }
 
     const projections = await getProjections();
@@ -933,7 +940,7 @@ router.post('/transactions/tags/bulk', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -941,11 +948,11 @@ router.delete('/transactions/:id/tags/:tagId', async (req, res) => {
   try {
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === req.params.id);
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
     emitTagRemoval(tx.id, req.params.tagId, 'manual');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -955,7 +962,7 @@ router.get('/correlation-rules', (req, res) => {
   try {
     res.json(loadCorrelationRules());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -963,27 +970,27 @@ router.post('/correlation-rules', (req, res) => {
   try {
     res.json(createCorrelationRule(req.body));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/correlation-rules/:id', (req, res) => {
   try {
     const rule = updateCorrelationRule(req.params.id, req.body);
-    if (!rule) return res.status(404).json({ error: 'Rule not found' });
+    if (!rule) return fail(res, 404, 'api.error.ruleNotFound');
     res.json(rule);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.delete('/correlation-rules/:id', (req, res) => {
   try {
     const ok = deleteCorrelationRule(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Rule not found' });
+    if (!ok) return fail(res, 404, 'api.error.ruleNotFound');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -991,7 +998,7 @@ router.post('/correlations/run', async (req, res) => {
   try {
     res.json(await runCorrelations());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1001,27 +1008,27 @@ router.get('/correlations', (req, res) => {
     if (req.query.status) proposals = proposals.filter((p) => p.status === req.query.status);
     res.json(proposals);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/correlations/:id/confirm', (req, res) => {
   try {
     const result = confirmProposal(req.params.id);
-    if (!result) return res.status(404).json({ error: 'Pending proposal not found' });
+    if (!result) return fail(res, 404, 'api.error.proposalNotFound');
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/correlations/:id/reject', (req, res) => {
   try {
     const proposal = rejectProposal(req.params.id);
-    if (!proposal) return res.status(404).json({ error: 'Pending proposal not found' });
+    if (!proposal) return fail(res, 404, 'api.error.proposalNotFound');
     res.json(proposal);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1043,7 +1050,7 @@ router.get('/transactions', async (req, res) => {
     const transactions = applyTransactionFilters(projections.transactions, req.query);
     res.json(transactions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1063,7 +1070,7 @@ router.get('/transactions/search', async (req, res) => {
       latest: dates[dates.length - 1] || null,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1097,7 +1104,7 @@ router.get('/transactions/pending', async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1122,7 +1129,7 @@ router.get('/travels', async (req, res) => {
       })
     );
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1139,7 +1146,7 @@ router.post('/travels', async (req, res) => {
 router.put('/travels/:id', async (req, res) => {
   try {
     const travel = updateTravel(req.params.id, req.body || {});
-    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
     // Dates or name may have moved, so the tag has to follow.
     const sync = await syncTravelTagFromLedger(travel);
     res.json({ ...travel, ...sync });
@@ -1151,7 +1158,7 @@ router.put('/travels/:id', async (req, res) => {
 router.delete('/travels/:id', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
-    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
     // Untag before deleting: once the trip is gone there is nothing left that
     // knows which tag was its own.
     const { transactions } = await getProjections();
@@ -1160,7 +1167,7 @@ router.delete('/travels/:id', async (req, res) => {
     if (untagged) invalidateProjections();
     res.json({ success: true, untagged });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1179,18 +1186,18 @@ router.post('/travels/detect', async (req, res) => {
     const projections = await getProjections();
     res.json({ proposals: detectTravels(projections.transactions) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.get('/travels/:id/transactions', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
-    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
     const projections = await getProjections();
     res.json(transactionsInTravel(travel, projections.transactions));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1204,12 +1211,12 @@ router.get('/travels/:id/transactions', async (req, res) => {
 router.post('/travels/:id/transactions/:txId', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
-    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
 
     const on = req.body?.on !== false;
     const projections = await getProjections();
     const tx = projections.transactions.find((t) => t.id === req.params.txId);
-    if (!tx) return res.status(404).json({ error: 'Transacção não encontrada' });
+    if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
 
     const { tagId, changed } = markTransactionAsTravel(travel, tx, on);
     await applyCategorizationBulk([tx.id], on ? travel.category || 'travel' : 'uncategorized', 'manual');
@@ -1217,7 +1224,7 @@ router.post('/travels/:id/transactions/:txId', async (req, res) => {
 
     res.json({ success: true, tagId, marked: on });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1231,7 +1238,7 @@ router.post('/travels/:id/transactions/:txId', async (req, res) => {
 router.post('/travels/:id/apply', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
-    if (!travel) return res.status(404).json({ error: 'Viagem não encontrada' });
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
 
     const { category = travel.category || 'travel', onlyUncategorized = true } = req.body || {};
     // The trip may never have been opened, in which case its subcategory does
@@ -1260,7 +1267,7 @@ router.post('/travels/:id/apply', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1279,7 +1286,7 @@ router.get('/travels/anomalies', async (req, res) => {
       strayTotal: stray.length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1297,7 +1304,7 @@ router.get('/duplicates', async (req, res) => {
       voided: projections.voidedTransactions.length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1314,10 +1321,10 @@ router.post('/duplicates/verify', async (req, res) => {
     const group =
       groups.find((g) => g.key === req.body?.key) ||
       (wanted.size ? groups.find((g) => g.transactions.some((t) => wanted.has(t.id))) : null);
-    if (!group) return res.status(404).json({ error: 'Grupo não encontrado' });
+    if (!group) return fail(res, 404, 'api.error.groupNotFound');
     res.json(await verifyAgainstDocument(group));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1325,7 +1332,7 @@ router.post('/duplicates/void', async (req, res) => {
   try {
     const { transactionIds, keepId } = req.body || {};
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
-      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+      return fail(res, 400, 'api.error.transactionIdsRequired');
     }
     const toVoid = [...new Set(transactionIds)].filter((id) => id !== keepId);
     // Nothing left to void is not an error: the group had already collapsed to a
@@ -1334,7 +1341,7 @@ router.post('/duplicates/void', async (req, res) => {
     if (toVoid.length === 0) return res.json({ voided: 0, collapsed: true });
     res.json(await voidTransactions(toVoid, { reason: 'duplicate', duplicateOf: keepId || null }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1342,21 +1349,21 @@ router.post('/duplicates/restore', async (req, res) => {
   try {
     const { transactionIds } = req.body || {};
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
-      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+      return fail(res, 400, 'api.error.transactionIdsRequired');
     }
     res.json(await restoreTransactions(transactionIds));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.post('/duplicates/dismiss', (req, res) => {
   try {
-    if (!req.body?.key) return res.status(400).json({ error: 'key is required' });
+    if (!req.body?.key) return fail(res, 400, 'api.error.keyRequired');
     dismissGroup(req.body.key);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1365,7 +1372,7 @@ router.get('/duplicates/voided', async (req, res) => {
     const projections = await getProjections();
     res.json(projections.voidedTransactions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1373,11 +1380,11 @@ router.get('/duplicates/voided', async (req, res) => {
 
 router.post('/investments/import', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Nenhum ficheiro enviado' });
+    if (!req.file) return fail(res, 400, 'api.error.noFiles');
     const result = await importPricempireCsv(req.file.buffer, { filename: req.file.originalname });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -1418,7 +1425,7 @@ router.get('/investments', async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1435,7 +1442,7 @@ router.get('/investments/transactions', async (req, res) => {
     if (marketplace) list = list.filter((t) => t.marketplace === marketplace);
     res.json(list);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1461,16 +1468,16 @@ router.get('/securities', async (req, res) => {
       quotesEnabled: quotesEnabled(),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
 router.put('/securities', (req, res) => {
   try {
-    if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Esperado um array' });
+    if (!Array.isArray(req.body)) return fail(res, 400, 'api.error.expectedArray');
     res.json(saveSecurities(req.body));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1479,7 +1486,7 @@ router.post('/securities/link', async (req, res) => {
     const projections = await getProjections();
     res.json(await linkSecurityOrders(projections.securityOrders || [], projections.transactions));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1487,7 +1494,7 @@ router.post('/securities/quotes/refresh', async (req, res) => {
   try {
     res.json(await refreshQuotes({ force: req.body?.force === true }));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -1500,18 +1507,18 @@ router.post('/currency/rate/refresh', async (req, res) => {
   try {
     res.json(await refreshRate({ force: req.body?.force === true }));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
 router.post('/securities/price', async (req, res) => {
   try {
     const { symbol, price, currency } = req.body || {};
-    if (!symbol || price == null) return res.status(400).json({ error: 'symbol e price são obrigatórios' });
+    if (!symbol || price == null) return fail(res, 400, 'api.error.symbolAndPriceRequired');
     await recordManualPrice(symbol, price, currency || 'EUR');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1522,7 +1529,7 @@ router.get('/assets', async (req, res) => {
     const projections = await getProjections();
     res.json(projections.assets);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1608,7 +1615,7 @@ router.get('/analytics', async (req, res) => {
       vaultTotal: projections.vaultTotal,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1618,7 +1625,7 @@ router.get('/analytics/cashflow', async (req, res) => {
     const result = computeMonthlyCashflow(projections.spendingTransactions);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1633,7 +1640,7 @@ router.get('/analytics/insights', async (req, res) => {
     );
     res.json(insights);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1657,7 +1664,7 @@ router.get('/accounts', async (req, res) => {
       reconciliation: projections.vaultReconciliation,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1670,7 +1677,7 @@ router.get('/accounts/movements', async (req, res) => {
     if (vault) movements = movements.filter((m) => m.vault === vault);
     res.json(movements);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1684,7 +1691,7 @@ router.get('/accounts/profile', (req, res) => {
   try {
     res.json({ profile: loadSettings().internal?.profile || null, default: DEFAULT_PROFILE });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1695,7 +1702,7 @@ router.put('/accounts/profile', (req, res) => {
     invalidateProjections();
     res.json({ profile: merged.internal.profile });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1724,7 +1731,7 @@ router.post('/accounts/profile/preview', async (req, res) => {
       reconciled: result.reconciliation?.balanced ?? null,
     });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    failFrom(res, err, 400);
   }
 });
 
@@ -1738,7 +1745,7 @@ router.post('/accounts/profile/preview', async (req, res) => {
 router.post('/accounts/vaults/alias', async (req, res) => {
   try {
     const { from, to } = req.body || {};
-    if (!from) return res.status(400).json({ error: 'from is required' });
+    if (!from) return fail(res, 400, 'api.error.fromRequired');
 
     const settings = loadSettings();
     const vaultAliases = { ...(settings.internal?.vaultAliases || {}) };
@@ -1751,7 +1758,7 @@ router.post('/accounts/vaults/alias', async (req, res) => {
     const projections = await getProjections();
     res.json({ vaultAliases, vaults: projections.vaults, vaultTotal: projections.vaultTotal });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 
@@ -1766,7 +1773,7 @@ router.get('/events', async (req, res) => {
     if (limit) filtered = filtered.slice(-parseInt(limit));
     res.json(filtered);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    failFrom(res, err);
   }
 });
 

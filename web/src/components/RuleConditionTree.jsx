@@ -1,4 +1,5 @@
 import IconButton from './ui/IconButton.jsx';
+import { useT } from '../i18n/index.js';
 
 /**
  * Nested rule conditions — "(A ou B) e não C", the way Outlook's own rule
@@ -52,6 +53,7 @@ function isGroup(node) {
 }
 
 function LeafRow({ leaf, onChange, onRemove }) {
+  const { t } = useT();
   const ops = OPS_BY_FIELD[leaf.field] || OPS_BY_FIELD.any;
   const isBetween = leaf.op === 'between';
 
@@ -81,8 +83,8 @@ function LeafRow({ leaf, onChange, onRemove }) {
       </select>
       {leaf.field === 'direction' ? (
         <select value={leaf.value} onChange={(e) => onChange({ ...leaf, value: e.target.value })}>
-          <option value="debit">débito</option>
-          <option value="credit">crédito</option>
+          <option value="debit">{t('ruleTree.debit')}</option>
+          <option value="credit">{t('ruleTree.credit')}</option>
         </select>
       ) : leaf.field === 'source' ? (
         <select value={leaf.value} onChange={(e) => onChange({ ...leaf, value: e.target.value })}>
@@ -131,12 +133,13 @@ function LeafRow({ leaf, onChange, onRemove }) {
           style={{ minWidth: 100 }}
         />
       )}
-      <IconButton icon="close" label="Remover condição" onClick={onRemove} />
+      <IconButton icon="close" label={t('ruleTree.removeCondition')} onClick={onRemove} />
     </div>
   );
 }
 
 function Group({ node, onChange, onRemove, depth }) {
+  const { t } = useT();
   const setOp = (op) => onChange({ ...node, op });
 
   const updateChild = (i, next) => {
@@ -154,7 +157,7 @@ function Group({ node, onChange, onRemove, depth }) {
   return (
     <div className={`cond-group ${depth === 0 ? 'cond-group-root' : ''}`}>
       <div className="cond-group-head">
-        <div className="seg-toggle" role="group" aria-label="Operador do grupo">
+        <div className="seg-toggle" role="group" aria-label={t('ruleTree.groupOperator')}>
           {['all', 'any', 'not'].map((op) => (
             <button
               key={op}
@@ -167,7 +170,7 @@ function Group({ node, onChange, onRemove, depth }) {
             </button>
           ))}
         </div>
-        {depth > 0 && <IconButton icon="close" label="Remover grupo" onClick={onRemove} />}
+        {depth > 0 && <IconButton icon="close" label={t('ruleTree.removeGroup')} onClick={onRemove} />}
       </div>
 
       <div className="cond-group-children">
@@ -200,6 +203,7 @@ function Group({ node, onChange, onRemove, depth }) {
 }
 
 export default function RuleConditionTree({ tree, onChange }) {
+  const { t } = useT();
   return <Group node={tree} depth={0} onChange={onChange} onRemove={() => {}} />;
 }
 

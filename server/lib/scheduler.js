@@ -28,8 +28,8 @@ const REGISTRY = {
     if (result.categorized > 0 || result.tagged > 0) {
       notify(
         'info',
-        'Rules run complete',
-        `${result.categorized} categorized, ${result.tagged} tagged`,
+        'notify.rules.complete',
+        { applied: result.categorized, tagged: result.tagged },
         { module: 'rules', ...result }
       );
     }
@@ -45,7 +45,7 @@ export async function runModule(module) {
   try {
     return await job();
   } catch (err) {
-    notify('error', `Scheduled ${module} run failed`, err.message, { module });
+    notify('error', 'notify.schedule.failed', { module, detail: err.message }, { module });
     throw err;
   } finally {
     running.set(module, false);
@@ -60,7 +60,7 @@ export function reloadScheduler() {
   for (const [module, cfg] of Object.entries(settings.schedules || {})) {
     if (!cfg.enabled || !cfg.cron || !REGISTRY[module]) continue;
     if (!cron.validate(cfg.cron)) {
-      notify('warning', `Invalid cron for ${module}`, `"${cfg.cron}" — schedule ignored`, { module });
+      notify('warning', 'notify.schedule.invalidCron', { module, cron: cfg.cron }, { module });
       continue;
     }
     jobs.push(cron.schedule(cfg.cron, () => runModule(module).catch(() => {})));

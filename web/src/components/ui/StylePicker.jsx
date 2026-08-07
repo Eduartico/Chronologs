@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useT } from '../../i18n/index.js';
 import Icon, { CATEGORY_ICON_NAMES } from '../Icon.jsx';
 import Popover from './Popover.jsx';
 import { PALETTE } from './ColorPicker.jsx';
@@ -25,6 +26,7 @@ export default function StylePicker({
   label = 'Ícone e cor',
   bare = false,
 }) {
+  const { t } = useT();
   const anchor = useRef(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -62,7 +64,7 @@ export default function StylePicker({
             className="icon-picker-search"
             autoFocus
             value={query}
-            placeholder="Procurar ícone…"
+            placeholder={t('picker.searchIcon')}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && close()}
           />
@@ -81,7 +83,7 @@ export default function StylePicker({
             ))}
             {shown.length === 0 && (
               <span className="muted" style={{ fontSize: 12, padding: 4 }}>
-                Nenhum ícone com esse nome.
+                {t('picker.noIcon')}
               </span>
             )}
           </div>

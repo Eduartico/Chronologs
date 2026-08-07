@@ -99,8 +99,8 @@ export async function refreshQuotes({ force = false } = {}) {
 
   notify(
     result.failed.length > 0 ? 'warning' : 'success',
-    'Cotações actualizadas',
-    `${result.fetched} de ${result.requested} títulos${result.failed.length ? ` · sem cotação: ${result.failed.join(', ')}` : ''}`,
+    'notify.quotes.fetched',
+    { updated: result.fetched, total: result.requested, missing: result.failed.length },
     { module: 'quotes', ...result }
   );
 

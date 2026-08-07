@@ -1,15 +1,53 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en" data-theme="guardian" data-mode="dark" data-panel="dark" data-ramp="deep">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0d1117" />
+    <meta name="theme-color" content="#0c1016" />
     <title>Chronologs</title>
     <!-- The transparent mark, not the one baked onto a purple square: a favicon
          sits on the browser's own tab colour, so its background has to be the
          tab's, not ours. -->
     <link rel="icon" type="image/png" href="/chronologs-logo.png" />
     <link rel="apple-touch-icon" href="/chronologs-logo.png" />
+    <script>
+      /*
+       * Theme and language, before the first paint.
+       *
+       * The real source of truth is user-data/state/settings.json, which arrives
+       * over HTTP a few hundred milliseconds in. Waiting for it would mean every
+       * load flashing Guardian-in-English on the way to whatever was chosen —
+       * which on a light theme means a black page flashing white.
+       *
+       * So SettingsProvider mirrors the *resolved* appearance to localStorage on
+       * every change, and this reads it. Resolved is the important word: the mode,
+       * panel and ramp flags are already worked out, so this script never has to
+       * know the seventeen-theme registry and cannot disagree with it.
+       *
+       * Blocking on purpose, and inline on purpose — a deferred or external script
+       * paints first and defeats the point. It is a few hundred bytes.
+       */
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('chronologs.appearance') || '{}');
+          var root = document.documentElement;
+          if (saved.theme) root.dataset.theme = saved.theme;
+          if (saved.mode) root.dataset.mode = saved.mode;
+          if (saved.panel) root.dataset.panel = saved.panel;
+          if (saved.ramp) root.dataset.ramp = saved.ramp;
+          root.dataset.finance = saved.finance === 'cvd' ? 'cvd' : 'standard';
+          root.dataset.textures = saved.textures ? 'on' : 'off';
+          root.dataset.tables = saved.tables ? 'on' : 'off';
+          root.lang = saved.locale === 'pt' ? 'pt-PT' : 'en';
+          if (saved.bg) {
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', saved.bg);
+          }
+        } catch (e) {
+          /* A corrupt or unavailable store just means the defaults on <html>. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

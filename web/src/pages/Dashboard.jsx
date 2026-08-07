@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
+import { useT } from '../i18n/index.js';
+import { nf } from '../lib/locale.js';
 import {
   AreaChart,
   Area,
@@ -62,12 +64,12 @@ function rangeFor(preset) {
   return { from: isoMonthsAgo(p?.months ?? 12), to: '' };
 }
 
+/** Whole euros, for stat tiles and table cells where the cents are noise.
+    The locale was the literal 'pt-PT' here — one of six places outside
+    format.js/money.js where it had leaked. `nf()` memoises per locale and is
+    invalidated when the language changes. */
 function eur(v) {
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(v || 0);
+  return nf({ style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
 }
 
 function Stat({ label, value, tone, hint }) {
@@ -82,6 +84,7 @@ function Stat({ label, value, tone, hint }) {
 }
 
 export default function Dashboard() {
+  const { t } = useT();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   // Persist the *choice*, derive the range from it.
@@ -154,7 +157,7 @@ export default function Dashboard() {
 
   // The legend is the filter, on every chart that has one.
   const trendFilter = useSeriesToggle('dashboard.hiddenCats', trend.categories);
-  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', ['Receitas', 'Despesas']);
+  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', ['Receitas', t('dashboard.expenses')]);
 
   const breakdownAll = useMemo(
     () =>
@@ -195,7 +198,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="empty-state">
-        <h3>Não foi possível carregar</h3>
+        <h3>{t('dashboard.loadFailed')}</h3>
         <p>{error}</p>
       </div>
     );
@@ -205,15 +208,15 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div>
-          <h2>Dashboard</h2>
+          <h2>{t('nav.dashboard')}</h2>
           {data?.range && (
             <p style={{ color: INK.secondary, fontSize: 13, marginTop: 2 }}>
-              {data.range.matched} de {data.range.total} transacções
+              {t('transactions.countOf', { shown: data.range.matched, total: data.range.total })}
               {data.range.earliest && ` · histórico desde ${formatDate(data.range.earliest)}`}
             </p>
           )}
         </div>
-        <button className="btn-ghost" onClick={load}>↻ Actualizar</button>
+        <button className="btn-ghost" onClick={load}>↻ {t('common.refresh')}</button>
       </div>
 
       {/* One control row above the charts drives every series on the page. */}
@@ -223,7 +226,7 @@ export default function Dashboard() {
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
           {/* Named, so a hand-picked range never leaves the control blank. */}
-          <option value="custom">Intervalo à escolha</option>
+          <option value="custom">{t('dashboard.customRange')}</option>
         </select>
         <DateRangeField
           from={range.from}
@@ -242,7 +245,7 @@ export default function Dashboard() {
           value={selectedCats[0] || ''}
           onChange={(e) => setSelectedCats(e.target.value ? [e.target.value] : [])}
         >
-          <option value="">Todas as categorias</option>
+          <option value="">{t('transactions.allCategories')}</option>
           {categories.map((c) => (
             <option key={c.id} value={c.name}>{c.name}</option>
           ))}
@@ -250,10 +253,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
-        <Stat label="Receitas" value={eur(totals.income)} tone="good" />
-        <Stat label="Despesas" value={eur(totals.expense)} tone="bad" hint={`${eur(totals.avgExpense)} por ${periodWord}`} />
+        <Stat label={t('dashboard.income')} value={eur(totals.income)} tone="good" />
+        <Stat label={t('dashboard.expenses')} value={eur(totals.expense)} tone="bad" hint={`${eur(totals.avgExpense)} por ${periodWord}`} />
         <Stat
-          label="Saldo"
+          label={t('dashboard.balance')}
           value={eur(totals.net)}
           tone={totals.net >= 0 ? 'good' : 'bad'}
           hint={totals.savings != null ? `taxa de poupança ${totals.savings.toFixed(1)}%` : null}
@@ -262,11 +265,23 @@ export default function Dashboard() {
 
       <div className="grid-2" style={{ marginBottom: 16 }}>
         <ChartCard
-          title="Receitas e despesas"
+          title={t('dashboard.cashflow')}
           subtitle={`Por ${periodWord} — clica na legenda para isolar uma série`}
           loading={loading}
           empty={!cashflow.length}
           height={280}
+          storageKey="cashflow"
+          /* Every chart passes its own data as a table. ChartCard receives a
+             built recharts element and cannot see behind it, so the spec has to
+             come from here — where the array already is. */
+          table={{
+            rows: cashflow,
+            columns: [
+              { key: 'month', label: t('common.date'), format: axisMonth },
+              { key: 'income', label: t('dashboard.income'), align: 'right', format: eur },
+              { key: 'expense', label: t('dashboard.expenses'), align: 'right', format: eur },
+            ],
+          }}
           controls={<ChartTypeToggle value={cashflowType} onChange={setCashflowType} options={['line', 'bar']} />}
         >
           {cashflowType === 'line' ? (
@@ -279,22 +294,22 @@ export default function Dashboard() {
               <Line
                 type="monotone"
                 dataKey="income"
-                name="Receitas"
+                name={t('dashboard.income')}
                 stroke={SERIES[2]}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
-                hide={cashflowFilter.hidden.has('Receitas')}
+                hide={cashflowFilter.hidden.has(t('dashboard.income'))}
               />
               <Line
                 type="monotone"
                 dataKey="expense"
-                name="Despesas"
+                name={t('dashboard.expenses')}
                 stroke={SERIES[1]}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
-                hide={cashflowFilter.hidden.has('Despesas')}
+                hide={cashflowFilter.hidden.has(t('dashboard.expenses'))}
               />
             </LineChart>
           ) : (
@@ -309,28 +324,36 @@ export default function Dashboard() {
               <Legend {...cashflowFilter.legendProps} />
               <Bar
                 dataKey="income"
-                name="Receitas"
+                name={t('dashboard.income')}
                 fill={SERIES[2]}
                 radius={[4, 4, 0, 0]}
-                hide={cashflowFilter.hidden.has('Receitas')}
+                hide={cashflowFilter.hidden.has(t('dashboard.income'))}
               />
               <Bar
                 dataKey="expense"
-                name="Despesas"
+                name={t('dashboard.expenses')}
                 fill={SERIES[1]}
                 radius={[4, 4, 0, 0]}
-                hide={cashflowFilter.hidden.has('Despesas')}
+                hide={cashflowFilter.hidden.has(t('dashboard.expenses'))}
               />
             </BarChart>
           )}
         </ChartCard>
 
         <ChartCard
-          title="Saldo acumulado"
-          subtitle="Soma corrente do saldo de cada período"
+          title={t('dashboard.cumulative')}
+          subtitle={t('dashboard.cumulativeSubtitle')}
           loading={loading}
           empty={!data?.cumulative?.length}
           height={280}
+          storageKey="cumulative"
+          table={{
+            rows: data?.cumulative || [],
+            columns: [
+              { key: 'month', label: t('common.date'), format: axisMonth },
+              { key: 'total', label: t('common.total'), align: 'right', format: eur },
+            ],
+          }}
           controls={
             <ChartTypeToggle value={cumulativeType} onChange={setCumulativeType} options={['area', 'line']} />
           }
@@ -351,7 +374,7 @@ export default function Dashboard() {
               <Area
                 type="monotone"
                 dataKey="cumulative"
-                name="Saldo acumulado"
+                name={t('dashboard.cumulative')}
                 stroke={SERIES[0]}
                 strokeWidth={2}
                 fill="url(#gCum)"
@@ -367,7 +390,7 @@ export default function Dashboard() {
               <Line
                 type="monotone"
                 dataKey="cumulative"
-                name="Saldo acumulado"
+                name={t('dashboard.cumulative')}
                 stroke={SERIES[0]}
                 strokeWidth={2}
                 dot={false}
@@ -380,15 +403,25 @@ export default function Dashboard() {
 
       <div style={{ marginBottom: 16 }}>
         <ChartCard
-          title="Despesa por categoria ao longo do tempo"
+          title={t('dashboard.trend')}
           subtitle={
             trendFilter.hidden.size
-              ? `${trendFilter.hidden.size} categoria(s) escondida(s) — clica na legenda para repor`
+              ? t('dashboard.hiddenSeries', { count: trendFilter.hidden.size })
               : 'Área empilhada — clica numa categoria da legenda para a esconder, duplo clique para a isolar'
           }
           loading={loading}
           empty={!trend.rows.length}
           height={300}
+          storageKey="trend"
+          /* One column per category, built from the same list the stack is
+             drawn from — so adding a category cannot leave the table behind. */
+          table={{
+            rows: trend.rows,
+            columns: [
+              { key: 'period', label: t('common.date'), format: axisMonth },
+              ...trend.categories.map((cat) => ({ key: cat, label: cat, align: 'right', format: eur })),
+            ],
+          }}
         >
           <AreaChart data={trend.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid {...cartesianDefaults.grid} />
@@ -422,15 +455,25 @@ export default function Dashboard() {
 
       <div className="grid-2" style={{ marginBottom: 16 }}>
         <ChartCard
-          title="Repartição da despesa"
+          title={t('dashboard.breakdown')}
           subtitle={
             breakdownFilter.hidden.size
-              ? `${breakdownFilter.hidden.size} categoria(s) escondida(s) — clica na legenda para repor`
+              ? t('dashboard.hiddenSeries', { count: breakdownFilter.hidden.size })
               : 'Clica numa categoria da legenda para a esconder, duplo clique para a isolar'
           }
           loading={loading}
           empty={!breakdown.length}
           height={280}
+          storageKey="breakdown"
+          table={{
+            rows: breakdown,
+            colorBy: 'name',
+            colorOf: (name) => breakdownColor(name),
+            columns: [
+              { key: 'name', label: t('common.category') },
+              { key: 'value', label: t('common.amount'), align: 'right', format: eur },
+            ],
+          }}
           controls={<ChartTypeToggle value={breakdownType} onChange={setBreakdownType} options={['pie', 'bar']} />}
         >
           {breakdownType === 'pie' ? (
@@ -484,7 +527,21 @@ export default function Dashboard() {
           )}
         </ChartCard>
 
-        <ChartCard title="Onde gastas mais" subtitle="Top 10 comerciantes" loading={loading} empty={!data?.topMerchants?.length} height={280}>
+        <ChartCard
+          title={t('dashboard.topMerchants')}
+          subtitle={t('dashboard.topMerchantsSubtitle')}
+          loading={loading}
+          empty={!data?.topMerchants?.length}
+          height={280}
+          storageKey="merchants"
+          table={{
+            rows: data?.topMerchants || [],
+            columns: [
+              { key: 'name', label: 'Comerciante' },
+              { key: 'value', label: t('common.amount'), align: 'right', format: eur },
+            ],
+          }}
+        >
           <BarChart
             data={data?.topMerchants || []}
             layout="vertical"
@@ -509,7 +566,7 @@ export default function Dashboard() {
       </div>
 
       <ChartCard
-        title="Taxa de poupança"
+        title={t('dashboard.savingsRate')}
         subtitle={
           clampedMonths
             ? `Percentagem das receitas que sobrou · ${clampedMonths} mês(es) abaixo de −100% desenhados no limite`
@@ -517,8 +574,16 @@ export default function Dashboard() {
         }
         loading={loading}
         empty={!savingsRate.some((r) => r.rate != null)}
-        emptyMessage="Sem receitas registadas neste período — a taxa de poupança precisa delas."
+        emptyMessage={t('dashboard.savingsRateEmpty')}
         height={220}
+        storageKey="savings"
+        table={{
+          rows: savingsRate,
+          columns: [
+            { key: 'month', label: t('common.date'), format: axisMonth },
+            { key: 'rate', label: 'Taxa', align: 'right', format: (v) => (v == null ? '—' : `${v.toFixed(1)}%`) },
+          ],
+        }}
       >
         <LineChart data={savingsRate} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
@@ -547,7 +612,7 @@ export default function Dashboard() {
           <Line
             type="monotone"
             dataKey="rate"
-            name="Taxa de poupança"
+            name={t('dashboard.savingsRate')}
             stroke={SERIES[2]}
             strokeWidth={2}
             // A hollow dot marks a month drawn at the limit rather than at its

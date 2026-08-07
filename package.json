@@ -9,18 +9,22 @@
     "web": "cd web && npx vite",
     "start": "node server/index.js",
     "build": "cd web && npx vite build",
-    "test": "node --test \"server/**/*.test.js\" \"web/src/lib/**/*.test.js\""
+    "test": "node scripts/validate_palette.js && node --test \"server/**/*.test.js\" \"web/src/lib/**/*.test.js\"",
+    "lint:i18n": "node scripts/find_untranslated.js"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "cors": "^2.8.5",
-    "uuid": "^10.0.0",
     "concurrently": "^9.0.0",
-    "googleapis": "^144.0.0",
-    "pdf-parse": "^1.1.1",
+    "cors": "^2.8.5",
     "csv-parse": "^5.5.6",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pdf-parse": "^1.1.1",
     "playwright": "^1.48.0",
-    "node-cron": "^3.0.3"
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "culori": "^4.0.2"
   }
 }

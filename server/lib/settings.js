@@ -42,12 +42,41 @@ const DEFAULT_SETTINGS = {
   //    here duplicates that default, which is the one place it is allowed to
   //    live.
   internal: { selfNames: [], vaultAliases: {}, windowDays: 3, profile: null },
+  // How the app looks and reads.
+  //
+  // `theme` names an entry in web/src/styles/themes.js; the light/dark, sidebar
+  // and chart-ramp flags that go with it are looked up from there and are
+  // deliberately NOT stored, so a hand-edited settings.json cannot produce a
+  // light background wearing dark-mode shadows.
+  //
+  // The shipped default is English. This user's own user-data/state/settings.json
+  // says `pt`, which is a data fact rather than a special case in code.
+  //
+  // `locale` is also the only appearance value the *server* reads: it decides
+  // which language the Ollama prompts are written in, because the language of a
+  // prompt is the language of its answer, and the advisor's notes go on screen.
+  appearance: {
+    theme: 'guardian',
+    locale: 'en',
+    finance: 'standard',
+    textures: false,
+    tables: false,
+  },
 };
 
 function file() {
   return statePath('settings.json');
 }
 
+/**
+ * Defaults, with whatever is on disk laid over them, one level deep.
+ *
+ * Every top-level object needs its own line below. Forgetting one is the quietest
+ * failure in the whole file: the key survives a full write and vanishes on a
+ * partial one, so a setting appears to save and is gone after a reload — and the
+ * symptom ("my theme keeps resetting") points at the frontend, which is the wrong
+ * file to go looking in. `settings.test.js` fails if a key is ever left out.
+ */
 export function loadSettings() {
   if (!existsSync(file())) return structuredClone(DEFAULT_SETTINGS);
   const stored = JSON.parse(readFileSync(file(), 'utf-8'));
@@ -59,8 +88,16 @@ export function loadSettings() {
     quotes: { ...DEFAULT_SETTINGS.quotes, ...(stored.quotes || {}) },
     currency: { ...DEFAULT_SETTINGS.currency, ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
+    appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
   };
 }
+
+/** The reader's language, for the one server-side decision that depends on it. */
+export function currentLocale() {
+  return loadSettings().appearance?.locale || DEFAULT_SETTINGS.appearance.locale;
+}
+
+export { DEFAULT_SETTINGS };
 
 export function saveSettings(settings) {
   const merged = { ...loadSettings(), ...settings };

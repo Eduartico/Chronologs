@@ -15,8 +15,9 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
-import { api } from '../lib/api.js';
-import { configureMoney, usd, usdSigned, pct, eur, convert } from '../lib/money.js';
+import { api, errText } from '../lib/api.js';
+import { usd, usdSigned, pct, eur, convert } from '../lib/money.js';
+import { useT } from '../i18n/index.js';
 import ChartCard from '../components/charts/ChartCard.jsx';
 import { useSeriesToggle } from '../components/charts/useSeriesToggle.jsx';
 import SecuritiesPanel from '../components/SecuritiesPanel.jsx';
@@ -41,24 +42,26 @@ import {
 // The "ordenar por…" dropdown that used to sit above this table listed the same
 // six columns the table already prints across its own head. The columns do the
 // job themselves now, and this is the description they sort by.
-const POSITION_COLUMNS = [
-  { key: 'name', label: 'Item', get: (p) => p.name },
-  { key: 'qty', label: 'Qtd', align: 'right', get: (p) => p.heldQty },
-  { key: 'avgCost', label: 'Custo médio', align: 'right', get: (p) => p.avgCost ?? 0 },
-  { key: 'price', label: 'Preço actual', align: 'right', get: (p) => p.marketPrice ?? 0 },
-  { key: 'value', label: 'Valor', align: 'right', get: (p) => p.marketValue ?? 0 },
-  { key: 'pnl', label: 'Não realizado', align: 'right', get: (p) => p.unrealizedPnl ?? 0 },
-  { key: 'realized', label: 'Realizado', align: 'right', get: (p) => p.realizedPnl ?? 0 },
+const POSITION_COLUMNS = (t) => [
+  { key: 'name', label: t('investments.item'), get: (p) => p.name },
+  { key: 'qty', label: t('securities.quantity'), align: 'right', get: (p) => p.heldQty },
+  { key: 'avgCost', label: t('securities.averageCost'), align: 'right', get: (p) => p.avgCost ?? 0 },
+  { key: 'price', label: t('investments.currentPrice'), align: 'right', get: (p) => p.marketPrice ?? 0 },
+  { key: 'value', label: t('securities.value'), align: 'right', get: (p) => p.marketValue ?? 0 },
+  { key: 'pnl', label: t('securities.unrealised'), align: 'right', get: (p) => p.unrealizedPnl ?? 0 },
+  { key: 'realized', label: t('investments.realised'), align: 'right', get: (p) => p.realizedPnl ?? 0 },
 ];
 
-const INVESTMENT_TX_COLUMNS = [
-  { key: 'date', label: 'Data', get: (t) => t.date || '' },
-  { key: 'name', label: 'Item', get: (t) => t.name },
-  { key: 'type', label: 'Tipo', get: (t) => t.type },
-  { key: 'quantity', label: 'Qtd', align: 'right', get: (t) => t.quantity },
-  { key: 'unitPrice', label: 'Preço unit.', align: 'right', get: (t) => t.unitPrice ?? 0 },
-  { key: 'totalPrice', label: 'Total', align: 'right', get: (t) => t.totalPrice ?? 0 },
-  { key: 'marketplace', label: 'Marketplace', get: (t) => t.marketplace || '' },
+// `get` takes `row`, not `t`: naming it `t` shadows the translator, which is how
+// a working file breaks the moment a label beside it becomes a lookup.
+const INVESTMENT_TX_COLUMNS = (t) => [
+  { key: 'date', label: t('common.date'), get: (row) => row.date || '' },
+  { key: 'name', label: t('investments.item'), get: (row) => row.name },
+  { key: 'type', label: t('investments.type'), get: (row) => row.type },
+  { key: 'quantity', label: t('securities.quantity'), align: 'right', get: (row) => row.quantity },
+  { key: 'unitPrice', label: t('investments.unitPrice'), align: 'right', get: (row) => row.unitPrice ?? 0 },
+  { key: 'totalPrice', label: t('common.total'), align: 'right', get: (row) => row.totalPrice ?? 0 },
+  { key: 'marketplace', label: t('investments.marketplace'), get: (row) => row.marketplace || '' },
 ];
 
 const VAULT_COLUMNS = [
@@ -92,6 +95,9 @@ function PnlCell({ value, roi }) {
 }
 
 export default function Investments() {
+  const { t } = useT();
+  const positionColumns = useMemo(() => POSITION_COLUMNS(t), [t]);
+  const investmentTxColumns = useMemo(() => INVESTMENT_TX_COLUMNS(t), [t]);
   const [data, setData] = useState(null);
   const [accounts, setAccounts] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -121,11 +127,10 @@ export default function Investments() {
         api.getInvestments(),
         api.getInvestmentTransactions(),
       ]);
-      if (settings) configureMoney(settings);
       setData(inv);
       setTransactions(txs);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -143,7 +148,7 @@ export default function Investments() {
       );
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setImporting(false);
     }
@@ -164,7 +169,7 @@ export default function Investments() {
     rows: positions,
     sort: positionSort,
     toggleSort: togglePositionSort,
-  } = useSortableRows(filteredPositions, POSITION_COLUMNS, 'investments.positionSort', {
+  } = useSortableRows(filteredPositions, positionColumns, 'investments.positionSort', {
     key: 'value',
     dir: 'desc',
   });
@@ -178,7 +183,7 @@ export default function Investments() {
     rows: investmentTxs,
     sort: txSort,
     toggleSort: toggleTxSort,
-  } = useSortableRows(filteredInvestmentTxs, INVESTMENT_TX_COLUMNS, 'investments.txSort', {
+  } = useSortableRows(filteredInvestmentTxs, investmentTxColumns, 'investments.txSort', {
     key: 'date',
     dir: 'desc',
   });
@@ -236,7 +241,7 @@ export default function Investments() {
 
   const allocationColor = useMemo(() => colorScale(allocationAll.map((a) => a.name)), [allocationAll]);
 
-  if (loading) return <div className="empty-state"><p>A carregar…</p></div>;
+  if (loading) return <div className="empty-state"><p>{t('common.loading')}</p></div>;
 
   const s = data?.summary;
   const isEmpty = !s || s.items === 0;
@@ -245,7 +250,7 @@ export default function Investments() {
     <div>
       <div className="page-header">
         <div>
-          <h2>Activos</h2>
+          <h2>{t('nav.investments')}</h2>
           <p style={{ color: INK.secondary, fontSize: 13, marginTop: 2 }}>
             {accounts?.vaults?.length || 0} cofres de poupança · {data?.securities?.positions?.length || 0}{' '}
             posições em bolsa · carteira CS2 com {data?.transactionCount || 0} transacções
@@ -265,7 +270,7 @@ export default function Investments() {
           <button className="btn-primary" onClick={() => fileInput.current?.click()} disabled={importing}>
             {importing ? 'A importar…' : '↑ Importar CSV do Pricempire'}
           </button>
-          <button className="btn-ghost" onClick={load}>↻ Actualizar</button>
+          <button className="btn-ghost" onClick={load}>↻ {t('common.refresh')}</button>
         </div>
       </div>
 
@@ -276,24 +281,24 @@ export default function Investments() {
 
       <SecuritiesPanel securities={data?.securities} onChanged={load} />
 
-      <h3 className="section-title">CS2 (Pricempire)</h3>
+      <h3 className="section-title">{t('investments.cs2')}</h3>
 
       {isEmpty ? (
         <div className="empty-state">
-          <h3>Ainda não há investimentos em CS2</h3>
+          <h3>{t('investments.emptyTitle')}</h3>
           <p>
-            No Pricempire, abre o teu portfolio, carrega em <strong>Export</strong> e importa aqui o
-            CSV — ou usa <strong>Ressincronizar</strong> em Ligações para o fazer automaticamente.
+            {t('investments.emptyBody')} <strong>Export</strong> e importa aqui o
+            CSV — ou usa <strong>{t('investments.resync')}</strong> em Ligações para o fazer automaticamente.
             Os preços vêm em USD; o equivalente em euros usa a taxa definida em Definições.
           </p>
         </div>
       ) : (
         <>
           <div className="grid-3" style={{ marginBottom: 16 }}>
-            <Stat label="Valor de mercado" value={usd(s.marketValue)} hint={`${s.unitsHeld} unidades em ${s.itemsHeld} itens`} />
-            <Stat label="Custo do que tenho" value={usd(s.investedRemaining)} hint={`${usd(s.investedTotal)} investidos no total`} />
+            <Stat label={t('securities.marketValue')} value={usd(s.marketValue)} hint={`${s.unitsHeld} unidades em ${s.itemsHeld} itens`} />
+            <Stat label={t('investments.costOfHoldings')} value={usd(s.investedRemaining)} hint={`${usd(s.investedTotal)} investidos no total`} />
             <Stat
-              label="Ganho não realizado"
+              label={t('securities.unrealised')}
               value={usdSigned(s.unrealizedPnl)}
               tone={s.unrealizedPnl >= 0 ? 'good' : 'bad'}
               hint={s.roi != null ? `ROI ${pct(s.roi)}` : null}
@@ -301,18 +306,18 @@ export default function Investments() {
           </div>
           <div className="grid-3" style={{ marginBottom: 24 }}>
             <Stat
-              label="Ganho realizado"
+              label={t('investments.realised')}
               value={usdSigned(s.realizedPnl)}
               tone={s.realizedPnl >= 0 ? 'good' : 'bad'}
               hint={`${usd(s.soldNet)} recebidos de vendas`}
             />
             <Stat
-              label="Resultado total"
+              label={t('investments.totalResult')}
               value={usdSigned(s.totalPnl)}
               tone={s.totalPnl >= 0 ? 'good' : 'bad'}
               hint="realizado + não realizado"
             />
-            <Stat label="Taxas pagas" value={usd(s.fees)} hint="Steam 15% · CSFloat 2%" />
+            <Stat label={t('investments.feesPaid')} value={usd(s.fees)} hint="Steam 15% · CSFloat 2%" />
           </div>
 
           {s.mismatches > 0 && (
@@ -333,10 +338,21 @@ export default function Investments() {
 
           <div className="grid-2" style={{ marginBottom: 16 }}>
             <ChartCard
-              title="Dinheiro investido ao longo do tempo"
-              subtitle="Acumulado, líquido de taxas"
+              title={t('investments.cashOverTime')}
+              subtitle={t('investments.cumulativeNetOfFees')}
               empty={!data.cashTimeline?.length}
               height={260}
+              storageKey="cash"
+              /* Every chart carries its own data as a table — visible on request,
+                 and in the page under .sr-only the rest of the time. */
+              table={{
+                rows: cashTimeline,
+                columns: [
+                  { key: 'date', label: t('common.date'), format: axisDate },
+                  { key: 'cumulativeSpent', label: 'Investido', align: 'right', format: usd },
+                  { key: 'cumulativeReceived', label: 'Recebido', align: 'right', format: usd },
+                ],
+              }}
               footnote="Reconstruído a partir das transacções — o export não traz histórico de preços."
             >
               <AreaChart data={cashTimeline} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -376,7 +392,7 @@ export default function Investments() {
             </ChartCard>
 
             <ChartCard
-              title="Alocação por item"
+              title={t('investments.allocationByItem')}
               subtitle={
                 allocationFilter.hidden.size
                   ? `${allocationFilter.hidden.size} escondido(s) — clica na legenda para repor`
@@ -384,6 +400,16 @@ export default function Investments() {
               }
               empty={allocation.length === 0}
               height={260}
+              storageKey="allocation"
+              table={{
+                rows: allocation,
+                colorBy: 'name',
+                colorOf: (name) => allocationColor(name),
+                columns: [
+                  { key: 'name', label: 'Item' },
+                  { key: 'value', label: t('common.amount'), align: 'right', format: usd },
+                ],
+              }}
             >
               <PieChart>
                 <Pie
@@ -423,10 +449,19 @@ export default function Investments() {
 
           <div className="grid-2" style={{ marginBottom: 16 }}>
             <ChartCard
-              title="Por marketplace"
-              subtitle="Gasto vs. recebido, líquido de taxas"
+              title={t('investments.byMarketplace')}
+              subtitle={t('investments.spentVsReceived')}
               empty={!data.byMarketplace?.length}
               height={240}
+              storageKey="marketplace"
+              table={{
+                rows: byMarketplace,
+                columns: [
+                  { key: 'marketplace', label: 'Marketplace' },
+                  { key: 'spent', label: 'Gasto', align: 'right', format: usd },
+                  { key: 'received', label: 'Recebido', align: 'right', format: usd },
+                ],
+              }}
             >
               <BarChart data={byMarketplace} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid {...cartesianDefaults.grid} />
@@ -455,11 +490,19 @@ export default function Investments() {
             </ChartCard>
 
             <ChartCard
-              title="Valor de mercado da carteira"
-              subtitle="Um ponto por importação"
+              title={t('investments.portfolioValue')}
+              subtitle={t('investments.onePointPerImport')}
               empty={(data.valueTimeline?.length || 0) < 2}
               emptyMessage="A curva começa a desenhar-se a partir da segunda importação — o CSV só traz o preço de hoje."
               height={240}
+              storageKey="value"
+              table={{
+                rows: valueTimeline,
+                columns: [
+                  { key: 'date', label: t('common.date'), format: axisDate },
+                  { key: 'value', label: t('common.total'), align: 'right', format: usd },
+                ],
+              }}
             >
               <AreaChart data={valueTimeline} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <defs>
@@ -475,7 +518,7 @@ export default function Investments() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  name="Valor de mercado"
+                  name={t('securities.marketValue')}
                   stroke={SERIES[2]}
                   strokeWidth={2}
                   fill="url(#gValue)"
@@ -486,17 +529,17 @@ export default function Investments() {
 
           <div className="filter-bar">
             <select value={tab} onChange={(e) => setTab(e.target.value)}>
-              <option value="positions">Posições</option>
-              <option value="transactions">Transacções</option>
+              <option value="positions">{t('investments.positions')}</option>
+              <option value="transactions">{t('nav.transactions')}</option>
             </select>
             <input
-              placeholder="Procurar item…"
+              placeholder={t('investments.searchItem')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ minWidth: 220 }}
             />
             {tab === 'positions' && (
-              <Switch checked={hideSold} onChange={setHideSold} label="Só o que tenho" />
+              <Switch checked={hideSold} onChange={setHideSold} label={t('investments.onlyHeld')} />
             )}
           </div>
 
@@ -505,7 +548,7 @@ export default function Investments() {
               <table>
                 <thead>
                   <tr>
-                    {POSITION_COLUMNS.map((col) => (
+                    {positionColumns.map((col) => (
                       <SortHeader
                         key={col.key}
                         column={col}
@@ -522,7 +565,7 @@ export default function Investments() {
                         {p.name}
                         {p.quantityMismatch && (
                           <span
-                            title="Vendas acima das compras registadas"
+                            title={t('investments.oversold')}
                             style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle' }}
                           >
                             <Icon name="alert" size={12} />
@@ -559,7 +602,7 @@ export default function Investments() {
               <table>
                 <thead>
                   <tr>
-                    {INVESTMENT_TX_COLUMNS.map((col) => (
+                    {investmentTxColumns.map((col) => (
                       <SortHeader key={col.key} column={col} sort={txSort} onToggle={toggleTxSort} />
                     ))}
                   </tr>
@@ -619,6 +662,7 @@ export default function Investments() {
  * next to the things that do: seeing them side by side is the point.
  */
 function SavingsPanel({ accounts }) {
+  const { t } = useT();
   const { rows: vaults, sort, toggleSort } = useSortableRows(
     accounts?.vaults || [],
     VAULT_COLUMNS,
@@ -631,8 +675,7 @@ function SavingsPanel({ accounts }) {
   return (
     <>
       <h3 className="section-title">
-        <Icon name="vault" size={17} /> Poupança
-        <span className="section-title-aside">{eur(vaultTotal)}</span>
+        <Icon name="vault" size={17} />{t('investments.savings')}<span className="section-title-aside">{eur(vaultTotal)}</span>
       </h3>
       <div className="card" style={{ padding: 0, overflow: 'auto', marginBottom: 16 }}>
         <table>
@@ -648,7 +691,7 @@ function SavingsPanel({ accounts }) {
               <tr key={v.vault} className={v.short ? 'row-warn' : undefined}>
                 <td>
                   {v.vault}
-                  {v.unnamed && <span className="tag">sem nome</span>}
+                  {v.unnamed && <span className="tag">{t('investments.unnamed')}</span>}
                 </td>
                 <td className="num amount-positive">{eur(v.deposited)}</td>
                 <td className="num amount-negative">{eur(v.withdrawn)}</td>
@@ -667,7 +710,7 @@ function SavingsPanel({ accounts }) {
           {formatDate(reconciliation.statementDate)}; os movimentos explicam{' '}
           {eur(reconciliation.computed)}. A diferença de {eur(reconciliation.unaccounted)} é o que a
           conta já tinha antes do primeiro extracto ingerido. Repartição por cofre em{' '}
-          <strong>Contas</strong>.
+          <strong>{t('nav.accounts')}</strong>.
         </p>
       )}
     </>

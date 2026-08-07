@@ -289,8 +289,8 @@ export async function ingestActivobank({
 
   notify(
     result.errors.length > 0 ? 'warning' : 'success',
-    'ActivoBank sync',
-    details.join(', '),
+    'notify.sync.activobank',
+    { imported: result.new, files: result.documents, detail: details.join(', ') },
     {
       origin,
       batchId,
@@ -307,8 +307,11 @@ export async function ingestActivobank({
   if (result.unparsedLines.length > 0) {
     notify(
       'warning',
-      'ActivoBank: some lines could not be parsed',
-      result.unparsedLines.map((u) => `${u.document}: ${u.lines.length} line(s)`).join('; '),
+      'notify.activobank.unparsed',
+      {
+        count: result.unparsedLines.length,
+        detail: result.unparsedLines.map((u) => `${u.document}: ${u.lines.length}`).join('; '),
+      },
       { batchId, unparsedLines: result.unparsedLines }
     );
   }

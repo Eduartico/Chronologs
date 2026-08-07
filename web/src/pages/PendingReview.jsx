@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useT } from '../i18n/index.js';
 import { formatDate } from '../lib/format.js';
 import { usePersistentState } from '../lib/usePersistentState.js';
-import { api } from '../lib/api.js';
+import { api, errText } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 import CategoryPicker from '../components/CategoryPicker.jsx';
 import { useLlmStatus } from '../lib/useLlmStatus.js';
@@ -106,6 +107,7 @@ function SuggestionPill({ suggestion, onAccept, primary }) {
 }
 
 export default function PendingReview({ onCountChange }) {
+  const { t, tx } = useT();
   const [mode, setMode] = usePersistentState('pendingreview.mode', 'grouped');
   const [sort, setSort] = usePersistentState('pendingreview.sort', 'date_desc');
   const [groups, setGroups] = useState([]);
@@ -149,7 +151,7 @@ export default function PendingReview({ onCountChange }) {
       setSelected(new Set());
       onCountChange?.(data.totalPending);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -241,7 +243,7 @@ export default function PendingReview({ onCountChange }) {
       showToast(`${r.applied} transacções categorizadas como "${category}"`);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -254,7 +256,7 @@ export default function PendingReview({ onCountChange }) {
       showToast(`Categorizada como "${category}"`);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -268,7 +270,7 @@ export default function PendingReview({ onCountChange }) {
       showToast(`${r.applied} transacções categorizadas como "${category}"`);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -283,7 +285,7 @@ export default function PendingReview({ onCountChange }) {
       setShowTagMenu(false);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -297,7 +299,7 @@ export default function PendingReview({ onCountChange }) {
       setNewTagName('');
       await tagSelection(tag.id);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -339,7 +341,7 @@ export default function PendingReview({ onCountChange }) {
         );
       }
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -369,7 +371,7 @@ export default function PendingReview({ onCountChange }) {
       showToast(`${result.categorized} categorizadas pelas tuas regras.`);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setApplyingRules(false);
     }
@@ -379,7 +381,7 @@ export default function PendingReview({ onCountChange }) {
     <div>
       <div className="page-header">
         <div>
-          <h2>Por rever</h2>
+          <h2>{t('nav.pendingReview')}</h2>
           {!loading && total > 0 && (
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
               {total} transacções
@@ -403,8 +405,7 @@ export default function PendingReview({ onCountChange }) {
           </button>
           <button className="btn-ghost" onClick={load}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="refresh" size={15} /> Actualizar
-            </span>
+              <Icon name="refresh" size={15} />{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -416,10 +417,10 @@ export default function PendingReview({ onCountChange }) {
       {ruleResolvedCount > 0 && (
         <div className="card" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
           <p style={{ flex: 1, fontSize: 13 }}>
-            <strong>{ruleResolvedCount}</strong> destas já têm resposta nas tuas regras.
+            {tx('pending.ruleResolved', { count: <strong>{ruleResolvedCount}</strong> })}
           </p>
           <button className="btn-primary btn-sm" onClick={applyRuleMatches} disabled={applyingRules}>
-            {applyingRules ? 'A aplicar…' : 'Aplicar'}
+            {applyingRules ? t('pending.applying') : t('pending.apply')}
           </button>
         </div>
       )}
@@ -435,13 +436,11 @@ export default function PendingReview({ onCountChange }) {
               className="select-box"
               checked={allSelected}
               onChange={toggleAll}
-            />
-            Seleccionar tudo o que está visível
-          </label>
+            />{t('pending.selectVisible')}</label>
           <SortStrip sort={sort} onChange={setSort} />
           <select value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="grouped">Agrupado por comerciante</option>
-            <option value="flat">Uma a uma</option>
+            <option value="grouped">{t('pending.groupedByMerchant')}</option>
+            <option value="flat">{t('pending.oneByOne')}</option>
           </select>
         </div>
       )}
@@ -455,7 +454,7 @@ export default function PendingReview({ onCountChange }) {
 
           <CategoryPicker
             compact
-            label="Categorizar como…"
+            label={t('pending.categoriseAs')}
             categories={categories}
             disabled={busy === 'selection'}
             onPick={categorizeSelection}
@@ -468,8 +467,7 @@ export default function PendingReview({ onCountChange }) {
               onClick={() => setShowTagMenu((s) => !s)}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="tag" size={14} /> Adicionar tag…
-              </span>
+                <Icon name="tag" size={14} />{t('pending.addTag')}</span>
             </button>
             {showTagMenu && (
               <div
@@ -489,9 +487,7 @@ export default function PendingReview({ onCountChange }) {
                 }}
               >
                 {tags.length === 0 && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                    Ainda não há tags.
-                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{t('pending.noTags')}</p>
                 )}
                 {tags.map((t) => (
                   <button
@@ -514,15 +510,13 @@ export default function PendingReview({ onCountChange }) {
                 ))}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <input
-                    placeholder="Nova tag…"
+                    placeholder={t('pending.newTag')}
                     value={newTagName}
                     onChange={(e) => setNewTagName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && createAndTag()}
                     style={{ flex: 1, minWidth: 0 }}
                   />
-                  <button className="btn-primary btn-sm" onClick={createAndTag} disabled={!newTagName.trim()}>
-                    Criar
-                  </button>
+                  <button className="btn-primary btn-sm" onClick={createAndTag} disabled={!newTagName.trim()}>{t('pending.create')}</button>
                 </div>
               </div>
             )}
@@ -532,20 +526,17 @@ export default function PendingReview({ onCountChange }) {
             className="btn-ghost btn-sm"
             style={{ marginLeft: 'auto' }}
             onClick={() => setSelected(new Set())}
-          >
-            Limpar selecção
-          </button>
+          >{t('pending.clearSelection')}</button>
         </div>
       )}
 
       {loading ? (
-        <div className="empty-state"><p>A carregar…</p></div>
+        <div className="empty-state"><p>{t('common.loading')}</p></div>
       ) : total === 0 ? (
         <div className="empty-state">
           <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="check" size={18} /> Está tudo categorizado
-          </h3>
-          <p>Não há transacções à espera de revisão.</p>
+            <Icon name="check" size={18} />{t('pending.emptyTitle')}</h3>
+          <p>{t('pending.emptyBody')}</p>
         </div>
       ) : mode === 'grouped' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -627,14 +618,12 @@ export default function PendingReview({ onCountChange }) {
                       )}
                     </>
                   ) : (
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      Sem sugestão — escolhe a categoria:
-                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('pending.noSuggestionChoose')}</span>
                   )}
                   <div style={{ marginLeft: 'auto' }}>
                     <CategoryPicker
                       compact
-                      label="Outra…"
+                      label={t('pending.other')}
                       categories={categories}
                       onPick={(c) => acceptGroup(g, c)}
                     />
@@ -643,9 +632,7 @@ export default function PendingReview({ onCountChange }) {
 
                 {g.count > 1 && (
                   <details style={{ marginTop: 10 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>
-                      Ver exemplo
-                    </summary>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>{t('pending.seeExample')}</summary>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                       {g.sample.description} · {formatDate(g.sample.date)}
                     </div>
@@ -714,12 +701,12 @@ export default function PendingReview({ onCountChange }) {
                       ))}
                     </>
                   ) : (
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sem sugestão</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('pending.noSuggestion')}</span>
                   )}
                   <div style={{ marginLeft: 'auto' }}>
                     <CategoryPicker
                       compact
-                      label="Outra…"
+                      label={t('pending.other')}
                       categories={categories}
                       onPick={(c) => acceptOne(tx, c)}
                     />

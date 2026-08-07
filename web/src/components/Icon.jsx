@@ -66,6 +66,11 @@ const PATHS = {
   chartLine: 'M3 20h18M4 16l5-6 4 3 6-8',
   chartArea: 'M3 20h18M4 17l5-6 4 3 6-8v11z',
   chartPie: 'M12 3a9 9 0 109 9h-9z',
+  // The other half of the chart/table switch: every chart can be read as rows.
+  table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
+  // The two Settings tabs added with the theme engine.
+  palette: 'M12 3a9 9 0 000 18 2 2 0 001.6-3.2 2 2 0 011.6-3.2H18a3 3 0 003-3 9 9 0 00-9-8.6zM7.5 12.5h.01M9.5 8.5h.01M14 7.5h.01',
+  eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7zM12 9a3 3 0 100 6 3 3 0 000-6z',
   link: 'M10 13a4 4 0 005.7 0l3-3a4 4 0 10-5.7-5.7L11.5 6M14 11a4 4 0 00-5.7 0l-3 3a4 4 0 105.7 5.7L12.5 18',
   brain: 'M9 4a3 3 0 00-3 3 3 3 0 00-2 5 3 3 0 002 5 3 3 0 003 3V4zM15 4a3 3 0 013 3 3 3 0 012 5 3 3 0 01-2 5 3 3 0 01-3 3V4z',
   calendar: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4',

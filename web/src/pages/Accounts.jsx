@@ -1,4 +1,6 @@
 import { Fragment, useState, useEffect, useCallback } from 'react';
+import { useT } from '../i18n/index.js';
+import { nf } from '../lib/locale.js';
 import { formatDate } from '../lib/format.js';
 import { api } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
@@ -19,7 +21,7 @@ import { useSortableRows } from '../lib/useSortableRows.js';
  */
 
 const euro = (n) =>
-  `€${Number(n || 0).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `€${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))}`;
 
 const KIND_LABEL = { current: 'Conta corrente', savings: 'Poupança', secondary: 'Secundária' };
 
@@ -32,6 +34,7 @@ const VAULT_COLUMNS = [
 ];
 
 export default function Accounts() {
+  const { t } = useT();
   const [data, setData] = useState(null);
   const [movements, setMovements] = useState([]);
   const [openVault, setOpenVault] = useState(null);
@@ -90,7 +93,7 @@ export default function Accounts() {
     dir: 'desc',
   });
 
-  if (loading) return <div className="empty-state">A carregar…</div>;
+  if (loading) return <div className="empty-state">{t('common.loading')}</div>;
   if (error) return <div className="empty-state">Erro: {error}</div>;
   if (!data) return null;
 
@@ -101,11 +104,10 @@ export default function Accounts() {
     <>
       <div className="page-header">
         <h2>
-          <Icon name="accounts" size={22} /> Contas &amp; Cofres
+          <Icon name="accounts" size={22} /> {t('accounts.titleFull')}
         </h2>
         <button className="btn-ghost btn-sm" onClick={load}>
-          <Icon name="refresh" size={15} /> Actualizar
-        </button>
+          <Icon name="refresh" size={15} />{t('common.refresh')}</button>
       </div>
 
       <div className="grid-2">
@@ -128,15 +130,15 @@ export default function Accounts() {
             <dl className="account-meta">
               <dt>Nº</dt>
               <dd>{account.id}</dd>
-              <dt>Nomes</dt>
+              <dt>{t('accounts.names')}</dt>
               <dd>{account.labels.join(' · ')}</dd>
-              <dt>Movimentos</dt>
+              <dt>{t('accounts.movements')}</dt>
               <dd>
                 {account.transactions} · {formatDate(account.firstDate)} → {formatDate(account.lastDate)}
               </dd>
               {account.holder && (
                 <>
-                  <dt>Titular</dt>
+                  <dt>{t('accounts.holder')}</dt>
                   <dd>{account.holder}</dd>
                 </>
               )}
@@ -147,8 +149,7 @@ export default function Accounts() {
 
       <div className="card">
         <div className="section-title">
-          <Icon name="vault" size={17} /> Cofres do PoupeUp
-          <span className="section-title-aside">{euro(vaultTotal)} atribuídos</span>
+          <Icon name="vault" size={17} />{t('accounts.vaults')}<span className="section-title-aside">{euro(vaultTotal)} atribuídos</span>
         </div>
 
         {/*
@@ -227,7 +228,7 @@ export default function Accounts() {
                         defaultValue=""
                         onChange={(e) => e.target.value && applyAlias(vault.vault, e.target.value)}
                       >
-                        <option value="">Pertence a…</option>
+                        <option value="">{t('accounts.belongsTo')}</option>
                         {namedVaults.map((name) => (
                           <option key={name} value={name}>
                             {name}
@@ -248,9 +249,7 @@ export default function Accounts() {
                               <td>
                                 {m.direction === 'deposit' ? 'Guardado' : 'Levantado'}
                                 {m.singleEntry && (
-                                  <span className="tag" title="Só uma das duas contas foi ingerida">
-                                    entrada única
-                                  </span>
+                                  <span className="tag" title={t('accounts.singleEntryHelp')}>{t('accounts.singleEntry')}</span>
                                 )}
                               </td>
                               <td
@@ -265,9 +264,7 @@ export default function Accounts() {
                           ))}
                           {movements.length === 0 && (
                             <tr>
-                              <td colSpan={4} className="muted">
-                                Sem movimentos.
-                              </td>
+                              <td colSpan={4} className="muted">{t('accounts.noMovements')}</td>
                             </tr>
                           )}
                         </tbody>

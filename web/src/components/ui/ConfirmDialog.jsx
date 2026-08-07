@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useT } from '../../i18n/index.js';
 
 /**
  * The confirmation that is worth interrupting for.
@@ -15,13 +16,14 @@ export default function ConfirmDialog({
   open,
   title,
   impact,
-  confirmLabel = 'Apagar',
-  cancelLabel = 'Cancelar',
+  confirmLabel,
+  cancelLabel,
   tone = 'danger',
   busy,
   onConfirm,
   onCancel,
 }) {
+  const { t } = useT();
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -44,7 +46,7 @@ export default function ConfirmDialog({
         )}
         <div className="modal-actions">
           <button className="btn-ghost" onClick={onCancel} disabled={busy}>
-            {cancelLabel}
+            {cancelLabel ?? t('common.cancel')}
           </button>
           <button
             className={tone === 'danger' ? 'btn-red' : 'btn-primary'}
@@ -52,7 +54,7 @@ export default function ConfirmDialog({
             disabled={busy}
             autoFocus
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common.delete')}
           </button>
         </div>
       </div>

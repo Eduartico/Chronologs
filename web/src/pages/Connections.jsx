@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../lib/api.js';
+import { useT } from '../i18n/index.js';
+import { api, errText } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 import Icon from '../components/Icon.jsx';
 
@@ -20,6 +21,7 @@ function describeIngest(result) {
 }
 
 function StatusDot({ ok, label }) {
+  const { t, tx } = useT();
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
       <span
@@ -36,19 +38,23 @@ function StatusDot({ ok, label }) {
 }
 
 function GcpInstructions() {
+  const { t, tx } = useT();
   const [open, setOpen] = useState(false);
   return (
     <div style={{ marginTop: 8 }}>
       <button className="btn-ghost btn-sm" onClick={() => setOpen(!open)}>
-        {open ? '▾' : '▸'} How to get Google credentials
+        {open ? '▾' : '▸'} {t('connections.howToCredentials')}
       </button>
       {open && (
         <ol style={{ margin: '8px 0 0 20px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-          <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>console.cloud.google.com</a> and create a project (any name).</li>
-          <li>APIs &amp; Services → Library → enable <strong>Gmail API</strong>.</li>
-          <li>APIs &amp; Services → OAuth consent screen → External → add your own email as a test user.</li>
-          <li>APIs &amp; Services → Credentials → Create credentials → <strong>OAuth client ID</strong> → Application type: <strong>Desktop app</strong>.</li>
-          <li>Copy the Client ID and Client Secret into the fields above.</li>
+          <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>console.cloud.google.com</a>{t('connections.step1')}</li>
+          {/* The console's own menu path stays in English — it is what is written
+              on the screen the reader is looking at, and translating it would send
+              them hunting for a menu item that does not exist. */}
+          <li>{tx('connections.step2', { api: <strong>Gmail API</strong> })}</li>
+          <li>{t('connections.stepConsent')}</li>
+          <li>{tx('connections.step4', { client: <strong>OAuth client ID</strong>, app: <strong>Desktop app</strong> })}</li>
+          <li>{t('connections.step3')}</li>
         </ol>
       )}
     </div>
@@ -56,6 +62,7 @@ function GcpInstructions() {
 }
 
 function ActivobankCard() {
+  const { t, tx } = useT();
   const [status, setStatus] = useState({ hasCredentials: false, connected: false, lastSyncAt: null });
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -77,7 +84,7 @@ function ActivobankCard() {
       setClientSecret('');
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     }
   };
 
@@ -87,7 +94,7 @@ function ActivobankCard() {
       window.open(url, '_blank');
       setMessage('Complete the Google login in the new tab, then click "Check status".');
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     }
   };
 
@@ -99,7 +106,7 @@ function ActivobankCard() {
       setMessage(`Scan complete: ${describeIngest(result)}`);
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -115,7 +122,7 @@ function ActivobankCard() {
       setMessage(`Re-parsed ${result.filesFound} stored document(s): ${describeIngest(result)}`);
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -129,7 +136,7 @@ function ActivobankCard() {
       const result = await api.uploadActivobankDocuments(files);
       setMessage(`Upload processed: ${describeIngest(result)}`);
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -139,11 +146,10 @@ function ActivobankCard() {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon name="accounts" size={16} /> ActivoBank (via Gmail)
-        </h3>
+          <Icon name="accounts" size={16} />{t('connections.activobank')}</h3>
         <div style={{ display: 'flex', gap: 14 }}>
-          <StatusDot ok={status.hasCredentials} label="Credentials" />
-          <StatusDot ok={status.connected} label="Google connected" />
+          <StatusDot ok={status.hasCredentials} label={t('connections.credentials')} />
+          <StatusDot ok={status.connected} label={t('connections.googleConnected')} />
         </div>
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '6px 0 12px' }}>
@@ -156,21 +162,19 @@ function ActivobankCard() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
-              placeholder="Google Client ID"
+              placeholder={t('connections.clientId')}
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               style={{ flex: 2, minWidth: 220 }}
             />
             <input
-              placeholder="Client Secret"
+              placeholder={t('connections.clientSecret')}
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               style={{ flex: 1, minWidth: 160 }}
             />
-            <button className="btn-primary" onClick={saveCredentials} disabled={!clientId || !clientSecret}>
-              Save credentials
-            </button>
+            <button className="btn-primary" onClick={saveCredentials} disabled={!clientId || !clientSecret}>{t('connections.saveCredentials')}</button>
           </div>
           <GcpInstructions />
         </div>
@@ -178,9 +182,9 @@ function ActivobankCard() {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {status.hasCredentials && !status.connected && (
-          <button className="btn-primary" onClick={connectGoogle}>Connect Google account</button>
+          <button className="btn-primary" onClick={connectGoogle}>{t('connections.connectGoogle')}</button>
         )}
-        <button className="btn-ghost" onClick={loadStatus}>Check status</button>
+        <button className="btn-ghost" onClick={loadStatus}>{t('connections.checkStatus')}</button>
         {status.connected && (
           <button className="btn-primary" onClick={scanNow} disabled={busy}>
             {busy ? 'Scanning…' : 'Scan email now'}
@@ -190,7 +194,7 @@ function ActivobankCard() {
           className="btn-ghost"
           onClick={reprocessStored}
           disabled={busy}
-          title="Re-read every document already downloaded, without fetching from Gmail"
+          title={t('connections.reprocessHelp')}
         >
           {busy ? 'Working…' : 'Re-parse stored documents'}
         </button>
@@ -239,6 +243,7 @@ function ActivobankCard() {
 }
 
 function PricempireCard() {
+  const { t, tx } = useT();
   const [status, setStatus] = useState({ sessionOk: false, selectedPortfolios: [], lastSync: null });
   const [portfolios, setPortfolios] = useState(null);
   const [portfoliosFetchedAt, setPortfoliosFetchedAt] = useState(null);
@@ -267,7 +272,7 @@ function PricempireCard() {
       setMessage('Session established.');
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -284,7 +289,7 @@ function PricempireCard() {
       setPortfoliosFetchedAt(fetchedAt);
       if (refresh) setMessage(null);
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -297,7 +302,7 @@ function PricempireCard() {
       setMessage(`Importing ${selected.length} portfolio(s) on each refresh.`);
       loadStatus();
     } catch (err) {
-      setMessage('Error: ' + err.message);
+      setMessage(errText(err));
     }
   };
 
@@ -312,7 +317,7 @@ function PricempireCard() {
     try {
       const result = await api.ingestPricempire();
       const parts = [
-        `${result.new ?? 0} transacções novas de ${result.parsed ?? 0} linhas`,
+        t('connections.importedSummary', { imported: result.new ?? 0, rows: result.parsed ?? 0 }),
         result.duplicates ? `${result.duplicates} já registadas` : null,
         result.portfolios ? `${result.portfolios} portefólio(s)` : null,
         result.method === 'scrape-fallback' ? 'via scraper (export indisponível)' : null,
@@ -320,7 +325,7 @@ function PricempireCard() {
       setMessage(`Ressincronização concluída: ${parts.join(', ')}.`);
       loadStatus();
     } catch (err) {
-      setMessage('Erro: ' + err.message);
+      setMessage(errText(err));
     } finally {
       setBusy(false);
     }
@@ -334,8 +339,7 @@ function PricempireCard() {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon name="gaming" size={16} /> Pricempire (CS2 skins)
-        </h3>
+          <Icon name="gaming" size={16} />{t('connections.pricempire')}</h3>
         <StatusDot ok={status.sessionOk} label={status.sessionOk ? 'Session active' : 'Not connected'} />
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '6px 0 12px' }}>
@@ -358,19 +362,19 @@ function PricempireCard() {
               className="btn-primary"
               onClick={resyncNow}
               disabled={busy || !status.selectedPortfolios?.length}
-              title="Abre o portefólio, descarrega o CSV de export e importa-o"
+              title={t('connections.exportHelp')}
             >
               {busy ? 'A trabalhar…' : 'Ressincronizar agora'}
             </button>
           </>
         )}
-        <button className="btn-ghost" onClick={loadStatus}>Check status</button>
+        <button className="btn-ghost" onClick={loadStatus}>{t('connections.checkStatus')}</button>
       </div>
 
       {portfolios && (
         <div className="modal-overlay" onClick={() => setPortfolios(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Select portfolios to import</h3>
+            <h3>{t('connections.selectPortfolios')}</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {portfoliosFetchedAt
@@ -381,16 +385,14 @@ function PricempireCard() {
                 className="btn-ghost btn-sm"
                 onClick={() => loadPortfolios(true)}
                 disabled={busy}
-                title="Opens the browser and re-reads the list from Pricempire (~10s)"
+                title={t('connections.refreshListHelp')}
                 style={{ marginLeft: 'auto' }}
               >
                 {busy ? '⏳ …' : '↻ Actualizar lista'}
               </button>
             </div>
             {portfolios.length === 0 && (
-              <p style={{ color: 'var(--text-muted)' }}>
-                Nenhum portefólio em cache — carrega em "Actualizar lista".
-              </p>
+              <p style={{ color: 'var(--text-muted)' }}>{t('connections.noPortfolios')}</p>
             )}
             {portfolios.map((p) => (
               <label key={p.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0', cursor: 'pointer' }}>
@@ -400,8 +402,8 @@ function PricempireCard() {
               </label>
             ))}
             <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-              <button className="btn-ghost" onClick={() => setPortfolios(null)}>Cancel</button>
-              <button className="btn-primary" onClick={saveSelection}>Save selection</button>
+              <button className="btn-ghost" onClick={() => setPortfolios(null)}>{t('common.cancel')}</button>
+              <button className="btn-primary" onClick={saveSelection}>{t('connections.saveSelection')}</button>
             </div>
           </div>
         </div>
@@ -413,10 +415,11 @@ function PricempireCard() {
 }
 
 export default function Connections() {
+  const { t } = useT();
   return (
     <div>
       <div className="page-header">
-        <h2>Connections</h2>
+        <h2>{t('nav.connections')}</h2>
       </div>
       <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
         <ActivobankCard />

@@ -83,13 +83,7 @@ export async function getContext() {
   if (!context) {
     // Last resort: the bundled browser. Login will very likely stall on the
     // Cloudflare challenge, so say so rather than letting it look like a bug.
-    notify(
-      'warning',
-      'Pricempire: no installed browser found',
-      'Chrome or Edge could not be launched, falling back to the bundled browser — ' +
-        'the Cloudflare check will probably not pass. Install Google Chrome and try again.',
-      { module: 'pricempire', failures }
-    );
+    notify('warning', 'notify.pricempire.noBrowser', {}, { module: 'pricempire', failures });
     context = await launch(null);
     activeChannel = 'bundled';
   }
@@ -152,12 +146,7 @@ export async function ensureSession({ interactive = false, timeoutMs = 5 * 60 * 
 
   if (!interactive) {
     savePricempireState({ sessionOk: false });
-    notify(
-      'error',
-      'Pricempire session expired',
-      'Open Connections and log in to Pricempire again.',
-      { module: 'pricempire' }
-    );
+    notify('error', 'notify.pricempire.sessionExpired', {}, { module: 'pricempire' });
     throw new Error('Pricempire session expired');
   }
 
@@ -165,8 +154,8 @@ export async function ensureSession({ interactive = false, timeoutMs = 5 * 60 * 
   if (await isChallengeVisible(page)) {
     notify(
       'info',
-      'Pricempire: Cloudflare check',
-      `Solve the "verify you are human" check in the ${activeChannel} window — the login form is behind it.`,
+      'notify.pricempire.challenge',
+      { channel: activeChannel },
       { module: 'pricempire', channel: activeChannel }
     );
   }

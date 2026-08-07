@@ -1,13 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { df, weekdayNames, firstDayOfWeek } from '../lib/locale.js';
 import { formatDate, formatDuration, formatRange } from '../lib/format.js';
-import { api } from '../lib/api.js';
+import { api, errText } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 import IconButton from '../components/ui/IconButton.jsx';
 import RowActions from '../components/ui/RowActions.jsx';
 import EditableField from '../components/ui/EditableField.jsx';
 import ConfirmDialog from '../components/ui/ConfirmDialog.jsx';
 import { DateRangeField } from '../components/ui/DateField.jsx';
+import SortHeader from '../components/ui/SortHeader.jsx';
+import Value from '../components/ui/Value.jsx';
 import { useRowEditor } from '../lib/useRowEditor.js';
+import { useSortableRows } from '../lib/useSortableRows.js';
+import { useT } from '../i18n/index.js';
 
 /**
  * Travel calendar.
@@ -18,17 +23,12 @@ import { useRowEditor } from '../lib/useRowEditor.js';
  * away. Detection proposes; the user confirms.
  */
 
-const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
-
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
 function monthLabel(year, month) {
-  return new Date(Date.UTC(year, month, 1)).toLocaleDateString('pt-PT', {
-    month: 'long',
-    year: 'numeric',
-  });
+  return df({ month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month, 1)));
 }
 
 function isoOf(year, month, day) {
@@ -38,7 +38,9 @@ function isoOf(year, month, day) {
 /** Monday-first grid covering the whole month, padded with adjacent days. */
 function monthGrid(year, month) {
   const first = new Date(Date.UTC(year, month, 1));
-  const offset = (first.getUTCDay() + 6) % 7;
+  // Same correction as lib/dateInput.js: the lead-in follows the locale's first
+  // day rather than assuming Monday.
+  const offset = (first.getUTCDay() - firstDayOfWeek() + 7) % 7;
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const cells = [];
 
@@ -79,6 +81,7 @@ function badDates(draft) {
  * start of 21/01/2025, the end only needs `25`.
  */
 function TravelHeadline({ title, editing, draft, patch, meta }) {
+  const { t } = useT();
   return (
     <div style={{ flex: 1, minWidth: 240 }}>
       <div className="travel-headline">
@@ -86,7 +89,7 @@ function TravelHeadline({ title, editing, draft, patch, meta }) {
           editing={editing}
           value={editing ? draft.name : title}
           onChange={(name) => patch({ name })}
-          placeholder="Valência, Tui, fim-de-semana…"
+          placeholder={t('travel.namePlaceholder')}
           width={230}
           autoFocus
         />
@@ -97,7 +100,7 @@ function TravelHeadline({ title, editing, draft, patch, meta }) {
             onChange={(country) => patch({ country: country.toUpperCase().slice(0, 2) })}
             placeholder="PT"
             width={58}
-            title="Código do país"
+            title={t('travel.countryCode')}
           />
         )}
       </div>
@@ -123,6 +126,90 @@ function TravelHeadline({ title, editing, draft, patch, meta }) {
   );
 }
 
+/** A trip's country, in the reader's language.
+    Trip *names* are user data and are never rewritten — but `country` is stored
+    as an ISO code beside the name, so the column can be translated with no
+    migration at all. Anything the catalogue does not know falls back to whatever
+    name the server saved. */
+function countryNameOf(trip, t) {
+  const key = `country.${trip.country}`;
+  const translated = t(key);
+  return translated === key ? trip.countryName || trip.country : translated;
+}
+
+const emptyTravelDraft = () => ({ name: '', country: '', startDate: '', endDate: '', tagId: '' });
+
+/**
+ * The blank row at the foot of the table.
+ *
+ * Adding a trip used to open a separate card above the list, with its own
+ * bordered inputs and its own Save button — a small form that looked nothing like
+ * the thing it was making. This is a row: same cells, same columns, same widths.
+ * What you fill in is what appears.
+ */
+function TravelAddRow({ draft, tags, onChange, onAdd, onClear, inputRef }) {
+  const { t } = useT();
+  const ready = Boolean(String(draft.name || '').trim()) && !badDates(draft);
+
+  const keys = (e) => {
+    if (e.key === 'Enter' && ready) onAdd();
+    if (e.key === 'Escape') onClear();
+  };
+
+  return (
+    <tr className="add-row">
+      <td>
+        <span className="autosize" data-value={draft.name || t('travel.addName')}>
+          <input
+            ref={inputRef}
+            value={draft.name}
+            placeholder={t('travel.addName')}
+            onChange={(e) => onChange({ name: e.target.value })}
+            onKeyDown={keys}
+          />
+        </span>
+      </td>
+      <td>
+        <span className="autosize" data-value={draft.country || 'PT'}>
+          <input
+            value={draft.country}
+            placeholder="PT"
+            maxLength={2}
+            onChange={(e) => onChange({ country: e.target.value.toUpperCase() })}
+            onKeyDown={keys}
+          />
+        </span>
+      </td>
+      <td>
+        <DateRangeField
+          from={draft.startDate}
+          to={draft.endDate}
+          onChange={({ from, to }) => onChange({ startDate: from, endDate: to })}
+        />
+      </td>
+      <td className="num">—</td>
+      <td className="num">—</td>
+      <td className="num">{t('format.days', { count: 2 })}</td>
+      <td>
+        <select value={draft.tagId ?? ''} onChange={(e) => onChange({ tagId: e.target.value })}>
+          <option value="">{t('travel.noTag')}</option>
+          {tags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <div className="row-actions">
+          <IconButton icon="plus" tone="good" label={t('common.add')} disabled={!ready} onClick={onAdd} />
+          <IconButton icon="close" label={t('common.cancel')} onClick={onClear} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function Travel() {
   const [travels, setTravels] = useState([]);
   const [proposals, setProposals] = useState([]);
@@ -133,17 +220,42 @@ export default function Travel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
   const [toast, setToast] = useState(null);
-  const [showForm, setShowForm] = useState(false);
   const [showRejected, setShowRejected] = useState(false);
   // A trip takes its tagged transactions with it, so deleting one is worth
   // stopping for — the armed bin is for things that are cheap to redo.
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [draft, setDraft] = useState({ name: '', country: '', startDate: '', endDate: '' });
+  const [draft, setDraft] = useState(emptyTravelDraft);
+  const addNameRef = useRef(null);
+  const { t } = useT();
 
   // Rejected trips are kept, not deleted: they are what stops detection from
   // proposing the same non-trip again, and they have to be undoable.
-  const active = travels.filter((t) => t.status !== 'rejected');
-  const rejected = travels.filter((t) => t.status === 'rejected');
+  const active = travels.filter((tr) => tr.status !== 'rejected');
+  const rejected = travels.filter((tr) => tr.status === 'rejected');
+
+  const travelColumns = useMemo(
+    () => [
+      // `table-fixed` divides the declared widths and gives the remainder to the
+      // one column without one — so the trip name, which is the longest text and
+      // the thing being read, is the column left unmeasured.
+      { key: 'name', label: t('travel.column.name'), get: (r) => r.name },
+      { key: 'country', label: t('travel.column.country'), get: (r) => countryNameOf(r, t), width: 120 },
+      { key: 'dates', label: t('travel.column.dates'), get: (r) => r.startDate, width: 200 },
+      { key: 'count', label: t('travel.column.transactions'), align: 'right', get: (r) => r.transactionCount, width: 100 },
+      { key: 'total', label: t('travel.column.total'), align: 'right', get: (r) => r.total, width: 110 },
+      { key: 'margin', label: t('travel.column.margin'), align: 'right', get: (r) => r.forgivingDays ?? 2, width: 90 },
+      { key: 'tag', label: t('travel.column.tag'), get: (r) => r.tagId, width: 130 },
+      // Four buttons, not two: this row carries "view movements" and "tag the
+      // whole window" alongside edit and delete.
+      { key: 'actions', label: '', sortable: false, width: 176 },
+    ],
+    [t],
+  );
+
+  const { rows: sortedTravels, sort, toggleSort } = useSortableRows(active, travelColumns, 'travel.sort', {
+    key: 'dates',
+    dir: 'desc',
+  });
 
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
@@ -160,7 +272,7 @@ export default function Travel() {
       setTravels(list);
       setTags(tagList);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -216,7 +328,7 @@ export default function Travel() {
           : `${found.length} viagem(ns) proposta(s) — confirma as que reconheces.`
       );
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -243,7 +355,7 @@ export default function Travel() {
       showToast(`Viagem "${travel.name}" adicionada.`);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -272,7 +384,7 @@ export default function Travel() {
       showToast(`"${p.countryName || p.country}" recusada — não volta a ser sugerida.`);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -312,7 +424,7 @@ export default function Travel() {
       );
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -335,7 +447,7 @@ export default function Travel() {
       });
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -348,11 +460,10 @@ export default function Travel() {
     }
     try {
       await api.createTravel({ ...draft, status: 'confirmed' });
-      setDraft({ name: '', country: '', startDate: '', endDate: '' });
-      setShowForm(false);
+      setDraft(emptyTravelDraft());
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -363,7 +474,7 @@ export default function Travel() {
       if (openTravel?.travel?.id === id) setOpenTravel(null);
       await load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -375,7 +486,7 @@ export default function Travel() {
       const list = await api.getTravelTransactions(travel.id);
       setOpenTravel({ travel, transactions: list });
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -391,7 +502,7 @@ export default function Travel() {
       await load();
       if (openTravel?.travel?.id === travel.id) await openDetails(travel);
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -402,7 +513,7 @@ export default function Travel() {
     try {
       setAnomalies(await api.getTravelAnomalies());
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setBusy(null);
     }
@@ -446,67 +557,36 @@ export default function Travel() {
     <div>
       <div className="page-header">
         <div>
-          <h2>Viagens</h2>
+          <h2>{t('nav.travel')}</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
             {travels.length} viagem(ns) registada(s) · abre uma viagem e marca à mão o que foi
             gasto nela — a janela de datas só propõe candidatos, não decide sozinha
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-ghost" onClick={loadAnomalies} disabled={busy === 'anomalies'}>
-            Verificar etiquetagem
-          </button>
+          <button className="btn-ghost" onClick={loadAnomalies} disabled={busy === 'anomalies'}>{t('travel.checkTagging')}</button>
           <button className="btn-ghost" onClick={detect} disabled={busy === 'detect'}>
             {busy === 'detect' ? 'A analisar…' : 'Detectar viagens'}
           </button>
-          <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
-            + Nova viagem
+          {/* Kept, as asked — but it no longer opens a separate form. It puts
+              the caret in the table's own add row, which is where a new trip is
+              actually written. */}
+          <button
+            className="btn-primary"
+            onClick={() => {
+              addNameRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+              addNameRef.current?.focus();
+            }}
+          >
+            + {t('travel.new')}
           </button>
         </div>
       </div>
 
-      {showForm && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              placeholder="Nome (ex.: Dublin com a Carol)"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              style={{ flex: 2, minWidth: 200 }}
-              autoFocus
-            />
-            <input
-              placeholder="País (ex.: IE)"
-              value={draft.country}
-              onChange={(e) => setDraft({ ...draft, country: e.target.value.toUpperCase() })}
-              style={{ width: 110, minWidth: 0 }}
-              maxLength={2}
-            />
-            <DateRangeField
-              from={draft.startDate}
-              to={draft.endDate}
-              onChange={({ from, to }) => setDraft({ ...draft, startDate: from, endDate: to })}
-              labels={{ from: 'Início', to: 'Fim' }}
-            />
-            {!badDates(draft) && (
-              <span className="muted" style={{ fontSize: 12 }}>
-                {formatDuration(draft.startDate, draft.endDate)}
-              </span>
-            )}
-            <RowActions
-              editing
-              onSave={createManual}
-              onCancel={() => setShowForm(false)}
-            />
-          </div>
-        </div>
-      )}
-
       {proposals.length > 0 && (
         <>
           <h3 className="section-title">
-            <Icon name="travel" size={18} /> Viagens detectadas
-          </h3>
+            <Icon name="travel" size={18} />{t('travel.proposals')}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
             {proposals.map((p) => {
               const editing = proposalEditor.isEditing(p.id);
@@ -538,18 +618,18 @@ export default function Travel() {
                           <IconButton
                             icon="check"
                             tone="good"
-                            label="Confirmar viagem"
+                            label={t('travel.confirmTrip')}
                             onClick={() => confirmProposal(p)}
                           />
                           <IconButton
                             icon="pencil"
-                            label="Corrigir antes de confirmar"
+                            label={t('travel.fixBeforeConfirm')}
                             onClick={() => proposalEditor.start(p, draftOf(p))}
                           />
                           <IconButton
                             icon="close"
                             tone="danger"
-                            label="Não foi viagem"
+                            label={t('travel.notATrip')}
                             onClick={() => rejectProposal(p)}
                           />
                         </>
@@ -569,8 +649,8 @@ export default function Travel() {
       {anomalies && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>Etiquetagem</h3>
-            <button className="btn-ghost btn-sm" onClick={() => setAnomalies(null)}>Fechar</button>
+            <h3>{t('travel.tagging')}</h3>
+            <button className="btn-ghost btn-sm" onClick={() => setAnomalies(null)}>{t('common.close')}</button>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
             <strong>{anomalies.missingTotal}</strong> transacções caem dentro de uma viagem mas não
@@ -607,16 +687,12 @@ export default function Travel() {
           <button
             className="btn-ghost btn-sm"
             onClick={() => setCursor({ year: now.getFullYear(), month: now.getMonth() })}
-          >
-            Hoje
-          </button>
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
-            Dias a azul = viagem · tracejado = margem
-          </span>
+          >{t('calendar.today')}</button>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{t('travel.calendarLegend')}</span>
         </div>
 
         <div className="calendar-grid">
-          {WEEKDAYS.map((d) => (
+          {weekdayNames('short').map((d) => (
             <div key={d} className="calendar-head">{d}</div>
           ))}
           {cells.map((cell, i) => {
@@ -645,98 +721,167 @@ export default function Travel() {
       </div>
 
       {loading ? (
-        <div className="empty-state"><p>A carregar…</p></div>
-      ) : active.length === 0 ? (
         <div className="empty-state">
-          <h3>Ainda não há viagens</h3>
-          <p>
-            Carrega em <strong>Detectar viagens</strong> para procurar compras no estrangeiro no
-            histórico, ou adiciona uma à mão.
-          </p>
+          <p>{t('common.loading')}</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {active.map((t) => {
-            const editing = travelEditor.isEditing(t.id);
-            return (
-            <div key={t.id} className="card" style={{ opacity: busy === t.id ? 0.5 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                <TravelHeadline
-                  title={t.name}
-                  editing={editing}
-                  draft={travelEditor.draft}
-                  patch={travelEditor.patch}
-                  meta={
-                    <>
-                      {formatRange(t.startDate, t.endDate)} · {formatDuration(t.startDate, t.endDate)}
-                      {t.countryName && ` · ${t.countryName}`} · {t.transactionCount} transacções na
-                      janela · {formatMoney(t.total)}
-                    </>
-                  }
-                />
-                <RowActions
-                  editing={editing}
-                  busy={busy === t.id || travelEditor.busy}
-                  deleteMode="modal"
-                  onEdit={() => travelEditor.start(t, draftOf(t))}
-                  onSave={travelEditor.commit}
-                  onCancel={travelEditor.cancel}
-                  onAskDelete={() => setConfirmDelete(t)}
-                  extras={
-                    !editing && (
-                      <>
-                        <IconButton
-                          icon="transactions"
-                          label="Ver transacções"
-                          onClick={() => openDetails(t)}
-                        />
-                        <IconButton
-                          icon="tag"
-                          label="Marcar tudo na janela: categoriza como travel tudo o que está por classificar"
-                          onClick={() => applyTravel(t, { category: 'travel', onlyUncategorized: true })}
-                        />
-                      </>
-                    )
-                  }
-                />
-              </div>
-
-              {/*
-                Margin and tag are settings, not readings. They used to be two
-                live controls on every card — a number box and a dropdown per
-                trip, sitting there being nothing most of the time. They belong
-                to the edit state, with everything else that is writable.
-              */}
-              {editing && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Margem (dias):</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={travelEditor.draft?.forgivingDays ?? 2}
-                    onChange={(e) => travelEditor.patch({ forgivingDays: e.target.value })}
-                    style={{ width: 70, minWidth: 0 }}
-                  />
-                  <select
-                    value={travelEditor.draft?.tagId ?? ''}
-                    onChange={(e) => travelEditor.patch({ tagId: e.target.value })}
+        /*
+         * Trips as a table.
+         *
+         * This was the last list in the app still built out of cards, and it read
+         * as a different product from every other page: a trip's dates, its
+         * movement count and its total were three sizes of text inside a box
+         * rather than three columns you could sort. Cards also had nowhere to put
+         * "margin" and "tag" except a second row that unfolded on edit.
+         *
+         * Same primitives as Categories and Transactions — useSortableRows,
+         * useRowEditor, EditableField, RowActions, and a real `.add-row` at the
+         * foot. The "+ Nova viagem" button stays and now simply puts the caret in
+         * that row: two ways in, one place where the work happens.
+         */
+        <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          <table className="table-fixed">
+            <thead>
+              <tr>
+                {travelColumns.map((col) => (
+                  <SortHeader key={col.key} column={col} sort={sort} onToggle={toggleSort} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTravels.map((tr) => {
+                const editing = travelEditor.isEditing(tr.id);
+                const d = travelEditor.draft || {};
+                return (
+                  <tr
+                    key={tr.id}
+                    className={editing ? 'is-editing' : undefined}
+                    style={{ opacity: busy === tr.id ? 0.5 : 1 }}
                   >
-                    <option value="">Sem tag</option>
-                    {tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>{tag.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {!editing && (t.forgivingDays ?? 2) !== 2 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                  margem de {t.forgivingDays} dias
-                </div>
-              )}
-            </div>
-            );
-          })}
+                    <td>
+                      <EditableField
+                        editing={editing}
+                        value={editing ? d.name : tr.name}
+                        onChange={(name) => travelEditor.patch({ name })}
+                        onStartEdit={() => travelEditor.start(tr, draftOf(tr))}
+                        onCommit={travelEditor.commit}
+                        onCancel={travelEditor.cancel}
+                        placeholder={t('travel.addName')}
+                        autoFocus
+                      />
+                    </td>
+                    <td>
+                      {editing ? (
+                        <EditableField
+                          editing
+                          value={d.country}
+                          onChange={(country) => travelEditor.patch({ country: country.toUpperCase().slice(0, 2) })}
+                          placeholder="PT"
+                          width={58}
+                        />
+                      ) : (
+                        countryNameOf(tr, t)
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <div>
+                          <DateRangeField
+                            from={d.startDate}
+                            to={d.endDate}
+                            onChange={({ from, to }) => travelEditor.patch({ startDate: from, endDate: to })}
+                          />
+                          {badDates(d) && <span className="amount-negative">{t('travel.badDates')}</span>}
+                        </div>
+                      ) : (
+                        <>
+                          {formatRange(tr.startDate, tr.endDate)}
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {formatDuration(tr.startDate, tr.endDate)}
+                          </div>
+                        </>
+                      )}
+                    </td>
+                    <td className="num">{tr.transactionCount}</td>
+                    <td className="num">
+                      {/* Travel spend is an expense, not a loss — `symbol="none"`
+                          keeps it out of the gain/loss colour scheme entirely. */}
+                      <Value amount={tr.total} symbol="none" />
+                    </td>
+                    <td className="num">
+                      {editing ? (
+                        <EditableField
+                          editing
+                          as="number"
+                          value={d.forgivingDays ?? 2}
+                          onChange={(forgivingDays) => travelEditor.patch({ forgivingDays })}
+                          width={56}
+                          title={t('travel.marginHelp')}
+                        />
+                      ) : (
+                        t('format.days', { count: tr.forgivingDays ?? 2 })
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <select value={d.tagId ?? ''} onChange={(e) => travelEditor.patch({ tagId: e.target.value })}>
+                          <option value="">{t('travel.noTag')}</option>
+                          {tags.map((tag) => (
+                            <option key={tag.id} value={tag.id}>
+                              {tag.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        tags.find((tag) => tag.id === tr.tagId)?.name || <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <RowActions
+                        editing={editing}
+                        busy={busy === tr.id || travelEditor.busy}
+                        deleteMode="modal"
+                        onEdit={() => travelEditor.start(tr, draftOf(tr))}
+                        onSave={travelEditor.commit}
+                        onCancel={travelEditor.cancel}
+                        onAskDelete={() => setConfirmDelete(tr)}
+                        extras={
+                          !editing && (
+                            <>
+                              <IconButton
+                                icon="transactions"
+                                label={t('travel.viewTransactions')}
+                                onClick={() => openDetails(tr)}
+                              />
+                              <IconButton
+                                icon="tag"
+                                label={t('travel.tagWindow')}
+                                onClick={() => applyTravel(tr, { category: 'travel', onlyUncategorized: true })}
+                              />
+                            </>
+                          )
+                        }
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+
+              <TravelAddRow
+                draft={draft}
+                tags={tags}
+                inputRef={addNameRef}
+                onChange={(patch) => setDraft({ ...draft, ...patch })}
+                onAdd={createManual}
+                onClear={() => setDraft(emptyTravelDraft())}
+              />
+            </tbody>
+          </table>
+          {sortedTravels.length === 0 && (
+            <p className="hint" style={{ padding: 'var(--sp-4)' }}>
+              {t('travel.empty')}
+            </p>
+          )}
         </div>
       )}
 
@@ -793,7 +938,7 @@ export default function Travel() {
               })}
             </div>
             <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setOpenTravel(null)}>Fechar</button>
+              <button className="btn-ghost" onClick={() => setOpenTravel(null)}>{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -822,7 +967,7 @@ export default function Travel() {
                         icon="refresh"
                         disabled={busy === t.id}
                         onClick={() => removeTravel(t.id)}
-                        label="Repor: deixa de estar recusada e volta a poder ser detectada"
+                        label={t('travel.unreject')}
                       />
                     </td>
                   </tr>

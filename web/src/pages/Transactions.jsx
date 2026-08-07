@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useT } from '../i18n/index.js';
 import { formatDate } from '../lib/format.js';
 import { usePersistentState } from '../lib/usePersistentState.js';
-import { api } from '../lib/api.js';
+import { api, errText } from '../lib/api.js';
 import SubcategoryPicker from '../components/SubcategoryPicker.jsx';
 import Icon from '../components/Icon.jsx';
 import CategoryPicker from '../components/CategoryPicker.jsx';
@@ -19,25 +20,31 @@ const PAGE_SIZE = 50;
 // what stops a cell's contents from resizing its column: opening the category
 // picker used to make the row three hundred pixels tall and shove the page
 // down, and adding a subcategory left the column a different width than before.
-const COLUMNS = [
-  { key: 'date', label: 'Data', sortable: true, get: (t) => t.date || '', width: 100 },
-  { key: 'description', label: 'Descrição', sortable: true, get: (t) => (t.description || '').toLowerCase() },
-  { key: 'merchant', label: 'Comerciante', sortable: true, get: (t) => (t.merchant || '').toLowerCase(), width: 200 },
-  { key: 'amount', label: 'Montante', sortable: true, get: (t) => Number(t.amount) || 0, align: 'right', width: 110 },
-  { key: 'category', label: 'Categoria', sortable: true, get: (t) => t.category || '', width: 170 },
-  { key: 'tags', label: 'Subcategorias', sortable: false, width: 200 },
-  { key: 'status', label: 'Estado', sortable: true, get: (t) => t.status || '', width: 110 },
+// A function of `t` rather than a constant: this is module scope, so a direct
+// t() call here would run at import time — before any provider exists.
+//
+// The row accessors take `row`, not `t`. They used to be `(t) => t.date`, which
+// worked while nothing else in the file was called `t` and shadowed the
+// translator the moment one was.
+const COLUMNS = (t) => [
+  { key: 'date', label: t('common.date'), sortable: true, get: (row) => row.date || '', width: 100 },
+  { key: 'description', label: t('common.description'), sortable: true, get: (row) => (row.description || '').toLowerCase() },
+  { key: 'merchant', label: t('transactions.merchant'), sortable: true, get: (row) => (row.merchant || '').toLowerCase(), width: 200 },
+  { key: 'amount', label: t('common.amount'), sortable: true, get: (row) => Number(row.amount) || 0, align: 'right', width: 110 },
+  { key: 'category', label: t('common.category'), sortable: true, get: (row) => row.category || '', width: 170 },
+  { key: 'tags', label: t('categories.subcategories'), sortable: false, width: 200 },
+  { key: 'status', label: t('transactions.status'), sortable: true, get: (row) => row.status || '', width: 110 },
   // The actions column has no heading: the icons in it say what they do, and a
   // word above them only widens the column.
   { key: 'actions', label: '', sortable: false, width: 80 },
 ];
 
-const STATUS_LABELS = {
-  all: 'Todos os estados',
-  pending: 'Por classificar',
-  categorized: 'Categorizadas',
-  overridden: 'Corrigidas à mão',
-};
+const STATUS_LABELS = (t) => ({
+  all: t('transactions.allStates'),
+  pending: t('transactions.uncategorised'),
+  categorized: t('transactions.categorised'),
+  overridden: t('transactions.corrected'),
+});
 
 // Every filter lives in one object and goes to the server together. Splitting
 // them between client and server is what made "All categories" look broken:
@@ -91,6 +98,9 @@ function StatusBadge({ status }) {
 }
 
 export default function Transactions() {
+  const { t, tx } = useT();
+  const columns = useMemo(() => COLUMNS(t), [t]);
+  const statusLabels = useMemo(() => STATUS_LABELS(t), [t]);
   const [transactions, setTransactions] = useState([]);
   const [totals, setTotals] = useState({ matched: 0, total: 0 });
   const [categories, setCategories] = useState([]);
@@ -125,7 +135,7 @@ export default function Transactions() {
       setTransactions(data.transactions);
       setTotals({ matched: data.matched, total: data.total });
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     } finally {
       setLoading(false);
     }
@@ -159,7 +169,7 @@ export default function Transactions() {
   }
 
   const visible = useMemo(() => {
-    const column = COLUMNS.find((c) => c.key === sort.key);
+    const column = columns.find((c) => c.key === sort.key);
     if (!column?.get) return transactions;
     const dir = sort.dir === 'asc' ? 1 : -1;
     return [...transactions].sort((a, b) => {
@@ -190,7 +200,7 @@ export default function Transactions() {
 
   const activeFilters = useMemo(() => {
     const chips = [];
-    if (filters.status !== 'all') chips.push({ key: 'status', label: STATUS_LABELS[filters.status], reset: { status: 'all' } });
+    if (filters.status !== 'all') chips.push({ key: 'status', label: statusLabels[filters.status], reset: { status: 'all' } });
     if (filters.search) chips.push({ key: 'search', label: `"${filters.search}"`, reset: { search: '' } });
     if (filters.category) chips.push({ key: 'category', label: filters.category, reset: { category: '' } });
     if (filters.tag) {
@@ -214,7 +224,7 @@ export default function Transactions() {
     if (filters.direction) {
       chips.push({
         key: 'direction',
-        label: filters.direction === 'debit' ? 'Só débitos' : 'Só créditos',
+        label: filters.direction === 'debit' ? t('transactions.debitsOnly') : t('transactions.creditsOnly'),
         reset: { direction: '' },
       });
     }
@@ -238,7 +248,7 @@ export default function Transactions() {
       showToast(`Categorizada como "${category}"`);
       refreshAll();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -255,7 +265,7 @@ export default function Transactions() {
       await api.addTransactionTag(tx.id, tagId);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -264,7 +274,7 @@ export default function Transactions() {
       await api.removeTransactionTag(tx.id, tagId);
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -285,7 +295,7 @@ export default function Transactions() {
       setManualEntry({ description: '', merchant: '', amount: '', date: todayIso() });
       load();
     } catch (err) {
-      showToast('Erro: ' + err.message);
+      showToast(errText(err));
     }
   }
 
@@ -298,13 +308,13 @@ export default function Transactions() {
     <div>
       <div className="page-header">
         <div>
-          <h2>Transacções</h2>
+          <h2>{t('nav.transactions')}</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
-            {loading ? 'A carregar…' : `${totals.matched} de ${totals.total} transacções`}
+            {loading ? t('common.loading') : t('transactions.countOf', { shown: totals.matched, total: totals.total })}
           </p>
         </div>
         <button className="btn-primary" onClick={() => setShowAdd(!showAdd)}>
-          + Adicionar manual
+          + {t('transactions.addManual')}
         </button>
       </div>
 
@@ -312,19 +322,19 @@ export default function Transactions() {
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <input
-              placeholder="Descrição"
+              placeholder={t('common.description')}
               value={manualEntry.description}
               onChange={(e) => setManualEntry({ ...manualEntry, description: e.target.value })}
               style={{ flex: 2, minWidth: 180 }}
             />
             <input
-              placeholder="Comerciante (opcional)"
+              placeholder={t('transactions.merchantOptional')}
               value={manualEntry.merchant}
               onChange={(e) => setManualEntry({ ...manualEntry, merchant: e.target.value })}
               style={{ flex: 1, minWidth: 140 }}
             />
             <input
-              placeholder="Montante (ex.: -12.50)"
+              placeholder={t('transactions.amountPlaceholder')}
               type="number"
               step="0.01"
               value={manualEntry.amount}
@@ -334,7 +344,7 @@ export default function Transactions() {
             <DateField
               value={manualEntry.date}
               onChange={(date) => setManualEntry({ ...manualEntry, date })}
-              title="Data"
+              title={t('common.date')}
             />
             <RowActions editing onSave={handleAddManual} onCancel={() => setShowAdd(false)} />
           </div>
@@ -343,17 +353,17 @@ export default function Transactions() {
 
       <div className="filter-bar">
         <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
-          {Object.entries(STATUS_LABELS).map(([value, label]) => (
+          {Object.entries(statusLabels).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
         <input
-          placeholder="Pesquisar descrição ou comerciante…"
+          placeholder={t('transactions.searchPlaceholder')}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
         />
         <select value={filters.category} onChange={(e) => setFilter({ category: e.target.value })}>
-          <option value="">Todas as categorias</option>
+          <option value="">{t('transactions.allCategories')}</option>
           {categories.map((c) => (
             <option key={c.id} value={c.name}>
               {c.name}{c.count ? ` (${c.count})` : ''}
@@ -361,27 +371,26 @@ export default function Transactions() {
           ))}
         </select>
         <select value={filters.tag} onChange={(e) => setFilter({ tag: e.target.value })}>
-          <option value="">Todas as tags</option>
+          <option value="">{t('transactions.allTags')}</option>
           {tags.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
         <button className="btn-ghost" onClick={() => setShowMore((s) => !s)}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="filter" size={15} /> {showMore ? 'Menos filtros' : 'Mais filtros'}
+            <Icon name="filter" size={15} /> {showMore ? t('transactions.fewerFilters') : t('transactions.moreFilters')}
           </span>
         </button>
         <button className="btn-ghost" onClick={load} style={{ marginLeft: 'auto' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="refresh" size={15} /> Actualizar
-          </span>
+            <Icon name="refresh" size={15} />{t('common.refresh')}</span>
         </button>
       </div>
 
       {showMore && (
         <div className="card" style={{ marginBottom: 12, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>Datas</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>{t('common.dates')}</span>
             {DATE_PRESETS.map((p) => (
               <button
                 key={p.id}
@@ -399,11 +408,11 @@ export default function Transactions() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>Montante</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 60 }}>{t('common.amount')}</span>
             <input
               type="number"
               step="0.01"
-              placeholder="mínimo €"
+              placeholder={t('transactions.minAmount')}
               value={filters.minAmount}
               onChange={(e) => setFilter({ minAmount: e.target.value })}
               style={{ width: 130, minWidth: 0 }}
@@ -411,15 +420,15 @@ export default function Transactions() {
             <input
               type="number"
               step="0.01"
-              placeholder="máximo €"
+              placeholder={t('transactions.maxAmount')}
               value={filters.maxAmount}
               onChange={(e) => setFilter({ maxAmount: e.target.value })}
               style={{ width: 130, minWidth: 0 }}
             />
             <select value={filters.direction} onChange={(e) => setFilter({ direction: e.target.value })}>
-              <option value="">Débitos e créditos</option>
-              <option value="debit">Só débitos</option>
-              <option value="credit">Só créditos</option>
+              <option value="">{t('transactions.bothDirections')}</option>
+              <option value="debit">{t('transactions.debitsOnly')}</option>
+              <option value="credit">{t('transactions.creditsOnly')}</option>
             </select>
           </div>
         </div>
@@ -427,11 +436,11 @@ export default function Transactions() {
 
       {activeFilters.length > 0 && (
         <div className="filter-chips">
-          <span>Filtros:</span>
+          <span>{t('transactions.filters')}</span>
           {activeFilters.map((chip) => (
             <span key={chip.key} className="filter-chip">
               {chip.label}
-              <button onClick={() => setFilter(chip.reset)} title="Remover filtro">
+              <button onClick={() => setFilter(chip.reset)} title={t('transactions.removeFilter')}>
                 <Icon name="close" size={12} />
               </button>
             </span>
@@ -442,38 +451,34 @@ export default function Transactions() {
               setSearchInput('');
               setFilters(EMPTY_FILTERS);
             }}
-          >
-            Limpar tudo
-          </button>
+          >{t('transactions.clearAll')}</button>
         </div>
       )}
 
       {loading ? (
-        <div className="empty-state"><p>A carregar…</p></div>
+        <div className="empty-state"><p>{t('common.loading')}</p></div>
       ) : visible.length === 0 ? (
         <div className="empty-state">
-          <h3>Nenhuma transacção corresponde</h3>
+          <h3>{t('transactions.noMatch')}</h3>
           {/* The specific dead end that used to read as a broken button. */}
           {filters.status === 'pending' && filters.category && filters.category !== 'uncategorized' ? (
             <p>
-              O estado <strong>Por classificar</strong> exclui tudo o que já tem categoria, por isso
-              nunca pode devolver transacções em <strong>{filters.category}</strong>.{' '}
-              <button className="btn-ghost btn-sm" onClick={() => setFilter({ status: 'all' })}>
-                Mostrar todos os estados
-              </button>
+              {tx('transactions.deadEnd', {
+                state: <strong>{t('transactions.uncategorised')}</strong>,
+                category: <strong>{filters.category}</strong>,
+              })}{' '}
+              <button className="btn-ghost btn-sm" onClick={() => setFilter({ status: 'all' })}>{t('transactions.showAllStates')}</button>
             </p>
           ) : (
             <p>
-              {totals.total} transacções no total — os filtros activos excluem-nas todas.{' '}
+              {t('transactions.allExcluded', { total: totals.total })}{' '}
               <button
                 className="btn-ghost btn-sm"
                 onClick={() => {
                   setSearchInput('');
                   setFilters(EMPTY_FILTERS);
                 }}
-              >
-                Limpar filtros
-              </button>
+              >{t('transactions.clearFilters')}</button>
             </p>
           )}
         </div>
@@ -482,7 +487,7 @@ export default function Transactions() {
           <table className="table-fixed">
             <thead>
               <tr>
-                {COLUMNS.map((col) => (
+                {columns.map((col) => (
                   <SortHeader key={col.key} column={col} sort={sort} onToggle={toggleSort} />
                 ))}
               </tr>
@@ -560,13 +565,13 @@ export default function Transactions() {
                       <div className="row-actions">
                         <IconButton
                           icon="brain"
-                          label="Ver o que as regras sugerem para esta"
+                          label={t('transactions.seeSuggestions')}
                           onClick={() => loadSuggestions(tx.id)}
                         />
                         <IconButton
                           icon="refresh"
                           tone="danger"
-                          label="Repor: volta a uncategorized"
+                          label={t('transactions.resetCategory')}
                           onClick={() => handleCategorize(tx, 'uncategorized')}
                         />
                       </div>
@@ -611,7 +616,7 @@ export default function Transactions() {
                 onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                 disabled={page >= pageCount - 1}
               >
-                Seguinte ›
+                {t('transactions.next')} ›
               </button>
               <button
                 className="btn-ghost btn-sm"

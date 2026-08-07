@@ -1,12 +1,8 @@
 import { useState } from 'react';
 import Icon from '../Icon.jsx';
 import { monthGrid, todayIso } from '../../lib/dateInput.js';
-
-const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
-const MONTHS = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-];
+import { monthNames, weekdayNames } from '../../lib/locale.js';
+import { useT } from '../../i18n/index.js';
 
 /**
  * The picker behind the calendar icon.
@@ -17,6 +13,12 @@ const MONTHS = [
  * a trip's shape is visible while you pick.
  */
 export default function Calendar({ value, rangeFrom, rangeTo, onPick }) {
+  const { t } = useT();
+  // Month and weekday names come from Intl rather than from two hardcoded
+  // Portuguese arrays. The weekday row is also ordered from the locale's own
+  // first day, which is what the grid's lead-in now honours.
+  const months = monthNames('long');
+  const weekdays = weekdayNames('narrow');
   const start = value || todayIso();
   const [cursor, setCursor] = useState(() => {
     const [y, m] = start.split('-').map(Number);
@@ -43,19 +45,19 @@ export default function Calendar({ value, rangeFrom, rangeTo, onPick }) {
   return (
     <div className="calendar-pop" onMouseDown={(e) => e.preventDefault()}>
       <div className="calendar-pop-head">
-        <button type="button" className="icon-btn" onClick={() => shift(-1)} aria-label="Mês anterior">
+        <button type="button" className="icon-btn" onClick={() => shift(-1)} aria-label={t('calendar.previousMonth')}>
           <Icon name="chevronLeft" size={15} />
         </button>
         <strong>
-          {MONTHS[cursor.month - 1]} {cursor.year}
+          {months[cursor.month - 1]} {cursor.year}
         </strong>
-        <button type="button" className="icon-btn" onClick={() => shift(1)} aria-label="Mês seguinte">
+        <button type="button" className="icon-btn" onClick={() => shift(1)} aria-label={t('calendar.nextMonth')}>
           <Icon name="chevronRight" size={15} />
         </button>
       </div>
 
       <div className="calendar-grid calendar-pop-grid">
-        {WEEKDAYS.map((d, i) => (
+        {weekdays.map((d, i) => (
           <div key={i} className="calendar-head">{d}</div>
         ))}
         {cells.map((cell, i) =>
@@ -84,11 +86,11 @@ export default function Calendar({ value, rangeFrom, rangeTo, onPick }) {
 
       <div className="calendar-pop-foot">
         <button type="button" className="btn-ghost btn-sm" onClick={() => onPick(today)}>
-          Hoje
+          {t('calendar.today')}
         </button>
         {value && (
           <button type="button" className="btn-ghost btn-sm" onClick={() => onPick('')}>
-            Limpar
+            {t('common.clear')}
           </button>
         )}
       </div>

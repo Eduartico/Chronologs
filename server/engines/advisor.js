@@ -17,6 +17,7 @@
  * consulted before anything is called strange.
  */
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { httpError } from '../lib/httpError.js';
 import { createHash } from 'crypto';
 import { statePath } from '../lib/paths.js';
 import { cleanDescription } from '../lib/merchant.js';
@@ -225,6 +226,12 @@ export function collapseCandidates(rules = loadRules(), transactions = []) {
       root,
       merchants: members.map((r) => patternsOf(r)[0]).filter(Boolean),
       ambiguous: spread || null,
+      // The prose is kept so already-fetched findings still read; the key is what
+      // the client prefers, so the same finding is explained in either language.
+      rationaleKey: spread ? 'advisorReason.collapseAmbiguous' : 'advisorReason.collapseClean',
+      rationaleParams: spread
+        ? { rules: members.length, root, categories: spread.categories.length, summary: spread.summary, category }
+        : { rules: members.length, root, category },
       rationale: spread
         ? `${members.length} regras diferentes começam por «${root}», mas no histórico essa raiz aparece em ${spread.categories.length} categorias — ${spread.summary}. Fundi-las numa só regra «${root} → ${category}» classificaria mal a maior parte delas.`
         : `${members.length} regras dizem a mesma coisa por palavras diferentes: tudo o que contém «${root}» é ${category}. Uma regra só faz o mesmo trabalho e deixa a lista legível.`,
@@ -247,6 +254,8 @@ export function collapseCandidates(rules = loadRules(), transactions = []) {
       members,
       {
         merchants: members.map((r) => patternsOf(r)[0]).filter(Boolean),
+        rationaleKey: 'advisorReason.patternCollapse',
+        rationaleParams: { rules: members.length, category },
         rationale: `Cada correcção tua escreveu uma regra nova, e ${members.length} delas apontam para ${category} — uma por comerciante. Juntas numa lista de padrões dentro de uma única regra, ${category} passa a ocupar uma linha em vez de ${members.length}.`,
       }
     );
@@ -373,6 +382,8 @@ export function patternCandidates(rules = loadRules(), transactions = []) {
       category: majority,
       share: Math.round((majorityCount / members.length) * 100),
       sample: members.slice(0, 5).map((t) => t.description),
+      rationaleKey: 'advisorReason.pattern',
+      rationaleParams: { root, total: members.length, majorityCount, majority },
       rationale: `«${root}» aparece em ${members.length} transacções, ${majorityCount} delas classificadas como ${majority} por ti. Não há regra nenhuma a cobrir isto.`,
     });
   }
@@ -382,7 +393,7 @@ export function patternCandidates(rules = loadRules(), transactions = []) {
 
 /** Turns a noted pattern into the one rule it deserved from the start. */
 export function applyPattern(finding) {
-  if (!finding?.root || !finding?.category) throw new Error('Achado inválido');
+  if (!finding?.root || !finding?.category) throw httpError(400, 'api.error.invalidFinding');
   const rules = loadRules();
   const rule = {
     id: stableId('rule', `pattern::${finding.root}`),
@@ -483,6 +494,14 @@ export function shadowedRules(rules = loadRules(), transactions = []) {
       // one-correction `learned` rule — a hand-written broad rule usually
       // covers far more than the pair the advisor is comparing here.
       canDeleteGeneral: thief.origin === 'learned',
+      rationaleKey: sameOutcome ? 'advisorReason.shadowedSame' : 'advisorReason.shadowedDifferent',
+      rationaleParams: {
+        rule: rule.name,
+        matched,
+        thief: thief.name,
+        category: rule.actions.setCategory,
+        thiefCategory: thief.actions?.setCategory,
+      },
       rationale: sameOutcome
         ? `A regra «${rule.name}» apanha ${matched} transacções mas nunca decide nenhuma: «${thief.name}» corre antes e já lhes dá a mesma categoria (${rule.actions.setCategory}). É uma regra a mais.`
         : `A regra «${rule.name}» apanha ${matched} transacções e nunca decide nenhuma: «${thief.name}» corre antes e classifica-as como ${thief.actions?.setCategory}. Se querias ${rule.actions.setCategory} nestas, a regra tem de subir na ordem — ou, se «${thief.name}» é que está a apontar para a categoria errada na maior parte das vezes, pode ser essa a mudar.`,
@@ -561,7 +580,7 @@ export function applyShadowedFix(finding, action, transactions = []) {
   const before = transactions.length ? structuredClone(rules) : null;
   const rule = rules.find((r) => r.id === finding.rule.id);
   const thief = rules.find((r) => r.id === finding.shadowedBy.id);
-  if (!rule) throw new Error('A regra já não existe');
+  if (!rule) throw httpError(400, 'api.error.ruleGone');
 
   const impact = (after) => {
     const diff = diffCategorization(before, after, transactions);
@@ -576,9 +595,9 @@ export function applyShadowedFix(finding, action, transactions = []) {
   }
 
   if (action === 'deleteGeneral') {
-    if (!thief) throw new Error('A regra que a tapava já não existe');
+    if (!thief) throw httpError(400, 'api.error.shadowingRuleGone');
     if (thief.origin !== 'learned') {
-      throw new Error('Só se apaga automaticamente uma regra aprendida — esta foi escrita à mão');
+      throw httpError(400, 'api.error.ruleNotLearned');
     }
     const after = rules.filter((r) => r.id !== thief.id);
     const result = { action: 'deleteGeneral', removed: thief.id, ...impact(after) };
@@ -587,7 +606,7 @@ export function applyShadowedFix(finding, action, transactions = []) {
   }
 
   if (action === 'promote') {
-    if (!thief) throw new Error('A regra que a tapava já não existe');
+    if (!thief) throw httpError(400, 'api.error.shadowingRuleGone');
     // Fractional order: it only has to sort between the thief and whatever ran
     // immediately before it, so there is no need to renumber the whole list.
     rule.order = (thief.order ?? 0) - 0.5;
@@ -597,8 +616,8 @@ export function applyShadowedFix(finding, action, transactions = []) {
   }
 
   if (action === 'retarget') {
-    if (!thief) throw new Error('A regra geral já não existe');
-    if (!finding.retargetTo) throw new Error('Não há categoria maioritária para redireccionar');
+    if (!thief) throw httpError(400, 'api.error.generalRuleGone');
+    if (!finding.retargetTo) throw httpError(400, 'api.error.noMajorityCategory');
     thief.actions = { ...thief.actions, setCategory: finding.retargetTo };
     thief.updated = new Date().toISOString();
     const result = { action: 'retarget', category: finding.retargetTo, ...impact(rules) };
@@ -606,7 +625,7 @@ export function applyShadowedFix(finding, action, transactions = []) {
     return result;
   }
 
-  throw new Error('Acção desconhecida');
+  throw httpError(400, 'api.error.unknownAction');
 }
 
 /**
@@ -615,7 +634,7 @@ export function applyShadowedFix(finding, action, transactions = []) {
  * rules covered — a lossy merge silently un-categorizes real spending.
  */
 export function applyCollapse(candidate, { force = false } = {}) {
-  if (!candidate?.merged) throw new Error('Candidato inválido');
+  if (!candidate?.merged) throw httpError(400, 'api.error.invalidCandidate');
   if (!candidate.lossless && !force) {
     throw new Error(`A fusão mudaria a categoria de ${candidate.changed} transacções`);
   }
@@ -741,7 +760,7 @@ export function compactLearnedRules(rules = loadRules(), transactions = []) {
  * the groups, so what was shown before the click is what happens on it.
  */
 export function applyCompaction(preview) {
-  if (!preview?.groups?.length) throw new Error('Nada para compactar');
+  if (!preview?.groups?.length) throw httpError(400, 'api.error.nothingToCompact');
 
   const rules = loadRules();
   const replacedIds = new Set(preview.groups.flatMap((g) => g.replacesIds));
@@ -811,6 +830,14 @@ export function anomalyCandidates(transactions, travels = loadTravels()) {
         expected: majority,
         expectedShare: Math.round((majorityCount / members.length) * 100),
         travel: travel ? { id: travel.id, name: travel.name } : null,
+        reasonKey: travel ? 'advisorReason.anomalyDuringTrip' : 'advisorReason.anomaly',
+        reasonParams: {
+          category: tx.category,
+          majorityCount,
+          total: members.length,
+          majority,
+          trip: travel?.name,
+        },
         reason: travel
           ? `Está em "${tx.category}" enquanto ${majorityCount} de ${members.length} deste comerciante estão em "${majority}" — mas cai na viagem "${travel.name}".`
           : `Está em "${tx.category}" enquanto ${majorityCount} de ${members.length} deste comerciante estão em "${majority}".`,
@@ -830,9 +857,9 @@ export function anomalyCandidates(transactions, travels = loadTravels()) {
  * finding instead.
  */
 export async function applyAnomalyInverse(finding, transactions) {
-  if (!finding?.expected || !finding?.group) throw new Error('Achado inválido');
+  if (!finding?.expected || !finding?.group) throw httpError(400, 'api.error.invalidFinding');
   const toCategory = finding.transaction?.category;
-  if (!toCategory) throw new Error('Achado inválido');
+  if (!toCategory) throw httpError(400, 'api.error.invalidFinding');
 
   const ids = transactions
     .filter(
@@ -842,7 +869,7 @@ export async function applyAnomalyInverse(finding, transactions) {
     )
     .map((tx) => tx.id);
 
-  if (ids.length === 0) throw new Error('Não há transacções do grupo maioritário para mudar');
+  if (ids.length === 0) throw httpError(400, 'api.error.noMajorityTransactions');
 
   const result = await applyCategorizationBulk(ids, toCategory, 'advisor-inverse');
   return { action: 'inverse', category: toCategory, moved: result.applied, ...result };
@@ -883,83 +910,57 @@ export async function askLlm({
     .slice(-25)
     .map((f) => `- ${f.kind}: ${f.subject}${f.note ? ` (motivo: ${f.note})` : ''}`);
 
-  const prompt = `És um assistente de finanças pessoais a rever a configuração de categorização de um utilizador português. Escreves como um colega a apontar para o ecrã: dizes o que reparaste, porquê, e o que farias.
+  // The prompt lives in server/engines/prompts/, one file per language, because
+  // the model answers in the language it is asked in and these notes go straight
+  // onto the screen. What does *not* move with the language is the wire format:
+  // the Portuguese JSON keys and the "concordo"/"discordo" verdicts are the parse
+  // contract, and the English prompt keeps them verbatim.
+  const { pick, normaliseVerdict } = await import('./prompts/index.js');
+  const { currentLocale } = await import('../lib/settings.js');
+  const buildPrompt = pick('advisor', currentLocale());
 
-Categorias disponíveis: ${categories.join(', ')}.
-
-GRUPOS DE REGRAS QUE PODEM SER FUNDIDOS
-${JSON.stringify(
-  collapses.slice(0, 12).map((c) => ({
-    id: c.id,
-    nivel: c.level,
-    raiz: c.root || null,
-    categoria: c.category,
-    numeroDeRegras: c.replaces.length,
-    comerciantes: (c.merchants || []).slice(0, 12),
-    mudariaCategoriaA: c.changed,
-  })),
-  null,
-  1
-)}
-
-RAÍZES QUE NÃO SUPORTAM UMA REGRA ÚNICA
-Estas aparecem repartidas por várias categorias no histórico real. São normalmente métodos de pagamento ou transferências, não comerciantes — não se pode inferir uma categoria a partir delas.
-${JSON.stringify(
-  ambiguous.slice(0, 10).map((a) => ({
-    id: a.id,
-    raiz: a.root,
-    transaccoes: a.total,
-    repartição: a.summary,
-    exemplos: a.sample.slice(0, 3),
-  })),
-  null,
-  1
-)}
-
-REGRAS QUE NUNCA CHEGAM A DECIDIR (ordem de avaliação)
-${JSON.stringify(
-  shadowed.slice(0, 10).map((s) => ({
-    id: s.id,
-    regra: s.rule.name,
-    categoriaQueQueria: s.rule.category,
-    tapadaPor: s.shadowedBy.name,
-    categoriaQueGanha: s.shadowedBy.category,
-    transaccoesAfectadas: s.matched,
-    mesmoResultado: s.redundant,
-  })),
-  null,
-  1
-)}
-
-CLASSIFICAÇÕES QUE DIVERGEM DO SEU GRUPO
-${JSON.stringify(
-  anomalies.slice(0, 20).map((a) => ({
-    id: a.id,
-    descricao: a.transaction.description,
-    actual: a.transaction.category,
-    maioria: a.expected,
-    duranteViagem: !!a.travel,
-  })),
-  null,
-  1
-)}
-
-${rejections.length ? `O utilizador JÁ REJEITOU as seguintes sugestões — não voltes a propô-las:\n${rejections.join('\n')}\n` : ''}
-REGRAS DA RESPOSTA
-- Usa o que sabes sobre os nomes: se os comerciantes de um grupo são todos supermercados, diz isso; se uma raiz é claramente uma transferência entre contas ou um método de pagamento, diz isso.
-- Uma compra num supermercado categorizada como viagem faz sentido se ocorreu durante uma viagem.
-- Para as raízes ambíguas, o conselho útil é NÃO criar regra e deixar decidir caso a caso — explica porquê com os números que tens.
-- Comenta só o que for claramente útil. Menos achados bem explicados valem mais do que muitos vagos.
-- Cada nota: duas ou três frases, português europeu, concreta. Nomeia os comerciantes e os números.
-
-Responde em JSON ESTRITO:
-{"findings": [{"id": "<id existente>", "verdict": "concordo"|"discordo", "note": "o que reparaste, porquê, e o que farias"}]}`;
+  const prompt = buildPrompt({
+    categories,
+    rejections,
+    collapses: collapses.slice(0, 12).map((c) => ({
+      id: c.id,
+      nivel: c.level,
+      raiz: c.root || null,
+      categoria: c.category,
+      numeroDeRegras: c.replaces.length,
+      comerciantes: (c.merchants || []).slice(0, 12),
+      mudariaCategoriaA: c.changed,
+    })),
+    ambiguous: ambiguous.slice(0, 10).map((a) => ({
+      id: a.id,
+      raiz: a.root,
+      transaccoes: a.total,
+      'reparti\u00e7\u00e3o': a.summary,
+      exemplos: a.sample.slice(0, 3),
+    })),
+    shadowed: shadowed.slice(0, 10).map((sh) => ({
+      id: sh.id,
+      regra: sh.rule.name,
+      categoriaQueQueria: sh.rule.category,
+      tapadaPor: sh.shadowedBy.name,
+      categoriaQueGanha: sh.shadowedBy.category,
+      transaccoesAfectadas: sh.matched,
+      mesmoResultado: sh.redundant,
+    })),
+    anomalies: anomalies.slice(0, 20).map((a) => ({
+      id: a.id,
+      descricao: a.transaction.description,
+      actual: a.transaction.category,
+      maioria: a.expected,
+      duranteViagem: !!a.travel,
+    })),
+  });
 
   let parsed;
   try {
     parsed = await generateJSON(prompt);
   } catch {
-    return { enabled: true, findings: [], error: 'O modelo local não respondeu' };
+    return { enabled: true, findings: [], errorKey: 'api.error.llmNoAnswer' };
   }
 
   const list = Array.isArray(parsed) ? parsed : parsed?.findings;
@@ -974,7 +975,11 @@ Responde em JSON ESTRITO:
       .slice(0, 20)
       .map((f) => ({
         id: f.id,
-        verdict: f.verdict === 'discordo' ? 'discordo' : 'concordo',
+        // A model reading an English prompt is quite capable of answering
+        // "agree" however plainly it was told to copy the Portuguese literal.
+        // The old code read anything that was not exactly "discordo" as
+        // agreement, so a translated "disagree" silently became a yes.
+        verdict: normaliseVerdict(f.verdict) ?? 'concordo',
         note: f.note,
         confidence: LLM_CONFIDENCE,
         source: 'llm',
