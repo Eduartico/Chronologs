@@ -16,7 +16,7 @@
  */
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { documentsPath } from '../../lib/paths.js';
+import { documentsPath } from '../../server/lib/paths.js';
 import { PRICEMPIRE } from './selectors.js';
 
 const CLICK_TIMEOUT = 8000;
@@ -63,7 +63,7 @@ export async function downloadPortfolioCsv(page, portfolioId) {
   if (!button) {
     throw new Error(
       'Botão de export não encontrado na página do portefólio — o site pode ter mudado ' +
-        '(actualiza exportButtonSelectors em server/ingestion/pricempire/selectors.js)'
+        '(actualiza exportButtonSelectors em modules/pricempire/selectors.js)'
     );
   }
 

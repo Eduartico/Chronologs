@@ -1,49 +1,43 @@
+/**
+ * Cron jobs, one per configured module instance.
+ *
+ * This file used to hold a literal registry of five entries — two banks-and-a-
+ * marketplace by name, three engines — which meant that adding a source meant
+ * editing it, and that the settings screen kept its own copy of the same five
+ * names to render a table from. Both lists now come from the module registry:
+ * a source instance is schedulable when its module declares `sync`, an engine
+ * when it declares `scheduledJob`.
+ *
+ * What each job actually does is unchanged; see framework/builtins.js for the
+ * engines and modules/<id>/module.js for the sources.
+ */
 import cron from 'node-cron';
 import { loadSettings } from './settings.js';
 import { notify } from './notify.js';
+import { listInstances, invoke, supports } from '../framework/registry.js';
 
 const running = new Map();
 let jobs = [];
 
-const REGISTRY = {
-  activobank: async () =>
-    (await import('../ingestion/activobank/index.js')).ingestActivobank({ origin: 'gmail' }),
-  pricempire: async () => (await import('../ingestion/pricempire/index.js')).syncPricempire(),
-  // Quotes only run when the user has opted into online price lookups; the
-  // fetcher enforces that itself, and this reports the skip rather than erroring.
-  quotes: async () => {
-    const { refreshQuotes, quotesEnabled } = await import('../ingestion/quotes/yahoo.js');
-    if (!quotesEnabled()) return { skipped: true, reason: 'cotações online desligadas' };
-    return refreshQuotes();
-  },
-  correlations: async () => {
-    const { runCorrelations } = await import('../engines/correlation.js');
-    const result = await runCorrelations();
-    if (result.proposals > 0) return result;
-    return result;
-  },
-  rules: async () => {
-    const { runRules } = await import('../engines/rules.js');
-    const result = await runRules({});
-    if (result.categorized > 0 || result.tagged > 0) {
-      notify(
-        'info',
-        'notify.rules.complete',
-        { applied: result.categorized, tagged: result.tagged },
-        { module: 'rules', ...result }
-      );
-    }
-    return result;
-  },
-};
+/** The capability the scheduler calls for a given instance. */
+async function jobCapability(instanceId) {
+  if (await supports(instanceId, 'scheduledJob')) return 'scheduledJob';
+  if (await supports(instanceId, 'sync')) return 'sync';
+  return null;
+}
 
+/**
+ * Runs one module by id, guarding against a second run while the first is in
+ * flight — a six-hourly scrape that takes longer than six hours would otherwise
+ * pile up browsers until the machine gave out.
+ */
 export async function runModule(module) {
-  const job = REGISTRY[module];
-  if (!job) throw new Error(`Unknown module: ${module}`);
+  const capability = await jobCapability(module);
+  if (!capability) throw new Error(`Unknown module: ${module}`);
   if (running.get(module)) return { skipped: true, reason: 'already running' };
   running.set(module, true);
   try {
-    return await job();
+    return await invoke(module, capability);
   } catch (err) {
     notify('error', 'notify.schedule.failed', { module, detail: err.message }, { module });
     throw err;
@@ -52,20 +46,40 @@ export async function runModule(module) {
   }
 }
 
-export function reloadScheduler() {
+/**
+ * Where an instance's schedule is configured.
+ *
+ * Source instances carry their own, so two banks can sync at different times.
+ * Engines are single and keep theirs under `settings.schedules`, which is where
+ * a settings.json written before modules existed already has them.
+ */
+function scheduleFor(instance, settings) {
+  return instance.manifest?.kind === 'source'
+    ? instance.schedule ?? settings.schedules?.[instance.module] ?? null
+    : settings.schedules?.[instance.id] ?? instance.schedule ?? null;
+}
+
+export async function reloadScheduler() {
   for (const j of jobs) j.stop();
   jobs = [];
+
   const settings = loadSettings();
   const active = [];
-  for (const [module, cfg] of Object.entries(settings.schedules || {})) {
-    if (!cfg.enabled || !cfg.cron || !REGISTRY[module]) continue;
+
+  for (const instance of await listInstances({ includeDisabled: false })) {
+    if (instance.missing) continue;
+    const cfg = scheduleFor(instance, settings);
+    if (!cfg?.enabled || !cfg.cron) continue;
+    if (!(await jobCapability(instance.id))) continue;
+
     if (!cron.validate(cfg.cron)) {
-      notify('warning', 'notify.schedule.invalidCron', { module, cron: cfg.cron }, { module });
+      notify('warning', 'notify.schedule.invalidCron', { module: instance.id, cron: cfg.cron }, { module: instance.id });
       continue;
     }
-    jobs.push(cron.schedule(cfg.cron, () => runModule(module).catch(() => {})));
-    active.push(`${module} (${cfg.cron})`);
+    jobs.push(cron.schedule(cfg.cron, () => runModule(instance.id).catch(() => {})));
+    active.push(`${instance.id} (${cfg.cron})`);
   }
+
   if (active.length > 0) console.log(`  Scheduler active: ${active.join(', ')}`);
   return active;
 }

@@ -1,10 +1,36 @@
 import { replayEvents } from '../ledger/eventStore.js';
 import { loadAssets, loadCategories, loadRules } from '../ledger/fileStore.js';
-import { analyzeAccounts, deriveSelfNames, isCashWithdrawal, compileProfile } from '../engines/accounts.js';
+import { analyzeAccounts, deriveSelfNames, isCashWithdrawal, compileProfiles } from '../engines/accounts.js';
 import { loadSettings } from '../lib/settings.js';
 
 export const INTERNAL_CATEGORY = 'internal transfer';
 export const CASH_WITHDRAWAL_CATEGORY = 'cash withdrawal';
+
+/**
+ * Each configured bank's own wording, keyed by the `source` it writes.
+ *
+ * Read through the registry rather than from settings directly, so an instance
+ * that has never been written down — the derived ActivoBank of an installation
+ * that predates modules — still contributes the profile it has always used.
+ *
+ * The registry import is dynamic because the projection is on the boot path and
+ * the registry reads settings, which reads paths: a static cycle there is paid
+ * for at every import rather than at this one call.
+ */
+async function institutionProfiles() {
+  try {
+    const { instancesOfFamily } = await import('../framework/registry.js');
+    const profiles = {};
+    for (const instance of await instancesOfFamily('bank', { includeDisabled: true })) {
+      profiles[instance.id] = instance.config?.profile ?? null;
+    }
+    return profiles;
+  } catch {
+    // A broken registry must not take the whole ledger down with it: falling
+    // back to the shipped wording is what the app did before modules existed.
+    return {};
+  }
+}
 
 export async function buildProjections() {
   const events = await replayEvents();
@@ -181,17 +207,23 @@ export async function buildProjections() {
   // before the app understood what these rows are.
   const settings = loadSettings();
   const selfNames = [...new Set([...deriveSelfNames(transactions), ...(settings.internal?.selfNames || [])])];
+
+  // Each source is read in its own institution's wording. A source is a module
+  // instance, so two banks are two entries here and neither one's phrasing is
+  // applied to the other's statements. With one bank this is exactly the single
+  // profile it was before.
+  const profiles = await institutionProfiles();
   const accountAnalysis = analyzeAccounts(transactions, {
     selfNames,
     windowDays: settings.internal?.windowDays ?? 3,
     vaultAliases: settings.internal?.vaultAliases || {},
     profile: settings.internal?.profile,
+    profiles,
   });
-  // Compiled once, outside the per-transaction loop below — `isCashWithdrawal`
-  // accepts either a raw profile or these already-compiled matchers, and a
-  // hot loop over the whole ledger is exactly the case that should never
-  // recompile the same five regexes on every row.
-  const institutionMatchers = compileProfile(settings.internal?.profile);
+  // Compiled once per source, outside the per-transaction loop below — a hot
+  // loop over the whole ledger is exactly the case that should never rebuild
+  // the same five regexes on every row.
+  const institutionMatchers = compileProfiles(profiles, settings.internal?.profile);
 
   for (const tx of transactions) {
     if (accountAnalysis.internalIds.has(tx.id)) {
@@ -290,7 +322,7 @@ export async function buildProjections() {
     };
   });
 
-  return {
+  const projections = {
     events,
     transactions,
     spendingTransactions,
@@ -313,4 +345,23 @@ export async function buildProjections() {
     tagsByTransaction,
     linksByTransaction,
   };
+
+  // A last look for engine modules, over the finished shape.
+  //
+  // Deliberately after everything: a hook here sees the same projection every
+  // route sees, and cannot change how the ledger was read. Errors are caught
+  // per hook — one module's derived figure failing must not leave the whole app
+  // without a transactions list.
+  try {
+    const { hooks } = await import('../framework/registry.js');
+    for (const { id, hook } of await hooks('afterProjection')) {
+      try {
+        hook(projections);
+      } catch (err) {
+        console.warn(`  ⚠ ${id}.afterProjection: ${err.message}`);
+      }
+    }
+  } catch {}
+
+  return projections;
 }

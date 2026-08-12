@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { findDuplicateCandidates, documentFilename } from './duplicates.js';
-import { normalizeTransactions } from '../ingestion/activobank/normalize.js';
-import { parseNotaText } from '../ingestion/activobank/parsers/nota.js';
+import { normalizeTransactions } from '../../modules/activobank/normalize.js';
+import { parseNotaText } from '../../modules/activobank/parsers/nota.js';
 
 const tx = (id, date, description, amount, document = 'EXTRATO.pdf', kind = 'extrato') => ({
   id,

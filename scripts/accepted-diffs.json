@@ -1,0 +1,35 @@
+{
+  "//": [
+    "Differences from the pre-refactor baseline that are intended.",
+    "",
+    "snapshot:verify compares against a capture taken before the module framework",
+    "existed. Anything not listed here is a regression. Anything listed here is a",
+    "decision someone made on purpose, with the reason next to it — which is the",
+    "whole point: the list of everything this refactor deliberately changed is one",
+    "reviewable file rather than a memory of which failures were 'fine'.",
+    "",
+    "`path` is a JSON path into the captured file; everything under it is",
+    "accepted too, so '$.body.modules' covers the whole subtree. Use bracket",
+    "notation for a key containing dots: \"$['report.csv']\"."
+  ],
+  "accepted": [
+    {
+      "file": "api/settings.json",
+      "path": "$.body.modules",
+      "why": "New key. Configured module instances. Empty on an installation whose settings.json predates modules — the registry derives the ActivoBank and Pricempire instances from the old `schedules` and `internal.profile` keys instead, so nothing that already existed changed value."
+    },
+    {
+      "file": "api/modules*",
+      "why": "New endpoints, one group per configured instance: what the interface reads to know which modules exist and what each offers, each instance's configuration, and each one's status. The per-provider routes they generalise (/google/status, /pricempire/status, /ingest/activobank, …) all still exist and still answer exactly the same thing — the entries for those are compared as before, and are unchanged."
+    },
+    {
+      "file": "«ui»",
+      "why": "Not a captured file — recorded here so the one visible change in the interface is written down somewhere. The Settings schedules table now names each module from its manifest's translation key, so it reads 'Leitura do email ActivoBank' in Portuguese instead of the hardcoded English 'ActivoBank email scan'. The old list was a literal object of five English strings, which broke the rule that no user-visible text is a literal, and would have shown a fork's own bank as a bare id. Everything else on Connections, Rules and Settings is pixel-identical."
+    },
+    {
+      "file": "documents.json",
+      "path": "$['pricempire/*']",
+      "why": "Gone from the capture, and they were noise. Documents are now re-read by the module instance that stored them; Pricempire declares no bank-document parser, so its portfolio exports are skipped. The baseline entries were those CSVs fed to the ActivoBank statement parsers, which read zero transactions out of a hundred rows each and reported one unparsed line — a measurement of nothing."
+    }
+  ]
+}

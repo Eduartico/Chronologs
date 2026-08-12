@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { parsePricempireCsv, repairMojibake } from '../ingestion/pricempire/csv.js';
+import { parsePricempireCsv, repairMojibake } from '../../modules/pricempire/csv.js';
 import {
   computePositions,
   computeSummary,
@@ -12,7 +12,7 @@ import {
 } from './portfolio.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURE = join(__dirname, '..', 'ingestion', 'pricempire', '__fixtures__', 'pricempire-export.csv');
+const FIXTURE = join(__dirname, '..', '..', 'modules', 'pricempire', '__fixtures__', 'pricempire-export.csv');
 
 const parsed = parsePricempireCsv(readFileSync(FIXTURE));
 const positions = computePositions(parsed.transactions, parsed.prices);

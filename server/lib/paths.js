@@ -33,13 +33,20 @@ export function snapshotsPath(...parts) {
   return join(USER_DATA_DIR, 'snapshots', ...parts);
 }
 
+/**
+ * The directories that exist regardless of what is installed.
+ *
+ * `documents/activobank/{inbox,processed}` and `browser/pricempire` used to be
+ * listed here, which is one of the places the app knew two institutions by
+ * name. Per-instance directories are created by `ensureInstanceDirectories`
+ * below, from whatever is actually configured.
+ */
 const TREE = [
   'ledger',
   'state',
   join('secrets', 'google'),
-  join('documents', 'activobank', 'inbox'),
-  join('documents', 'activobank', 'processed'),
-  join('browser', 'pricempire'),
+  'documents',
+  'browser',
   'snapshots',
 ];
 
@@ -49,6 +56,23 @@ export function bootstrapUserData() {
     if (!existsSync(p)) mkdirSync(p, { recursive: true });
   }
   migrateLegacyData();
+}
+
+/**
+ * Per-instance document folders, so a fresh install has a layout that explains
+ * itself before anything has been ingested.
+ *
+ * Takes the ids rather than reading the registry, because the registry reads
+ * settings which reads paths — and a cycle there would be paid for at every
+ * import, not just this one call.
+ */
+export function ensureInstanceDirectories(instanceIds) {
+  for (const id of instanceIds) {
+    for (const stage of ['inbox', 'processed']) {
+      const p = documentsPath(id, stage);
+      if (!existsSync(p)) mkdirSync(p, { recursive: true });
+    }
+  }
 }
 
 // One-time migration from the pre-user-data layout (repo-root data/ folder).

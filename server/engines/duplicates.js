@@ -170,6 +170,10 @@ export function findDuplicateCandidates(
         documentId: documentIdOf(members[0]),
         documentFilename: documentFilename(documentIdOf(members[0])),
         documentKind: members[0].raw?.payload?.document_kind || null,
+        // Which instance ingested it, so the document can be re-read by the
+        // module that knows how — a fork with two banks stores two files called
+        // EXTRATO.pdf and the filename alone no longer identifies one.
+        source: members[0].source ?? null,
         sameDocument,
         crossKind,
         sameDate,
@@ -212,17 +216,33 @@ export function findDuplicateCandidates(
   );
 }
 
-/** Locates a stored ActivoBank document by the filename in its ledger id. */
-export function resolveDocumentPath(documentId) {
+/**
+ * Locates a stored document by the filename in its ledger id.
+ *
+ * `source` is the instance that ingested it, and is where the search starts —
+ * two banks can perfectly well store a file called `EXTRATO.pdf`. Without one,
+ * every instance's directories are searched, which is what happens for a group
+ * assembled before the source was recorded on it.
+ */
+export function resolveDocumentPath(documentId, source = null) {
   const filename = documentFilename(documentId);
   if (!filename) return null;
-  for (const stage of ['processed', 'inbox']) {
-    const root = documentsPath('activobank', stage);
-    if (!existsSync(root)) continue;
-    for (const batch of readdirSync(root, { withFileTypes: true })) {
-      if (!batch.isDirectory()) continue;
-      const candidate = join(root, batch.name, filename);
-      if (existsSync(candidate)) return candidate;
+
+  const root = documentsPath();
+  if (!existsSync(root)) return null;
+  const instances = source
+    ? [source]
+    : readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+
+  for (const instance of instances) {
+    for (const stage of ['processed', 'inbox']) {
+      const stageDir = documentsPath(instance, stage);
+      if (!existsSync(stageDir)) continue;
+      for (const batch of readdirSync(stageDir, { withFileTypes: true })) {
+        if (!batch.isDirectory()) continue;
+        const candidate = join(stageDir, batch.name, filename);
+        if (existsSync(candidate)) return candidate;
+      }
     }
   }
   return null;
@@ -234,34 +254,37 @@ export function resolveDocumentPath(documentId) {
  *
  * `expected` below `count` means the ledger holds copies the document does not
  * justify — the safe, evidence-backed case for voiding.
+ *
+ * Which parser to use is decided by the module that ingested the document, not
+ * by this file: the strongest signal the duplicate screen has is a re-read of
+ * the original, and it has to keep working for whatever institution a fork adds.
  */
 export async function verifyAgainstDocument(group) {
   if (!group.documentId) return { verified: false, reason: 'no-document' };
 
-  const path = resolveDocumentPath(group.documentId);
+  const path = resolveDocumentPath(group.documentId, group.source ?? null);
   if (!path) return { verified: false, reason: 'document-not-found' };
 
-  const { parsePdf } = await import('../ingestion/activobank/parsers/pdf.js');
-  const { parseCsv } = await import('../ingestion/activobank/parsers/csv.js');
-  const { parseBody } = await import('../ingestion/activobank/parsers/body.js');
-  const { normalizeTransactions } = await import('../ingestion/activobank/normalize.js');
+  // The instance that owns the directory the document was found in.
+  const owner = group.source ?? path.slice(documentsPath().length + 1).split(/[\\/]/)[0];
 
-  const buffer = readFileSync(path);
-  const ext = path.toLowerCase().split('.').pop();
+  const { invoke, supports } = await import('../framework/registry.js');
+  if (!(await supports(owner, 'parseDocument'))) {
+    return { verified: false, reason: `no-parser-for:${owner}` };
+  }
+
   let parsed;
   try {
-    parsed =
-      ext === 'pdf'
-        ? await parsePdf(buffer)
-        : ext === 'csv' || ext === 'tsv'
-          ? await parseCsv(buffer)
-          : await parseBody(buffer.toString('utf-8'), null);
+    parsed = await invoke(owner, 'parseDocument', {
+      filename: documentFilename(path),
+      buffer: readFileSync(path),
+      date: null,
+    });
   } catch (err) {
     return { verified: false, reason: `parse-failed: ${err.message}` };
   }
 
-  const normalized = normalizeTransactions(parsed.transactions || []);
-  const expected = normalized.filter(
+  const expected = (parsed.transactions || []).filter(
     (t) =>
       Number(t.amount).toFixed(2) === Number(group.amount).toFixed(2) &&
       String(t.date).slice(0, 10) === group.date

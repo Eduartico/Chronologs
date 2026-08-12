@@ -18,6 +18,7 @@
  */
 
 import en from '../../web/src/i18n/en.js';
+import { moduleString } from '../framework/i18n.js';
 
 /**
  * Render a key in English, for the `error` field and for anywhere the server has
@@ -25,9 +26,13 @@ import en from '../../web/src/i18n/en.js';
  *
  * The catalogue is a plain ESM object precisely so it can be imported here; both
  * packages are `"type": "module"` and no bundler is involved.
+ *
+ * Keys a module brought with it are consulted after the core catalogue, so a
+ * fork's own bank can name its notifications without editing a shipped file —
+ * and cannot redefine one of the app's own strings by accident.
  */
 export function english(key, params = {}) {
-  let value = en[key];
+  let value = en[key] ?? moduleString(key, 'en');
   if (value === undefined) return key;
   if (value && typeof value === 'object') {
     value = value[new Intl.PluralRules('en').select(Number(params.count) || 0)] ?? value.other;

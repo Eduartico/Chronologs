@@ -53,6 +53,37 @@ export default {
   'nav.collapse': 'Collapse sidebar',
   'nav.expand': 'Expand sidebar',
 
+  /* ---- modules ------------------------------------------------------------
+     One entry per installed module, named by its manifest's `label` key. A
+     module that adds a key here must add the Portuguese one too — the contract
+     test in server/framework/contract.test.js fails otherwise, because a module
+     whose name only exists in one language shows a raw key in the other. */
+  'module.activobank.label': 'ActivoBank email scan',
+  'module.activobank.config.gmailLabel': 'Gmail label',
+  'module.activobank.config.profile': 'Institution wording',
+  'module.pricempire.label': 'Pricempire portfolio resync',
+  'module.pricempire.config.portfolios': 'Portfolios',
+  'module.rules.label': 'Rules engine sweep',
+  'module.correlations.label': 'Correlation detection',
+  'module.securities.label': 'ETF order reconciliation',
+  'module.quotes.label': 'ETF market quotes',
+
+  /* ---- module cards ----
+     Used by the generic card a module gets when it ships no component of its
+     own. Everything a module author needs to say is a key here or in their own
+     manifest — never a sentence in JSX. */
+  'modules.connected': 'Connected',
+  'modules.notConnected': 'Not connected',
+  'modules.instanceOf': 'Provided by the {module} module',
+  'modules.lastSync': 'last synced {when}',
+  'modules.action.connect': 'Connect',
+  'modules.action.sync': 'Sync now',
+  'modules.action.reprocess': 'Re-parse stored documents',
+  'modules.ranSummary': '{imported} new movements from {files} document(s)',
+  'modules.missingModule': 'This connection was set up with the "{module}" module, which is not installed. Its data is still in the ledger; reinstall the module to sync again.',
+  'modules.problemsTitle': 'Modules that could not be loaded',
+  'modules.none': 'No connections configured yet.',
+
   /* ---- financial values ---------------------------------------------------
      Read aloud by screen readers in place of the colour and the arrow. */
   'value.up': 'up',
@@ -241,6 +272,10 @@ export default {
   'api.error.patternNotFound': 'Pattern not found — it may already have been resolved',
   'api.error.llmDisabled': 'Ollama is switched off — turn it on in Settings',
   'api.error.noFiles': 'No files uploaded',
+  'api.error.moduleNotFound': 'Module not found',
+  'api.error.moduleActionNotFound': 'This module offers no such action',
+  'api.error.moduleCapabilityNotFound': 'This module does not offer that',
+  'api.error.moduleRequired': 'A new instance must say which module it is',
   'api.error.idRequired': 'id is required',
   'api.error.categoryRequired': 'category is required',
   'api.error.selectedMustBeArray': 'selected must be a list',
@@ -276,6 +311,13 @@ export default {
      The server stores {key, params} and renders these here, so the same row reads
      in whichever language is active when it is opened. Rows written before this
      change carry literal text instead and still display it. */
+  /* The wording a module gets when it declares none of its own. ActivoBank and
+     Pricempire keep their named keys below, because "ActivoBank sync" reads
+     better in a notification list than "activobank: sync". */
+  'notify.sync.module.title': '{module} sync',
+  'notify.sync.module.body': '{imported} new movements from {files} file(s)',
+  'notify.module.unparsed.title': '{module}: some lines could not be read',
+  'notify.module.unparsed.body': '{count} document(s) had lines the parser did not recognise — {detail}',
   'notify.sync.activobank.title': 'ActivoBank sync',
   'notify.sync.activobank.body': '{imported} new movements from {files} file(s)',
   'notify.sync.activobankFailed.title': 'ActivoBank sync failed',
