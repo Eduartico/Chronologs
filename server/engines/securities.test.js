@@ -8,7 +8,7 @@ import {
   computeSecurityPositions,
   computeSecuritySummary,
 } from './securities.js';
-import { parseComprovativoText } from '../ingestion/activobank/parsers/comprovativo.js';
+import { parseComprovativoText } from '../../modules/activobank/parsers/comprovativo.js';
 
 // Taken from a real ComprovativoOperacao PDF: pdf-parse renders the two-column
 // form with labels glued to their values.

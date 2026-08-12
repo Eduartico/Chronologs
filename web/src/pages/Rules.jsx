@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useT } from '../i18n/index.js';
+import { fetchModules } from '../modules/registry.js';
 import { api, errText } from '../lib/api.js';
 import { formatDate } from '../lib/format.js';
 import Icon from '../components/Icon.jsx';
@@ -33,7 +34,23 @@ const EMPTY_RULE = {
   actions: { setCategory: '', addTags: [] },
 };
 
-const SOURCES = ['activobank', 'pricempire', 'manual'];
+/**
+ * Where a movement came from, as the rule editor offers it.
+ *
+ * Read from what is installed rather than written down: a fork with a different
+ * bank had a source filter listing two providers it does not have and not the
+ * one it does. `manual` is always there — it is the app itself, not a module.
+ */
+function useSources() {
+  const [sources, setSources] = useState(['manual']);
+  useEffect(() => {
+    fetchModules().then(({ instances }) => {
+      const ids = instances.filter((i) => i.kind === 'source' || i.missing).map((i) => i.id);
+      setSources([...new Set([...ids, 'manual'])]);
+    });
+  }, []);
+  return sources;
+}
 
 function cleanRule(draft) {
   const c = draft.conditions;
@@ -99,6 +116,7 @@ function describeConditions(rule) {
 
 export default function Rules() {
   const { t, tx } = useT();
+  const sources = useSources();
   const [rules, setRules] = useState([]);
   const [tags, setTags] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -411,7 +429,7 @@ export default function Rules() {
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-muted)' }}>{t('rules.sources')}</span>
-              {SOURCES.map((s) => (
+              {sources.map((s) => (
                 <label key={s} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
                   <input
                     type="checkbox"

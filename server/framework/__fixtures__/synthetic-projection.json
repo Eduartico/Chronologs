@@ -1,0 +1,1862 @@
+{
+  "accountHolders": [
+    "MARIA EXEMPLO SANTOS"
+  ],
+  "accounts": [
+    {
+      "firstDate": "2025-03-03",
+      "holder": "MARIA EXEMPLO SANTOS",
+      "id": "11100011100",
+      "kind": "current",
+      "labels": [
+        "CONTA SIMPLES"
+      ],
+      "lastBalance": 3110.4,
+      "lastBalanceDate": "2025-05-06",
+      "lastDate": "2025-05-06",
+      "name": "CONTA SIMPLES",
+      "primary": true,
+      "source": "activobank",
+      "transactions": 12
+    },
+    {
+      "firstDate": "2025-03-10",
+      "holder": "MARIA EXEMPLO SANTOS",
+      "id": "22200022200",
+      "kind": "savings",
+      "labels": [
+        "CONTA POUPEUP"
+      ],
+      "lastBalance": 251.25,
+      "lastBalanceDate": "2025-06-30",
+      "lastDate": "2025-06-30",
+      "name": "CONTA POUPEUP",
+      "primary": false,
+      "source": "activobank",
+      "transactions": 5
+    }
+  ],
+  "assetSnapshots": [
+    {
+      "date": "2025-05-20",
+      "items": [
+        {
+          "currency": "EUR",
+          "name": "Example Skin | Factory New",
+          "price": 91.5,
+          "quantity": 1,
+          "source": "pricempire",
+          "type": "cs2_skin",
+          "value": 91.5
+        }
+      ],
+      "provider": "pricempire",
+      "raw": {
+        "hash": "hash-34",
+        "id": "ev-034",
+        "linked_entities": [],
+        "payload": {
+          "date": "2025-05-20",
+          "items": [
+            {
+              "currency": "EUR",
+              "name": "Example Skin | Factory New",
+              "price": 91.5,
+              "quantity": 1,
+              "source": "pricempire",
+              "type": "cs2_skin",
+              "value": 91.5
+            }
+          ],
+          "provider": "pricempire"
+        },
+        "source": "pricempire",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "asset_snapshot"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "class": "cs2_skin",
+      "costBasis": 84.3,
+      "currency": "EUR",
+      "currentValue": 91.5,
+      "lastPrice": 91.5,
+      "lastPriceDate": "2025-05-20",
+      "name": "Example Skin | Factory New",
+      "portfolioId": "portfolio-1",
+      "purchaseValue": 84.3,
+      "quantity": 1,
+      "source": "pricempire",
+      "symbol": "Example Skin | Factory New",
+      "type": "cs2_skin"
+    }
+  ],
+  "categoryMap": {
+    "tx-atm": "cash withdrawal",
+    "tx-groceries": "groceries",
+    "tx-restaurant": "dining",
+    "tx-vault-deposit-current": "internal transfer",
+    "tx-vault-deposit-savings": "internal transfer",
+    "tx-vault-second": "internal transfer",
+    "tx-vault-second-savings": "internal transfer",
+    "tx-vault-second-truncated": "internal transfer",
+    "tx-vault-second-truncated-savings": "internal transfer",
+    "tx-vault-withdrawal-current": "internal transfer",
+    "tx-vault-withdrawal-savings": "internal transfer"
+  },
+  "internalMovements": [
+    {
+      "amount": 300,
+      "currentId": "tx-vault-deposit-current",
+      "date": "2025-03-10",
+      "description": "TRF P/ PoupeUp - Mealheiro",
+      "direction": "deposit",
+      "mirrorId": "tx-vault-deposit-savings",
+      "singleEntry": false,
+      "vault": "Mealheiro"
+    },
+    {
+      "amount": 150,
+      "currentId": "tx-vault-withdrawal-current",
+      "date": "2025-04-02",
+      "description": "TRF DE PoupeUp - Mealheiro",
+      "direction": "withdrawal",
+      "mirrorId": "tx-vault-withdrawal-savings",
+      "singleEntry": false,
+      "vault": "Mealheiro"
+    },
+    {
+      "amount": 75,
+      "currentId": "tx-vault-second",
+      "date": "2025-04-05",
+      "description": "TRF P/ PoupeUp - Fundo de Emergencia",
+      "direction": "deposit",
+      "mirrorId": "tx-vault-second-savings",
+      "singleEntry": false,
+      "vault": "Fundo de Emergencia"
+    },
+    {
+      "amount": 25,
+      "currentId": "tx-vault-second-truncated",
+      "date": "2025-05-06",
+      "description": "TRF P/ PoupeUp - Fundo de Emergen",
+      "direction": "deposit",
+      "mirrorId": "tx-vault-second-truncated-savings",
+      "singleEntry": false,
+      "vault": "Fundo de Emergen"
+    }
+  ],
+  "investments": [
+    {
+      "currency": "USD",
+      "date": "2025-05-02",
+      "feeAmount": 1.2,
+      "feePercentage": 1.4,
+      "id": "inv-1",
+      "marketplace": "Example Market",
+      "name": "Example Skin | Factory New",
+      "quantity": 1,
+      "source": "pricempire",
+      "totalPrice": 84.3,
+      "type": "buy",
+      "unitPrice": 84.3
+    }
+  ],
+  "linksByTransaction": {
+    "pricempire-2025-05-02-deadbeef": [
+      {
+        "linkId": "link-1",
+        "note": "synthetic correlation",
+        "ruleId": "corr-1",
+        "transactionIds": [
+          "tx-security-debit",
+          "pricempire-2025-05-02-deadbeef"
+        ]
+      }
+    ],
+    "tx-security-debit": [
+      {
+        "linkId": "link-1",
+        "note": "synthetic correlation",
+        "ruleId": "corr-1",
+        "transactionIds": [
+          "tx-security-debit",
+          "pricempire-2025-05-02-deadbeef"
+        ]
+      }
+    ]
+  },
+  "overrides": {
+    "tx-restaurant": {
+      "new": "dining",
+      "original": "groceries"
+    }
+  },
+  "priceEvents": [
+    {
+      "hash": "hash-33",
+      "id": "ev-033",
+      "linked_entities": [],
+      "payload": {
+        "currency": "EUR",
+        "price": 91.5,
+        "symbol": "Example Skin | Factory New",
+        "timestamp": "2025-05-20"
+      },
+      "source": "pricempire",
+      "timestamp": "2026-01-01T00:00:00.000Z",
+      "type": "price_update"
+    }
+  ],
+  "priceMap": {
+    "Example Skin | Factory New": {
+      "currency": "EUR",
+      "price": 91.5,
+      "symbol": "Example Skin | Factory New",
+      "timestamp": "2025-05-20"
+    }
+  },
+  "securityOrders": [
+    {
+      "currency": "EUR",
+      "date": "2025-04-15",
+      "executed": true,
+      "market": "EURONEXT",
+      "price": 92.15,
+      "quantity": 4,
+      "quote": 92.15,
+      "security": "ISHARES CORE MSCI WORLD",
+      "security_order_id": "order-2025-04-15-abc123",
+      "side": "buy",
+      "source": "activobank"
+    }
+  ],
+  "spendingTransactions": [
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -45.2,
+      "balance": 1954.8,
+      "category": "groceries",
+      "currency": "EUR",
+      "date": "2025-03-03",
+      "description": "COMPRA 0412 CONTINENTE PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-001",
+      "id": "tx-groceries",
+      "links": [],
+      "merchant": "CONTINENTE",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-1",
+        "id": "ev-001",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -45.2,
+          "balance": 1954.8,
+          "currency": "EUR",
+          "date": "2025-03-03",
+          "description": "COMPRA 0412 CONTINENTE PORTO PT",
+          "merchant": "CONTINENTE",
+          "transaction_id": "tx-groceries"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-001"
+      ],
+      "status": "categorized",
+      "tags": [
+        "tag-essential"
+      ],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": 1800,
+      "balance": 3754.8,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-03-05",
+      "description": "TRF DE EMPRESA EXEMPLO LDA",
+      "duplicateOf": null,
+      "eventId": "ev-002",
+      "id": "tx-salary",
+      "links": [],
+      "merchant": "EMPRESA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-2",
+        "id": "ev-002",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": 1800,
+          "balance": 3754.8,
+          "currency": "EUR",
+          "date": "2025-03-05",
+          "description": "TRF DE EMPRESA EXEMPLO LDA",
+          "merchant": "EMPRESA EXEMPLO",
+          "transaction_id": "tx-salary"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-002"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": 1.25,
+      "balance": 251.25,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-06-30",
+      "description": "JUROS CREDITADOS",
+      "duplicateOf": null,
+      "eventId": "ev-011",
+      "id": "tx-savings-interest",
+      "links": [],
+      "merchant": "JUROS",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-11",
+        "id": "ev-011",
+        "linked_entities": [
+          {
+            "id": "batch-jun/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": 1.25,
+          "balance": 251.25,
+          "currency": "EUR",
+          "date": "2025-06-30",
+          "description": "JUROS CREDITADOS",
+          "merchant": "JUROS",
+          "transaction_id": "tx-savings-interest"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-011"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -60,
+      "balance": 3394.8,
+      "category": "cash withdrawal",
+      "currency": "EUR",
+      "date": "2025-03-12",
+      "description": "LEV ATM 4821 PORTO",
+      "duplicateOf": null,
+      "eventId": "ev-012",
+      "id": "tx-atm",
+      "links": [],
+      "merchant": "ATM",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-12",
+        "id": "ev-012",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -60,
+          "balance": 3394.8,
+          "currency": "EUR",
+          "date": "2025-03-12",
+          "description": "LEV ATM 4821 PORTO",
+          "merchant": "ATM",
+          "transaction_id": "tx-atm"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-012"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -32.5,
+      "balance": 3362.3,
+      "category": "dining",
+      "currency": "EUR",
+      "date": "2025-03-18",
+      "description": "COMPRA 0412 RESTAURANTE EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-013",
+      "id": "tx-restaurant",
+      "links": [],
+      "merchant": "RESTAURANTE EXEMPLO",
+      "originalCategory": "groceries",
+      "overridden": true,
+      "raw": {
+        "hash": "hash-13",
+        "id": "ev-013",
+        "linked_entities": [
+          {
+            "id": "batch-mar/NOTA.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "amount": -32.5,
+          "currency": "EUR",
+          "date": "2025-03-18",
+          "description": "COMPRA 0412 RESTAURANTE EXEMPLO PORTO PT",
+          "merchant": "RESTAURANTE EXEMPLO",
+          "transaction_id": "tx-restaurant"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [
+        "tag-leisure"
+      ],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-013",
+        "ev-014"
+      ],
+      "status": "overridden",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -12.4,
+      "balance": 3349.9,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-03-20",
+      "description": "COMPRA 0412 FARMACIA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-015",
+      "id": "tx-unattributed",
+      "links": [],
+      "merchant": "FARMACIA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-15",
+        "id": "ev-015",
+        "linked_entities": [
+          {
+            "id": "batch-mar/NOTA.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "amount": -12.4,
+          "currency": "EUR",
+          "date": "2025-03-20",
+          "description": "COMPRA 0412 FARMACIA EXEMPLO PORTO PT",
+          "merchant": "FARMACIA EXEMPLO",
+          "transaction_id": "tx-unattributed"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-015"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -19.99,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-10",
+      "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-017",
+      "id": "tx-duplicate-original",
+      "links": [],
+      "merchant": "LOJA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-17",
+        "id": "ev-017",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -19.99,
+          "currency": "EUR",
+          "date": "2025-04-10",
+          "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+          "merchant": "LOJA EXEMPLO",
+          "transaction_id": "tx-duplicate-original"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-017"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -3.6,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-11",
+      "description": "COMPRA 0412 PADARIA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-020",
+      "id": "tx-wrongly-voided",
+      "links": [],
+      "merchant": "PADARIA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-20",
+        "id": "ev-020",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -3.6,
+          "currency": "EUR",
+          "date": "2025-04-11",
+          "description": "COMPRA 0412 PADARIA EXEMPLO PORTO PT",
+          "merchant": "PADARIA EXEMPLO",
+          "transaction_id": "tx-wrongly-voided"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-020"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -368.6,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-15",
+      "description": "COMPRA TITULOS BOLSA",
+      "duplicateOf": null,
+      "eventId": "ev-031",
+      "id": "tx-security-debit",
+      "links": [
+        {
+          "linkId": "link-1",
+          "note": "synthetic correlation",
+          "ruleId": "corr-1",
+          "transactionIds": [
+            "tx-security-debit",
+            "pricempire-2025-05-02-deadbeef"
+          ]
+        }
+      ],
+      "merchant": "BOLSA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-31",
+        "id": "ev-031",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -368.6,
+          "currency": "EUR",
+          "date": "2025-04-15",
+          "description": "COMPRA TITULOS BOLSA",
+          "merchant": "BOLSA",
+          "transaction_id": "tx-security-debit"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-031"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": null,
+      "accountHolder": null,
+      "accountId": null,
+      "amortize": null,
+      "amount": -84.3,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-05-02",
+      "description": "Buy 1x Example Skin | Factory New",
+      "duplicateOf": null,
+      "eventId": "ev-032",
+      "id": "pricempire-2025-05-02-deadbeef",
+      "links": [
+        {
+          "linkId": "link-1",
+          "note": "synthetic correlation",
+          "ruleId": "corr-1",
+          "transactionIds": [
+            "tx-security-debit",
+            "pricempire-2025-05-02-deadbeef"
+          ]
+        }
+      ],
+      "merchant": "pricempire",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-32",
+        "id": "ev-032",
+        "linked_entities": [],
+        "payload": {
+          "amount": -84.3,
+          "currency": "EUR",
+          "date": "2025-05-02",
+          "description": "Buy 1x Example Skin | Factory New",
+          "merchant": "pricempire",
+          "portfolio_id": "portfolio-1",
+          "source": "pricempire",
+          "transaction_id": "pricempire-2025-05-02-deadbeef"
+        },
+        "source": "pricempire",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "pricempire",
+      "sourceEventIds": [
+        "ev-032"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    }
+  ],
+  "tagsByTransaction": {
+    "tx-groceries": [
+      "tag-essential"
+    ],
+    "tx-restaurant": []
+  },
+  "transactions": [
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -45.2,
+      "balance": 1954.8,
+      "category": "groceries",
+      "currency": "EUR",
+      "date": "2025-03-03",
+      "description": "COMPRA 0412 CONTINENTE PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-001",
+      "id": "tx-groceries",
+      "links": [],
+      "merchant": "CONTINENTE",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-1",
+        "id": "ev-001",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -45.2,
+          "balance": 1954.8,
+          "currency": "EUR",
+          "date": "2025-03-03",
+          "description": "COMPRA 0412 CONTINENTE PORTO PT",
+          "merchant": "CONTINENTE",
+          "transaction_id": "tx-groceries"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-001"
+      ],
+      "status": "categorized",
+      "tags": [
+        "tag-essential"
+      ],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": 1800,
+      "balance": 3754.8,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-03-05",
+      "description": "TRF DE EMPRESA EXEMPLO LDA",
+      "duplicateOf": null,
+      "eventId": "ev-002",
+      "id": "tx-salary",
+      "links": [],
+      "merchant": "EMPRESA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-2",
+        "id": "ev-002",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": 1800,
+          "balance": 3754.8,
+          "currency": "EUR",
+          "date": "2025-03-05",
+          "description": "TRF DE EMPRESA EXEMPLO LDA",
+          "merchant": "EMPRESA EXEMPLO",
+          "transaction_id": "tx-salary"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-002"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -300,
+      "balance": 3454.8,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-03-10",
+      "description": "TRF P/ PoupeUp - Mealheiro",
+      "duplicateOf": null,
+      "eventId": "ev-003",
+      "id": "tx-vault-deposit-current",
+      "internal": true,
+      "links": [],
+      "merchant": "POUPEUP",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-3",
+        "id": "ev-003",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -300,
+          "balance": 3454.8,
+          "currency": "EUR",
+          "date": "2025-03-10",
+          "description": "TRF P/ PoupeUp - Mealheiro",
+          "merchant": "POUPEUP",
+          "transaction_id": "tx-vault-deposit-current"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": false,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-003"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": 300,
+      "balance": 300,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-03-10",
+      "description": "TRF DE MARIA EXEMPLO SANTOS",
+      "duplicateOf": null,
+      "eventId": "ev-004",
+      "id": "tx-vault-deposit-savings",
+      "internal": true,
+      "links": [],
+      "merchant": "TRANSFERENCIA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-4",
+        "id": "ev-004",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": 300,
+          "balance": 300,
+          "currency": "EUR",
+          "date": "2025-03-10",
+          "description": "TRF DE MARIA EXEMPLO SANTOS",
+          "merchant": "TRANSFERENCIA",
+          "transaction_id": "tx-vault-deposit-savings"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": true,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-004"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": 150,
+      "balance": 3210.4,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-04-02",
+      "description": "TRF DE PoupeUp - Mealheiro",
+      "duplicateOf": null,
+      "eventId": "ev-005",
+      "id": "tx-vault-withdrawal-current",
+      "internal": true,
+      "links": [],
+      "merchant": "POUPEUP",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-5",
+        "id": "ev-005",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": 150,
+          "balance": 3210.4,
+          "currency": "EUR",
+          "date": "2025-04-02",
+          "description": "TRF DE PoupeUp - Mealheiro",
+          "merchant": "POUPEUP",
+          "transaction_id": "tx-vault-withdrawal-current"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": false,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-005"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": -150,
+      "balance": 150,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-04-02",
+      "description": "TRF P/ MARIA EXEMPLO SANTOS",
+      "duplicateOf": null,
+      "eventId": "ev-006",
+      "id": "tx-vault-withdrawal-savings",
+      "internal": true,
+      "links": [],
+      "merchant": "TRANSFERENCIA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-6",
+        "id": "ev-006",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": -150,
+          "balance": 150,
+          "currency": "EUR",
+          "date": "2025-04-02",
+          "description": "TRF P/ MARIA EXEMPLO SANTOS",
+          "merchant": "TRANSFERENCIA",
+          "transaction_id": "tx-vault-withdrawal-savings"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": true,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-006"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -75,
+      "balance": 3135.4,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-04-05",
+      "description": "TRF P/ PoupeUp - Fundo de Emergencia",
+      "duplicateOf": null,
+      "eventId": "ev-007",
+      "id": "tx-vault-second",
+      "internal": true,
+      "links": [],
+      "merchant": "POUPEUP",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-7",
+        "id": "ev-007",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -75,
+          "balance": 3135.4,
+          "currency": "EUR",
+          "date": "2025-04-05",
+          "description": "TRF P/ PoupeUp - Fundo de Emergencia",
+          "merchant": "POUPEUP",
+          "transaction_id": "tx-vault-second"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": false,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-007"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -25,
+      "balance": 3110.4,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-05-06",
+      "description": "TRF P/ PoupeUp - Fundo de Emergen",
+      "duplicateOf": null,
+      "eventId": "ev-008",
+      "id": "tx-vault-second-truncated",
+      "internal": true,
+      "links": [],
+      "merchant": "POUPEUP",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-8",
+        "id": "ev-008",
+        "linked_entities": [
+          {
+            "id": "batch-mai/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -25,
+          "balance": 3110.4,
+          "currency": "EUR",
+          "date": "2025-05-06",
+          "description": "TRF P/ PoupeUp - Fundo de Emergen",
+          "merchant": "POUPEUP",
+          "transaction_id": "tx-vault-second-truncated"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": false,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-008"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": 75,
+      "balance": 225,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-04-05",
+      "description": "TRF DE MARIA EXEMPLO SANTOS",
+      "duplicateOf": null,
+      "eventId": "ev-009",
+      "id": "tx-vault-second-savings",
+      "internal": true,
+      "links": [],
+      "merchant": "TRANSFERENCIA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-9",
+        "id": "ev-009",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": 75,
+          "balance": 225,
+          "currency": "EUR",
+          "date": "2025-04-05",
+          "description": "TRF DE MARIA EXEMPLO SANTOS",
+          "merchant": "TRANSFERENCIA",
+          "transaction_id": "tx-vault-second-savings"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": true,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-009"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": 25,
+      "balance": 250,
+      "category": "internal transfer",
+      "currency": "EUR",
+      "date": "2025-05-06",
+      "description": "TRF DE MARIA EXEMPLO SANTOS",
+      "duplicateOf": null,
+      "eventId": "ev-010",
+      "id": "tx-vault-second-truncated-savings",
+      "internal": true,
+      "links": [],
+      "merchant": "TRANSFERENCIA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-10",
+        "id": "ev-010",
+        "linked_entities": [
+          {
+            "id": "batch-mai/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": 25,
+          "balance": 250,
+          "currency": "EUR",
+          "date": "2025-05-06",
+          "description": "TRF DE MARIA EXEMPLO SANTOS",
+          "merchant": "TRANSFERENCIA",
+          "transaction_id": "tx-vault-second-truncated-savings"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "redundant": true,
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-010"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA POUPEUP",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "22200022200",
+      "amortize": null,
+      "amount": 1.25,
+      "balance": 251.25,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-06-30",
+      "description": "JUROS CREDITADOS",
+      "duplicateOf": null,
+      "eventId": "ev-011",
+      "id": "tx-savings-interest",
+      "links": [],
+      "merchant": "JUROS",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-11",
+        "id": "ev-011",
+        "linked_entities": [
+          {
+            "id": "batch-jun/EXTRATO-POUPEUP.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA POUPEUP",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "22200022200",
+          "amount": 1.25,
+          "balance": 251.25,
+          "currency": "EUR",
+          "date": "2025-06-30",
+          "description": "JUROS CREDITADOS",
+          "merchant": "JUROS",
+          "transaction_id": "tx-savings-interest"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-011"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -60,
+      "balance": 3394.8,
+      "category": "cash withdrawal",
+      "currency": "EUR",
+      "date": "2025-03-12",
+      "description": "LEV ATM 4821 PORTO",
+      "duplicateOf": null,
+      "eventId": "ev-012",
+      "id": "tx-atm",
+      "links": [],
+      "merchant": "ATM",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-12",
+        "id": "ev-012",
+        "linked_entities": [
+          {
+            "id": "batch-mar/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -60,
+          "balance": 3394.8,
+          "currency": "EUR",
+          "date": "2025-03-12",
+          "description": "LEV ATM 4821 PORTO",
+          "merchant": "ATM",
+          "transaction_id": "tx-atm"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-012"
+      ],
+      "status": "categorized",
+      "systemCategorized": true,
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -32.5,
+      "balance": 3362.3,
+      "category": "dining",
+      "currency": "EUR",
+      "date": "2025-03-18",
+      "description": "COMPRA 0412 RESTAURANTE EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-013",
+      "id": "tx-restaurant",
+      "links": [],
+      "merchant": "RESTAURANTE EXEMPLO",
+      "originalCategory": "groceries",
+      "overridden": true,
+      "raw": {
+        "hash": "hash-13",
+        "id": "ev-013",
+        "linked_entities": [
+          {
+            "id": "batch-mar/NOTA.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "amount": -32.5,
+          "currency": "EUR",
+          "date": "2025-03-18",
+          "description": "COMPRA 0412 RESTAURANTE EXEMPLO PORTO PT",
+          "merchant": "RESTAURANTE EXEMPLO",
+          "transaction_id": "tx-restaurant"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [
+        "tag-leisure"
+      ],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-013",
+        "ev-014"
+      ],
+      "status": "overridden",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -12.4,
+      "balance": 3349.9,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-03-20",
+      "description": "COMPRA 0412 FARMACIA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-015",
+      "id": "tx-unattributed",
+      "links": [],
+      "merchant": "FARMACIA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-15",
+        "id": "ev-015",
+        "linked_entities": [
+          {
+            "id": "batch-mar/NOTA.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "amount": -12.4,
+          "currency": "EUR",
+          "date": "2025-03-20",
+          "description": "COMPRA 0412 FARMACIA EXEMPLO PORTO PT",
+          "merchant": "FARMACIA EXEMPLO",
+          "transaction_id": "tx-unattributed"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-015"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -19.99,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-10",
+      "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-017",
+      "id": "tx-duplicate-original",
+      "links": [],
+      "merchant": "LOJA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-17",
+        "id": "ev-017",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -19.99,
+          "currency": "EUR",
+          "date": "2025-04-10",
+          "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+          "merchant": "LOJA EXEMPLO",
+          "transaction_id": "tx-duplicate-original"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-017"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -3.6,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-11",
+      "description": "COMPRA 0412 PADARIA EXEMPLO PORTO PT",
+      "duplicateOf": null,
+      "eventId": "ev-020",
+      "id": "tx-wrongly-voided",
+      "links": [],
+      "merchant": "PADARIA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-20",
+        "id": "ev-020",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -3.6,
+          "currency": "EUR",
+          "date": "2025-04-11",
+          "description": "COMPRA 0412 PADARIA EXEMPLO PORTO PT",
+          "merchant": "PADARIA EXEMPLO",
+          "transaction_id": "tx-wrongly-voided"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-020"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -368.6,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-15",
+      "description": "COMPRA TITULOS BOLSA",
+      "duplicateOf": null,
+      "eventId": "ev-031",
+      "id": "tx-security-debit",
+      "links": [
+        {
+          "linkId": "link-1",
+          "note": "synthetic correlation",
+          "ruleId": "corr-1",
+          "transactionIds": [
+            "tx-security-debit",
+            "pricempire-2025-05-02-deadbeef"
+          ]
+        }
+      ],
+      "merchant": "BOLSA",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-31",
+        "id": "ev-031",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -368.6,
+          "currency": "EUR",
+          "date": "2025-04-15",
+          "description": "COMPRA TITULOS BOLSA",
+          "merchant": "BOLSA",
+          "transaction_id": "tx-security-debit"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-031"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    },
+    {
+      "account": null,
+      "accountHolder": null,
+      "accountId": null,
+      "amortize": null,
+      "amount": -84.3,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-05-02",
+      "description": "Buy 1x Example Skin | Factory New",
+      "duplicateOf": null,
+      "eventId": "ev-032",
+      "id": "pricempire-2025-05-02-deadbeef",
+      "links": [
+        {
+          "linkId": "link-1",
+          "note": "synthetic correlation",
+          "ruleId": "corr-1",
+          "transactionIds": [
+            "tx-security-debit",
+            "pricempire-2025-05-02-deadbeef"
+          ]
+        }
+      ],
+      "merchant": "pricempire",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-32",
+        "id": "ev-032",
+        "linked_entities": [],
+        "payload": {
+          "amount": -84.3,
+          "currency": "EUR",
+          "date": "2025-05-02",
+          "description": "Buy 1x Example Skin | Factory New",
+          "merchant": "pricempire",
+          "portfolio_id": "portfolio-1",
+          "source": "pricempire",
+          "transaction_id": "pricempire-2025-05-02-deadbeef"
+        },
+        "source": "pricempire",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "pricempire",
+      "sourceEventIds": [
+        "ev-032"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": null,
+      "voided": false
+    }
+  ],
+  "vaultReconciliation": {
+    "balanced": true,
+    "computed": 250,
+    "interest": 1.25,
+    "statementBalance": 251.25,
+    "statementDate": "2025-06-30",
+    "unaccounted": 0
+  },
+  "vaultTotal": 250,
+  "vaults": [
+    {
+      "balance": 150,
+      "deposited": 300,
+      "estimated": false,
+      "lastMovement": "2025-04-02",
+      "movements": 2,
+      "settled": 0,
+      "settledWith": [],
+      "short": false,
+      "unnamed": false,
+      "vault": "Mealheiro",
+      "withdrawn": 150
+    },
+    {
+      "balance": 100,
+      "deposited": 100,
+      "estimated": false,
+      "lastMovement": "2025-05-06",
+      "movements": 2,
+      "settled": 0,
+      "settledWith": [],
+      "short": false,
+      "unnamed": false,
+      "vault": "Fundo de Emergencia",
+      "withdrawn": 0
+    }
+  ],
+  "vaultsNeedAttribution": false,
+  "voidedTransactions": [
+    {
+      "account": "CONTA SIMPLES",
+      "accountHolder": "MARIA EXEMPLO SANTOS",
+      "accountId": "11100011100",
+      "amortize": null,
+      "amount": -19.99,
+      "balance": null,
+      "category": "uncategorized",
+      "currency": "EUR",
+      "date": "2025-04-10",
+      "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+      "duplicateOf": "tx-duplicate-original",
+      "eventId": "ev-018",
+      "id": "tx-duplicate-copy",
+      "links": [],
+      "merchant": "LOJA EXEMPLO",
+      "originalCategory": null,
+      "overridden": false,
+      "raw": {
+        "hash": "hash-18",
+        "id": "ev-018",
+        "linked_entities": [
+          {
+            "id": "batch-abr/EXTRATO-REENVIO.pdf",
+            "type": "document"
+          }
+        ],
+        "payload": {
+          "account": "CONTA SIMPLES",
+          "account_holder": "MARIA EXEMPLO SANTOS",
+          "account_id": "11100011100",
+          "amount": -19.99,
+          "currency": "EUR",
+          "date": "2025-04-10",
+          "description": "COMPRA 0412 LOJA EXEMPLO PORTO PT",
+          "merchant": "LOJA EXEMPLO",
+          "transaction_id": "tx-duplicate-copy"
+        },
+        "source": "activobank",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "type": "transaction"
+      },
+      "removedTags": [],
+      "source": "activobank",
+      "sourceEventIds": [
+        "ev-018"
+      ],
+      "status": "pending",
+      "tags": [],
+      "voidReason": "duplicate",
+      "voided": true
+    }
+  ]
+}

@@ -9,8 +9,11 @@
     "web": "cd web && npx vite",
     "start": "node server/index.js",
     "build": "cd web && npx vite build",
-    "test": "node scripts/validate_palette.js && node --test \"server/**/*.test.js\" \"web/src/lib/**/*.test.js\"",
-    "lint:i18n": "node scripts/find_untranslated.js"
+    "test": "node scripts/validate_palette.js && node --test \"server/**/*.test.js\" \"web/src/lib/**/*.test.js\" \"modules/**/*.test.js\"",
+    "lint:i18n": "node scripts/find_untranslated.js",
+    "snapshot:baseline": "node scripts/snapshot_baseline.js",
+    "snapshot:verify": "node scripts/verify_baseline.js",
+    "new:module": "node scripts/new_module.js"
   },
   "dependencies": {
     "concurrently": "^9.0.0",

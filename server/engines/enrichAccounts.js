@@ -11,55 +11,62 @@
  *
  * Matching is by transaction id, which is derived from date, amount and
  * description and therefore identical between the old parse and the new one.
+ *
+ * Nothing calls this. It was run by hand once, against the ledger it was written
+ * for, and its output is already in there — the `transaction_enrichment` events
+ * the projection overlays. It is kept because the same situation recurs every
+ * time a parser learns to read a field it used to miss, and rebuilding it from
+ * memory then would be worse than keeping it working now. `dryRun: true` reports
+ * what it would append without appending anything.
  */
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { basename } from 'path';
+import { readFileSync } from 'fs';
 import { createEvent, loadLedgerIndex, appendIfNewIndexed } from '../ledger/eventStore.js';
-import { documentsPath } from '../lib/paths.js';
-import { parsePdf } from '../ingestion/activobank/parsers/pdf.js';
-import { normalizeTransactions } from '../ingestion/activobank/normalize.js';
+import { createContext } from '../framework/context.js';
+import { storedDocuments } from '../framework/kits/documentBank.js';
+import { sourceInstances, invoke, supports } from '../framework/registry.js';
 
 const ENRICHED_FIELDS = ['account', 'account_id', 'account_holder', 'balance'];
 
-function storedDocuments() {
-  const files = [];
-  for (const stage of ['processed', 'inbox']) {
-    const root = documentsPath('activobank', stage);
-    if (!existsSync(root)) continue;
-    for (const batch of readdirSync(root, { withFileTypes: true })) {
-      if (!batch.isDirectory()) continue;
-      const batchDir = join(root, batch.name);
-      for (const entry of readdirSync(batchDir, { withFileTypes: true })) {
-        if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) {
-          files.push(join(batchDir, entry.name));
-        }
-      }
-    }
-  }
-  return files;
-}
-
-/** The account facts a fresh parse of the stored documents can supply. */
+/**
+ * The account facts a fresh parse of the stored documents can supply.
+ *
+ * Every instance that can re-read a document is asked to, rather than one bank
+ * being named here: on a fork with two banks, the second one's statements carry
+ * exactly the same kind of fact and would otherwise never be backfilled.
+ *
+ * Only PDFs: the account header the statement prints is what carries the number
+ * and the holder, and the CSV and mail-body formats have no such header.
+ */
 export async function readAccountFacts() {
   const facts = new Map();
   const errors = [];
 
-  for (const path of storedDocuments()) {
-    try {
-      const parsed = await parsePdf(readFileSync(path));
-      for (const tx of normalizeTransactions(parsed.transactions || [])) {
-        const fact = {};
-        for (const field of ENRICHED_FIELDS) {
-          if (tx[field] != null) fact[field] = tx[field];
+  for (const instance of await sourceInstances({ includeDisabled: true })) {
+    if (!(await supports(instance.id, 'parseDocument'))) continue;
+    const ctx = createContext(instance);
+
+    for (const path of storedDocuments(ctx, { extensions: ['.pdf'] })) {
+      try {
+        const parsed = await invoke(instance.id, 'parseDocument', {
+          filename: basename(path),
+          buffer: readFileSync(path),
+          date: null,
+        });
+        for (const tx of parsed.transactions || []) {
+          const fact = {};
+          for (const field of ENRICHED_FIELDS) {
+            if (tx[field] != null) fact[field] = tx[field];
+          }
+          if (!Object.keys(fact).length) continue;
+          // A movement can appear in several documents; the first reading of
+          // each fact wins, and later documents only fill in what was missing.
+          const existing = facts.get(tx.transaction_id);
+          facts.set(tx.transaction_id, existing ? { ...fact, ...existing } : fact);
         }
-        if (!Object.keys(fact).length) continue;
-        // A movement can appear in several documents; the first reading of each
-        // fact wins, and later documents only fill in what was missing.
-        const existing = facts.get(tx.transaction_id);
-        facts.set(tx.transaction_id, existing ? { ...fact, ...existing } : fact);
+      } catch (err) {
+        errors.push(`${basename(path)}: ${err.message}`);
       }
-    } catch (err) {
-      errors.push(`${path.split(/[\\/]/).pop()}: ${err.message}`);
     }
   }
 

@@ -1,8 +1,9 @@
 # Chronologs
 
-Personal finance tracker. React/Vite frontend (`web/`), Express backend
-(`server/`), event-sourced ledger on disk — no database. Single user
-(Eduardo), PT-PT.
+Personal finance tracker, built as a small core plus modules. React/Vite
+frontend (`web/`), Express backend (`server/`), data sources under `modules/`,
+event-sourced ledger on disk — no database. Configured for one user (Eduardo),
+PT-PT, but the shape is meant to be forked.
 
 **Before making non-trivial changes, check
 `~/.claude/projects/e--Repos-Chronologs/memory/MEMORY.md`** — standing
@@ -25,21 +26,59 @@ overrides, and tag events are separate event types keyed by that same id;
 `rebuild.js` folds the latest of each onto the base transaction. See
 `chronologs-ledger-identity` in memory for the incident this design prevents.
 
+## Modules
+
+A data source is a folder under `modules/`, discovered by globbing
+`modules/*/module.js` at startup. There is no list to register on. Full
+authoring manual in `docs/modules.md`; `modules/example-bank/` is a working
+template with passing tests, and `npm run new:module <id>` copies it.
+
+- A **module** is code; an **instance** is that code pointed at one account.
+  The instance id is written as `source` onto every event it produces, so it is
+  permanent — renaming one orphans its history in an append-only ledger. This
+  is why Eduardo's instances are called `activobank` and `pricempire`.
+- Every capability receives one argument, `ctx`
+  (`server/framework/context.js`). A module never imports `paths.js`,
+  `eventStore.js` or `notify.js` and never writes its own `source` string;
+  `ctx.ledger` stamps it. That is the whole mechanism behind multi-instance.
+- The reusable pipelines are `server/framework/kits/`. `documentBank.js` holds
+  everything a statement-reading bank needs except the parser — batching, the
+  per-instance content-hash gate, the cross-document-kind dedup window, the
+  ledger scan discipline, running the rules. `browserSource.js` does the same
+  for a site with no API. A new bank supplies `fetch` and `parse`.
+- `server/framework/contracts.js` is the contract, and the only place that
+  knows it. `contract.test.js` runs it over every installed module.
+- Built-in engines (rules, correlations, quotes, securities linking) are
+  declared through the same contract in `server/framework/builtins.js`, so the
+  scheduler and the settings table iterate one kind of thing.
+- Routes are generic: `/api/modules/:instance/{sync,upload,reprocess,connect,
+  status,config,action/:name}` in `server/routes/modules.js`. The old
+  per-provider routes in `api.js` still exist as two-line delegations — that is
+  what kept the frontend unchanged, not a coincidence.
+- **Per-instance institution profiles.** Two banks word "money left this
+  account" differently; one profile for the whole ledger meant the second
+  bank's transfers were counted as spending. `compileProfiles` in
+  `engines/accounts.js` resolves per `source`, and `findPrimaryAccounts` finds
+  the everyday account *per institution* — a global winner made the second
+  bank's current account read as savings.
+
 ## Where things live
 
 | Concern | File |
 |---|---|
 | Rule engine v2 (conditions, ordering, stop-processing) | `server/engines/rules.js` |
 | Rule advisor (collapse/shadowed/pattern/anomaly findings) | `server/engines/advisor.js` — see `docs/rules-model.md` |
-| Internal transfers / PoupeUp vaults | `server/engines/accounts.js` — bank-agnostic via `settings.internal.profile`, see `chronologs-institution-agnostic` |
+| Internal transfers / PoupeUp vaults | `server/engines/accounts.js` — one editable profile per bank instance, see `chronologs-institution-agnostic` |
 | Categorization application (writes ledger events) | `server/engines/categorization.js` |
 | Travel detection | `server/engines/travel.js` |
 | Duplicate detection | `server/engines/duplicates.js` |
-| Correlations (ActivoBank ↔ Pricempire matching) | `server/engines/correlation.js` |
+| Correlations (bank ↔ marketplace matching) | `server/engines/correlation.js` |
 | Analytics / dashboard aggregates | `server/engines/analytics.js` |
-| ActivoBank ingestion (Gmail, PDF/CSV parsing) | `server/ingestion/activobank/` |
-| Pricempire ingestion | `server/ingestion/pricempire/` |
-| All HTTP routes | `server/routes/api.js` (one large file, grouped by feature with comment headers) |
+| ActivoBank ingestion (Gmail, PDF/CSV parsing) | `modules/activobank/` |
+| Pricempire ingestion | `modules/pricempire/` |
+| Module contract, registry, `ctx`, kits | `server/framework/` |
+| Generic module routes | `server/routes/modules.js` |
+| All other HTTP routes | `server/routes/api.js` (one large file, grouped by feature with comment headers) |
 | Scheduler (cron-style internal jobs) | `server/lib/scheduler.js` |
 
 `server/config/defaults/*.json` are the shipped defaults (categories,
@@ -176,9 +215,19 @@ calling server-side logic done; `npm run build` before calling a frontend
 change done.
 
 `npm test` runs `scripts/validate_palette.js` first, then the node test
-runner over `server/**/*.test.js` and `web/src/lib/**/*.test.js` — the
-frontend glob is why `theme.test.js`, `contrastInk.test.js` and
-`i18n.test.js` live under `lib/` rather than beside what they test.
+runner over `server/**/*.test.js`, `web/src/lib/**/*.test.js` and
+`modules/**/*.test.js` — the frontend glob is why `theme.test.js`,
+`contrastInk.test.js` and `i18n.test.js` live under `lib/` rather than beside
+what they test.
+
+**`npm run snapshot:verify` before calling any refactor done.** It replays the
+real ledger and re-requests every read-only endpoint, comparing against a
+capture taken with `npm run snapshot:baseline` — 2912 movements and 900-odd
+documents, which is a far stronger statement than any test. Differences that
+are *intended* go in `scripts/accepted-diffs.json` with the reason, rather than
+re-taking the baseline: re-taking it resets the comparison and hides whatever
+drifted alongside. The baseline lives in `user-data/snapshots/` and is
+gitignored, because it is a capture of real money.
 
 A theme or accessibility change needs the browser twice: once on a dark
 theme and once on a light one. Guardian and Calus's Selected are the two

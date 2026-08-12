@@ -166,6 +166,39 @@ export function compileProfile(profile = DEFAULT_PROFILE) {
 
 const DEFAULT_MATCHERS = compileProfile(DEFAULT_PROFILE);
 
+/**
+ * Which institution's wording to read a given movement with.
+ *
+ * One person can bank in two places, and the two do not agree on how to write
+ * "money left this account". Compiling one profile for the whole ledger meant
+ * the second bank's transfers were invisible as internal movements — counted as
+ * real spending, which is the €13.293 bug this file exists to prevent, arriving
+ * by a different door.
+ *
+ * `profiles` is keyed by the `source` on the event, which is the module instance
+ * that ingested it. Compiled once per source here rather than per row: a hot
+ * loop over the whole ledger must not rebuild five regexes on every movement.
+ *
+ * With one bank configured, or none, this resolves to exactly what a single
+ * profile did before.
+ */
+export function compileProfiles(profiles = {}, fallback = DEFAULT_PROFILE) {
+  const bySource = new Map();
+  for (const [source, profile] of Object.entries(profiles)) {
+    bySource.set(source, compileProfile(profile ?? fallback));
+  }
+  const shared = fallback === DEFAULT_PROFILE ? DEFAULT_MATCHERS : compileProfile(fallback);
+  return (tx) => bySource.get(tx?.source) ?? shared;
+}
+
+/** A resolver that answers with the same matchers whatever it is asked. */
+function alwaysMatchers(profileOrResolver) {
+  if (typeof profileOrResolver === 'function') return profileOrResolver;
+  const matchers =
+    profileOrResolver === DEFAULT_PROFILE ? DEFAULT_MATCHERS : compileProfile(profileOrResolver);
+  return () => matchers;
+}
+
 /** The counterparty text of a transfer descriptor, or null if not a transfer. */
 function counterpartyOf(description, matchers = DEFAULT_MATCHERS) {
   const text = String(description || '').trim();
@@ -243,6 +276,31 @@ export function findPrimaryAccount(transactions, keyOf = buildAccountResolver(tr
 }
 
 /**
+ * The everyday account *at each institution*, as a lookup by transaction.
+ *
+ * There is one busiest account per bank, not one in the world. Picking a single
+ * global winner meant that with two banks configured, the second one's current
+ * account was not the primary and so fell through to being classified as
+ * savings — which then made its ordinary payments look like transfers into a
+ * savings product, and its real transfers unpairable. Invisible with one
+ * institution, wrong the moment there are two.
+ */
+export function findPrimaryAccounts(transactions, keyOf = buildAccountResolver(transactions)) {
+  const bySource = new Map();
+  for (const tx of transactions) {
+    const source = tx.source ?? null;
+    if (!bySource.has(source)) bySource.set(source, []);
+    bySource.get(source).push(tx);
+  }
+
+  const primaries = new Map();
+  for (const [source, rows] of bySource) {
+    primaries.set(source, findPrimaryAccount(rows, keyOf));
+  }
+  return (tx) => primaries.get(tx?.source ?? null) ?? null;
+}
+
+/**
  * Classifies a transaction as one leg of an internal movement.
  *
  * Two descriptor shapes qualify. Seen from the current account the counterparty
@@ -295,15 +353,24 @@ export function internalLegOf(
  */
 export function matchInternalTransfers(
   transactions,
-  { selfNames = [], windowDays = 3, profile = DEFAULT_PROFILE } = {}
+  { selfNames = [], windowDays = 3, profile = DEFAULT_PROFILE, profiles = null } = {}
 ) {
-  const matchers = compileProfile(profile);
+  // Legs are still paired across every account, including across two different
+  // banks — a transfer from one to the other is exactly as internal as one
+  // between two accounts at the same bank. Only the *reading* of each descriptor
+  // is per-institution.
+  const matchersFor = profiles ? compileProfiles(profiles, profile) : alwaysMatchers(profile);
   const keyOf = buildAccountResolver(transactions);
-  const primaryAccount = findPrimaryAccount(transactions, keyOf);
+  const primaryFor = findPrimaryAccounts(transactions, keyOf);
 
   const legs = [];
   transactions.forEach((tx, index) => {
-    const leg = internalLegOf(tx, { selfNames, primaryAccount, keyOf, matchers });
+    const leg = internalLegOf(tx, {
+      selfNames,
+      primaryAccount: primaryFor(tx),
+      keyOf,
+      matchers: matchersFor(tx),
+    });
     if (!leg) return;
     const day = dayNumber(dateOf(tx));
     if (day == null) return;
@@ -371,7 +438,9 @@ export function matchInternalTransfers(
   const redundantIds = new Set(savings.filter((l) => claimed.has(l.index)).map((l) => l.tx.id));
 
   movements.sort((a, b) => a.date.localeCompare(b.date));
-  return { movements, internalIds, redundantIds, primaryAccount };
+  // One institution's everyday account, for the single-bank callers that read
+  // this. With several configured, `findPrimaryAccounts` is the honest answer.
+  return { movements, internalIds, redundantIds, primaryAccount: findPrimaryAccount(transactions, keyOf) };
 }
 
 /**
@@ -529,14 +598,20 @@ function settleShortfalls(vaults, movements) {
  * code.
  */
 export function deriveAccounts(transactions, profile = DEFAULT_PROFILE) {
-  const matchers = profile === DEFAULT_PROFILE ? DEFAULT_MATCHERS : compileProfile(profile);
+  // A profile, or a resolver from compileProfiles: an account's "is this the
+  // savings product" test has to be read in the wording of the bank that
+  // printed the label, not of whichever bank happens to be first.
+  const matchersFor = alwaysMatchers(profile);
   const keyOf = buildAccountResolver(transactions);
-  const primary = findPrimaryAccount(transactions, keyOf);
+  const primaryFor = findPrimaryAccounts(transactions, keyOf);
   const accounts = new Map();
   for (const tx of transactions) {
     const key = keyOf(tx);
     if (!key) continue;
     const label = accountOf(tx) || key;
+    const matchers = matchersFor(tx);
+    // Each institution has its own everyday account; see findPrimaryAccounts.
+    const primary = primaryFor(tx);
     const account = accounts.get(key) || {
       id: key,
       name: label,
@@ -570,7 +645,9 @@ export function deriveAccounts(transactions, profile = DEFAULT_PROFILE) {
   }
   for (const account of accounts.values()) {
     account.labels = [...account.labels];
-    // A savings account is still savings even when it happens to be busiest.
+    // A savings account is still savings even when it happens to be busiest —
+    // read, again, in the wording of the institution that named it.
+    const matchers = matchersFor({ source: account.source });
     if (account.kind !== 'savings' && account.labels.some((l) => matchers.savingsAccount.test(l))) {
       account.kind = 'savings';
     }
@@ -581,18 +658,21 @@ export function deriveAccounts(transactions, profile = DEFAULT_PROFILE) {
 /**
  * Cash taken out at an ATM — spending, not a move between my own accounts.
  *
- * Accepts either a raw profile (compiled on this call — fine for the odd
- * lookup) or already-compiled matchers from `compileProfile` (what a hot loop
- * over every transaction in the ledger should pass, so the regexes are built
- * once rather than once per row).
+ * Accepts any of three things, because all three call sites are legitimate:
+ * a raw profile (compiled here — fine for the odd lookup), already-compiled
+ * matchers from `compileProfile` (what a hot loop over the whole ledger should
+ * pass, so the regexes are built once rather than once per row), or a resolver
+ * from `compileProfiles` (which picks the right institution per row).
  */
 export function isCashWithdrawal(tx, profile = DEFAULT_PROFILE) {
   const matchers =
-    profile?.cashWithdrawal instanceof RegExp
-      ? profile
-      : profile === DEFAULT_PROFILE
-        ? DEFAULT_MATCHERS
-        : compileProfile(profile);
+    typeof profile === 'function'
+      ? profile(tx)
+      : profile?.cashWithdrawal instanceof RegExp
+        ? profile
+        : profile === DEFAULT_PROFILE
+          ? DEFAULT_MATCHERS
+          : compileProfile(profile);
   return matchers.cashWithdrawal.test(String(tx.description || '').trim());
 }
 
@@ -633,16 +713,21 @@ export function reconcileVaults(accounts, vaults, transactions = [], { internalI
 /** Everything the projections need, computed in one pass. */
 export function analyzeAccounts(
   transactions,
-  { selfNames = [], windowDays = 3, vaultAliases = {}, profile = DEFAULT_PROFILE } = {}
+  { selfNames = [], windowDays = 3, vaultAliases = {}, profile = DEFAULT_PROFILE, profiles = null } = {}
 ) {
+  // `profiles` maps a source — a module instance id — to that institution's
+  // wording. `profile` remains the single-institution form, and is also the
+  // fallback for a source `profiles` says nothing about.
+  const matchersFor = profiles ? compileProfiles(profiles, profile) : alwaysMatchers(profile);
+
   const { movements, internalIds, redundantIds, primaryAccount } = matchInternalTransfers(
     transactions,
-    { selfNames, windowDays, profile }
+    { selfNames, windowDays, profile: matchersFor }
   );
   const { vaults, total, needsAttribution } = computeVaultBalances(movements, {
     aliases: vaultAliases,
   });
-  const accounts = deriveAccounts(transactions, profile);
+  const accounts = deriveAccounts(transactions, matchersFor);
   return {
     accounts,
     reconciliation: reconcileVaults(accounts, vaults, transactions, { internalIds }),

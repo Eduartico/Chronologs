@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { fail, failFrom } from '../lib/httpError.js';
 import multer from 'multer';
 import { ingestManualTransaction, ingestManualAsset } from '../ingestion/manual.js';
-import { ingestActivobank, reprocessStoredDocuments } from '../ingestion/activobank/index.js';
-import { loadSyncState } from '../ingestion/activobank/gmail.js';
-import { ingestPricempire, syncPricempire, fetchPortfolioList } from '../ingestion/pricempire/index.js';
-import { importPricempireCsv } from '../ingestion/pricempire/importer.js';
+import {
+  invoke as invokeModule,
+  invokeAction as moduleAction,
+  instancesOfFamily,
+  sourceInstances,
+} from '../framework/registry.js';
 import {
   computePositions,
   computeSummary,
@@ -13,11 +15,6 @@ import {
   computeCashTimeline,
   computeValueTimeline,
 } from '../engines/portfolio.js';
-import {
-  ensureSession as ensurePricempireSession,
-  loadPricempireState,
-  savePricempireState,
-} from '../ingestion/pricempire/browser.js';
 import {
   saveCredentials as saveGoogleCredentials,
   getAuthUrl as getGoogleAuthUrl,
@@ -62,6 +59,7 @@ import { loadTags, createTag, updateTag, deleteTag } from '../lib/tags.js';
 import {
   loadCorrelationRules,
   createCorrelationRule,
+  defaultCorrelationSources,
   updateCorrelationRule,
   deleteCorrelationRule,
   runCorrelations,
@@ -173,20 +171,26 @@ router.get('/google/callback', async (req, res) => {
   }
 });
 
-router.get('/google/status', (req, res) => {
+router.get('/google/status', async (req, res) => {
   try {
-    res.json({ ...getGoogleStatus(), lastSyncAt: loadSyncState().lastSyncAt });
+    const status = await invokeModule('activobank', 'status');
+    res.json({ ...getGoogleStatus(), lastSyncAt: status.lastSyncAt });
   } catch (err) {
     failFrom(res, err);
   }
 });
 
-// ---------- INGESTION ENDPOINTS ----------
+/* ---------- INGESTION ENDPOINTS ------------------------------------------
+   Named after the two providers this app was built around, and kept that way:
+   every one of them is a two-line delegation to /api/modules/:instance/…, which
+   is where a third provider is reached without anything being added here.
+
+   They exist for the interface that already calls them and for anyone's
+   bookmarks and scripts. New work should use the generic routes. */
 
 router.post('/ingest/activobank', async (req, res) => {
   try {
-    const result = await ingestActivobank({ origin: 'gmail' });
-    res.json(result);
+    res.json(await invokeModule('activobank', 'sync'));
   } catch (err) {
     failFrom(res, err);
   }
@@ -196,8 +200,7 @@ router.post('/ingest/activobank', async (req, res) => {
 // a parser change, since each message is fetched only once.
 router.post('/ingest/activobank/reprocess', async (req, res) => {
   try {
-    const result = await reprocessStoredDocuments();
-    res.json(result);
+    res.json(await invokeModule('activobank', 'reprocess'));
   } catch (err) {
     failFrom(res, err);
   }
@@ -209,8 +212,7 @@ router.post('/ingest/activobank/upload', upload.array('documents', 20), async (r
       return fail(res, 400, 'api.error.noFiles');
     }
     const files = req.files.map((f) => ({ filename: f.originalname, buffer: f.buffer }));
-    const result = await ingestActivobank({ origin: 'upload', files });
-    res.json(result);
+    res.json(await invokeModule('activobank', 'upload', files));
   } catch (err) {
     failFrom(res, err);
   }
@@ -220,9 +222,11 @@ router.post('/ingest/activobank/upload', upload.array('documents', 20), async (r
 // old scraper stays reachable for debugging via ?method=scrape.
 router.post('/ingest/pricempire', async (req, res) => {
   try {
-    const result =
-      req.query.method === 'scrape' ? await ingestPricempire() : await syncPricempire();
-    res.json(result);
+    res.json(
+      req.query.method === 'scrape'
+        ? await moduleAction('pricempire', 'scrape')
+        : await invokeModule('pricempire', 'sync')
+    );
   } catch (err) {
     failFrom(res, err);
   }
@@ -232,16 +236,15 @@ router.post('/ingest/pricempire', async (req, res) => {
 
 router.post('/pricempire/connect', async (req, res) => {
   try {
-    await ensurePricempireSession({ interactive: true });
-    res.json({ sessionOk: true });
+    res.json(await invokeModule('pricempire', 'connect'));
   } catch (err) {
     failFrom(res, err);
   }
 });
 
-router.get('/pricempire/status', (req, res) => {
+router.get('/pricempire/status', async (req, res) => {
   try {
-    res.json(loadPricempireState());
+    res.json(await invokeModule('pricempire', 'status'));
   } catch (err) {
     failFrom(res, err);
   }
@@ -255,29 +258,17 @@ router.get('/pricempire/status', (req, res) => {
  */
 router.get('/pricempire/portfolios', async (req, res) => {
   try {
-    const state = loadPricempireState();
-    if (req.query.refresh !== 'true' && Array.isArray(state.portfolios)) {
-      return res.json({
-        portfolios: state.portfolios,
-        fetchedAt: state.portfoliosFetchedAt || null,
-        cached: true,
-      });
-    }
-
-    const portfolios = await fetchPortfolioList();
-    const fetchedAt = new Date().toISOString();
-    savePricempireState({ portfolios, portfoliosFetchedAt: fetchedAt });
-    res.json({ portfolios, fetchedAt, cached: false });
+    res.json(await moduleAction('pricempire', 'portfolios', { refresh: req.query.refresh === 'true' }));
   } catch (err) {
     failFrom(res, err);
   }
 });
 
-router.put('/pricempire/portfolios', (req, res) => {
+router.put('/pricempire/portfolios', async (req, res) => {
   try {
     const { selected } = req.body;
     if (!Array.isArray(selected)) return fail(res, 400, 'api.error.selectedMustBeArray');
-    res.json(savePricempireState({ selectedPortfolios: selected }));
+    res.json(await moduleAction('pricempire', 'selectPortfolios', { selected }));
   } catch (err) {
     failFrom(res, err);
   }
@@ -336,16 +327,20 @@ router.get('/settings', (req, res) => {
   }
 });
 
-router.put('/settings', (req, res) => {
+router.put('/settings', async (req, res) => {
   try {
     // The scheduler is torn down and rebuilt only when the schedules actually
     // moved. This used to run unconditionally, which was harmless while the only
     // things on this page were cron settings — but picking a theme now writes
     // here too, and rebuilding five cron jobs because someone tried Jacarina is
     // both wasteful and, if a job happens to be mid-run, worse than wasteful.
+    //
+    // A source instance carries its own schedule, so `modules` counts as well:
+    // watching only `schedules` would silently ignore a second bank's cron.
     const before = loadSettings();
     const merged = saveSettings(req.body);
-    if (JSON.stringify(before.schedules) !== JSON.stringify(merged.schedules)) reloadScheduler();
+    const moved = (key) => JSON.stringify(before[key]) !== JSON.stringify(merged[key]);
+    if (moved('schedules') || moved('modules')) await reloadScheduler();
     res.json(merged);
   } catch (err) {
     failFrom(res, err);
@@ -966,9 +961,12 @@ router.get('/correlation-rules', (req, res) => {
   }
 });
 
-router.post('/correlation-rules', (req, res) => {
+router.post('/correlation-rules', async (req, res) => {
   try {
-    res.json(createCorrelationRule(req.body));
+    // Which two sources a new rule joins by default is read from what is
+    // installed, not from two provider names written into the engine.
+    const defaults = defaultCorrelationSources(await sourceInstances({ includeDisabled: true }));
+    res.json(createCorrelationRule(req.body, defaults));
   } catch (err) {
     failFrom(res, err);
   }
@@ -1381,8 +1379,8 @@ router.get('/duplicates/voided', async (req, res) => {
 router.post('/investments/import', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return fail(res, 400, 'api.error.noFiles');
-    const result = await importPricempireCsv(req.file.buffer, { filename: req.file.originalname });
-    res.json(result);
+    const files = [{ filename: req.file.originalname, buffer: req.file.buffer }];
+    res.json(await invokeModule('pricempire', 'upload', files));
   } catch (err) {
     failFrom(res, err, 400);
   }
@@ -1719,10 +1717,24 @@ router.post('/accounts/profile/preview', async (req, res) => {
     const selfNames = [
       ...new Set([...deriveSelfNames(projections.transactions), ...(settings.internal?.selfNames || [])]),
     ];
+    // Previewing a candidate profile applies it to one institution and leaves
+    // the others reading their own wording — otherwise the preview for a second
+    // bank would report every movement at the first one as unrecognised, which
+    // is a scary and completely false answer.
+    const instance = req.body?.instance ?? null;
+    const profiles = {};
+    if (instance) {
+      for (const other of await instancesOfFamily('bank', { includeDisabled: true })) {
+        profiles[other.id] = other.config?.profile ?? null;
+      }
+      profiles[instance] = req.body?.profile || null;
+    }
+
     const result = analyzeAccounts(projections.transactions, {
       selfNames,
       windowDays: settings.internal?.windowDays ?? 3,
       profile: req.body?.profile || null,
+      profiles: instance ? profiles : null,
     });
     res.json({
       internalMovements: result.movements.length,

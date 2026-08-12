@@ -3,6 +3,14 @@ import { statePath } from './paths.js';
 
 const DEFAULT_SETTINGS = {
   version: 1,
+  /**
+   * Schedules for the built-in engines. Source modules keep their schedule on
+   * their own instance (see `modules` below) — a second bank needs its own
+   * timing, not a share of one global entry keyed by module name.
+   *
+   * The two source entries stay here as well, because a settings.json written
+   * before modules existed has them, and `migrateModules` reads them.
+   */
   schedules: {
     activobank: { enabled: false, preset: 'weekly', cron: '0 8 * * 1' },
     pricempire: { enabled: false, preset: 'every6h', cron: '0 */6 * * *' },
@@ -10,6 +18,19 @@ const DEFAULT_SETTINGS = {
     rules: { enabled: false, preset: 'daily', cron: '0 9 * * *' },
     quotes: { enabled: false, preset: 'daily', cron: '0 19 * * 1-5' },
   },
+  /**
+   * Configured instances of source modules, keyed by instance id.
+   *
+   * The key is the `source` string on every event that instance writes, so it
+   * is permanent: renaming one orphans its history in an append-only ledger.
+   * Two accounts at the same bank are two entries naming the same `module`.
+   *
+   * Empty by default. `migrateModules` below fills it in from the older
+   * `schedules` and `internal` keys the first time a pre-modules settings.json
+   * is read, so an existing installation gets exactly the configuration it
+   * already had.
+   */
+  modules: {},
   llm: { enabled: false, baseUrl: 'http://localhost:11434', model: '' },
   // ETF market prices are the one thing the bank documents cannot supply, so
   // this is the single feature that reaches the internet — off by default, and
@@ -89,6 +110,7 @@ export function loadSettings() {
     currency: { ...DEFAULT_SETTINGS.currency, ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
+    modules: { ...(stored.modules || {}) },
   };
 }
 

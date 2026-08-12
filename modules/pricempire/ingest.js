@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
-import { createEvent, appendIfNew } from '../../ledger/eventStore.js';
-import { loadAssets, saveAssets } from '../../ledger/fileStore.js';
-import { notify } from '../../lib/notify.js';
-import { runRules } from '../../engines/rules.js';
+import { createEvent, appendIfNew } from '../../server/ledger/eventStore.js';
+import { loadAssets, saveAssets } from '../../server/ledger/fileStore.js';
+import { notify } from '../../server/lib/notify.js';
+import { runRules } from '../../server/engines/rules.js';
 import { ensureSession, loadPricempireState, savePricempireState } from './browser.js';
 import { listPortfolios, scrapePortfolio } from './scrape.js';
 import { downloadPortfolioCsv } from './export.js';
@@ -198,7 +198,7 @@ export async function ingestPricempire() {
       await runRules({ transactionIds: result.newTransactionIds });
     } catch {}
     try {
-      const { runCorrelations } = await import('../../engines/correlation.js');
+      const { runCorrelations } = await import('../../server/engines/correlation.js');
       await runCorrelations();
     } catch {}
   }

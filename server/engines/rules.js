@@ -190,7 +190,58 @@ function evalLeaf(tx, leaf, { lenient }) {
     return tx.source === leaf.value;
   }
 
+  // A field an engine module added. Registered rather than listed here so a
+  // fork can teach the rules engine to match on something this app has never
+  // heard of — a counterparty IBAN, a merchant category code — without editing
+  // this function and inheriting its merge conflicts forever.
+  const extra = extraConditions().get(field);
+  if (extra) return extra.test(tx, leaf.value, { leaf, lenient });
+
   return false;
+}
+
+/**
+ * Condition fields contributed by engine modules.
+ *
+ * Populated once at startup by `registerRuleContributions`, and empty until
+ * then — which is correct, because the rules engine cannot run before the
+ * registry has loaded. Kept as a plain map rather than an async lookup because
+ * `evalLeaf` is called once per rule per transaction over the whole ledger.
+ */
+let CONTRIBUTED_CONDITIONS = new Map();
+let CONTRIBUTED_ACTIONS = new Map();
+
+function extraConditions() {
+  return CONTRIBUTED_CONDITIONS;
+}
+
+/** Folds every engine module's `ruleConditions` and `ruleActions` in. */
+export function registerRuleContributions(manifests) {
+  CONTRIBUTED_CONDITIONS = new Map();
+  CONTRIBUTED_ACTIONS = new Map();
+  for (const manifest of manifests) {
+    for (const condition of manifest.hooks?.ruleConditions ?? []) {
+      if (condition?.field && typeof condition.test === 'function') {
+        CONTRIBUTED_CONDITIONS.set(condition.field, condition);
+      }
+    }
+    for (const action of manifest.hooks?.ruleActions ?? []) {
+      if (action?.action && typeof action.apply === 'function') {
+        CONTRIBUTED_ACTIONS.set(action.action, action);
+      }
+    }
+  }
+  return { conditions: CONTRIBUTED_CONDITIONS, actions: CONTRIBUTED_ACTIONS };
+}
+
+/** What the rule editor should offer beyond the built-in fields. */
+export function contributedRuleFields() {
+  return [...CONTRIBUTED_CONDITIONS.values()].map((c) => ({ field: c.field, label: c.label }));
+}
+
+/** What a rule can be made to do beyond categorising and tagging. */
+export function contributedRuleActions() {
+  return [...CONTRIBUTED_ACTIONS.values()].map((a) => ({ action: a.action, label: a.label }));
 }
 
 function evalNode(tx, node, opts) {
@@ -276,6 +327,16 @@ export function evaluateRules(tx, rules = null) {
     for (const tagId of rule.actions?.addTags || []) {
       if (!result.tags.includes(tagId)) result.tags.push(tagId);
     }
+
+    // Actions an engine module added. Collected here rather than applied: this
+    // function is pure and is called from the advisor and the preview screens as
+    // well as from the real run, and a hook that wrote to the ledger from inside
+    // a preview would be a genuinely nasty surprise. `runRules` applies them.
+    for (const [name, value] of Object.entries(rule.actions ?? {})) {
+      const contributed = CONTRIBUTED_ACTIONS.get(name);
+      if (contributed) (result.contributed ??= []).push({ action: name, value, ruleId: rule.id });
+    }
+
     if (rule.stopProcessing) break;
   }
 

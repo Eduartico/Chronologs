@@ -25,14 +25,30 @@ function saveCorrelationRules(rules) {
   writeFileSync(rulesFile(), JSON.stringify(rules, null, 2), 'utf-8');
 }
 
-export function createCorrelationRule(input) {
+/**
+ * A correlation always runs between two named sources, and a rule created
+ * without them named has to pick something.
+ *
+ * It used to pick `activobank` and `pricempire` by name, which on a fork with a
+ * different bank produced a rule that could never match anything and gave no
+ * hint why. The defaults now come from what is actually installed: the money
+ * side is a bank, the other side is whatever else brings data in.
+ */
+export function defaultCorrelationSources(instances = []) {
+  const sources = instances.filter((i) => i.manifest?.kind === 'source');
+  const bank = sources.find((i) => i.manifest.family === 'bank');
+  const other = sources.find((i) => i.id !== bank?.id);
+  return { sourceA: bank?.id ?? null, sourceB: other?.id ?? null };
+}
+
+export function createCorrelationRule(input, defaults = {}) {
   const rules = loadCorrelationRules();
   const rule = {
     id: uuidv4(),
     name: input.name || 'Correlation rule',
     enabled: input.enabled ?? true,
-    sourceA: input.sourceA || 'activobank',
-    sourceB: input.sourceB || 'pricempire',
+    sourceA: input.sourceA || defaults.sourceA || null,
+    sourceB: input.sourceB || defaults.sourceB || null,
     directionA: input.directionA || 'debit',
     textHint: input.textHint || '',
     dateWindowDays: input.dateWindowDays ?? 4,

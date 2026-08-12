@@ -7,6 +7,7 @@ import Icon from '../components/Icon.jsx';
 import { refreshLlmStatus } from '../lib/useLlmStatus.js';
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { useT } from '../i18n/index.js';
+import { fetchModules } from '../modules/registry.js';
 import AppearancePanel from './settings/AppearancePanel.jsx';
 import AccessibilityPanel from './settings/AccessibilityPanel.jsx';
 
@@ -34,13 +35,24 @@ const PRESETS = [
   { id: 'custom', label: 'Custom cron…', cron: null },
 ];
 
-const MODULE_LABELS = {
-  activobank: 'ActivoBank email scan',
-  pricempire: 'Pricempire portfolio resync',
-  correlations: 'Correlation detection',
-  rules: 'Rules engine sweep',
-  quotes: 'ETF market quotes',
-};
+/**
+ * What each schedulable thing is called, from the manifest that declares it.
+ *
+ * This was a hardcoded object naming five providers, in English, which meant a
+ * fork's own bank appeared in the schedules table as a bare id and the whole
+ * table stayed English whatever the language was set to. A module's `label` is
+ * a translation key, so both problems have the same fix.
+ */
+function useModuleLabels() {
+  const { t } = useT();
+  const [labels, setLabels] = useState({});
+  useEffect(() => {
+    fetchModules().then(({ modules }) => {
+      setLabels(Object.fromEntries(modules.map((m) => [m.id, m.label])));
+    });
+  }, []);
+  return (id) => (labels[id] ? t(labels[id]) : id);
+}
 
 export default function Settings() {
   const [settings, setSettings] = useState(null);
@@ -50,6 +62,7 @@ export default function Settings() {
   const [rate, setRate] = useState(null);
   const [tab, setTab] = usePersistentState('settings.tab', 'general');
   const { t, tx } = useT();
+  const moduleLabel = useModuleLabels();
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => {});
@@ -87,7 +100,7 @@ export default function Settings() {
     setBusyModule(module);
     try {
       const result = await api.runScheduledModule(module);
-      showToast(`${MODULE_LABELS[module]}: ${JSON.stringify(result)}`);
+      showToast(`${moduleLabel(module)}: ${JSON.stringify(result)}`);
     } catch (e) {
       showToast(errText(e));
     } finally {
@@ -175,7 +188,7 @@ export default function Settings() {
                 <Switch
                   checked={!!cfg.enabled}
                   onChange={(enabled) => setSchedule(module, { enabled })}
-                  label={MODULE_LABELS[module] || module}
+                  label={moduleLabel(module)}
                 />
               </div>
               <select

@@ -54,6 +54,30 @@ export default {
   'nav.collapse': 'Encolher a barra lateral',
   'nav.expand': 'Expandir a barra lateral',
 
+  /* ---- módulos ---- */
+  'module.activobank.label': 'Leitura do email ActivoBank',
+  'module.activobank.config.gmailLabel': 'Etiqueta do Gmail',
+  'module.activobank.config.profile': 'Vocabulário da instituição',
+  'module.pricempire.label': 'Ressincronização do Pricempire',
+  'module.pricempire.config.portfolios': 'Portefólios',
+  'module.rules.label': 'Passagem do motor de regras',
+  'module.correlations.label': 'Detecção de correlações',
+  'module.securities.label': 'Reconciliação de ordens de bolsa',
+  'module.quotes.label': 'Cotações de mercado dos ETF',
+
+  /* ---- cartões dos módulos ---- */
+  'modules.connected': 'Ligado',
+  'modules.notConnected': 'Não ligado',
+  'modules.instanceOf': 'Fornecido pelo módulo {module}',
+  'modules.lastSync': 'última sincronização {when}',
+  'modules.action.connect': 'Ligar',
+  'modules.action.sync': 'Sincronizar agora',
+  'modules.action.reprocess': 'Reler os documentos guardados',
+  'modules.ranSummary': '{imported} movimentos novos de {files} documento(s)',
+  'modules.missingModule': 'Esta ligação foi criada com o módulo "{module}", que não está instalado. Os dados continuam no registo; reinstala o módulo para voltar a sincronizar.',
+  'modules.problemsTitle': 'Módulos que não foi possível carregar',
+  'modules.none': 'Ainda não há ligações configuradas.',
+
   /* ---- valores financeiros ---- */
   'value.up': 'subiu',
   'value.down': 'desceu',
@@ -237,6 +261,10 @@ export default {
   'api.error.patternNotFound': 'Padrão não encontrado — pode já ter sido resolvido',
   'api.error.llmDisabled': 'O Ollama está desligado — activa-o nas Definições',
   'api.error.noFiles': 'Nenhum ficheiro enviado',
+  'api.error.moduleNotFound': 'Módulo não encontrado',
+  'api.error.moduleActionNotFound': 'Este módulo não oferece essa acção',
+  'api.error.moduleCapabilityNotFound': 'Este módulo não oferece isso',
+  'api.error.moduleRequired': 'Uma instância nova tem de dizer de que módulo é',
   'api.error.idRequired': 'o id é obrigatório',
   'api.error.categoryRequired': 'a categoria é obrigatória',
   'api.error.selectedMustBeArray': 'selected tem de ser uma lista',
@@ -269,6 +297,10 @@ export default {
   'api.error.llmNoAnswer': 'O modelo local não respondeu',
 
   /* ---- notificações ---- */
+  'notify.sync.module.title': 'Sincronização {module}',
+  'notify.sync.module.body': '{imported} movimentos novos de {files} ficheiro(s)',
+  'notify.module.unparsed.title': '{module}: houve linhas que não foram lidas',
+  'notify.module.unparsed.body': '{count} documento(s) tinham linhas que o leitor não reconheceu — {detail}',
   'notify.sync.activobank.title': 'Sincronização ActivoBank',
   'notify.sync.activobank.body': '{imported} movimentos novos de {files} ficheiro(s)',
   'notify.sync.activobankFailed.title': 'Falhou a sincronização ActivoBank',

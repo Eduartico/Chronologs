@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { google } from 'googleapis';
-import { getOAuthClient, hasToken } from '../../lib/googleAuth.js';
-import { statePath } from '../../lib/paths.js';
+import { getOAuthClient, hasToken } from '../../server/lib/googleAuth.js';
+import { statePath } from '../../server/lib/paths.js';
 
 const QUERY = 'from:activobank.pt';
 
