@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { statePath } from './paths.js';
+import { PIVOT } from '../../web/src/lib/currencies.js';
 
 const DEFAULT_SETTINGS = {
   version: 1,
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS = {
     correlations: { enabled: false, preset: 'daily', cron: '30 8 * * *' },
     rules: { enabled: false, preset: 'daily', cron: '0 9 * * *' },
     quotes: { enabled: false, preset: 'daily', cron: '0 19 * * 1-5' },
+    fx: { enabled: false, preset: 'daily', cron: '0 17 * * 1-5' },
   },
   /**
    * Configured instances of source modules, keyed by instance id.
@@ -38,14 +40,33 @@ const DEFAULT_SETTINGS = {
   quotes: { enabled: false, provider: 'yahoo' },
   // CS2 markets quote in USD while the bank side is EUR, and showing both at
   // once turned every screen into a currency puzzle. One currency is displayed
-  // — the euro, since that is what the bank account is in — and the amounts are
-  // still *stored* in whatever the market quoted, so they keep matching
-  // Pricempire and Steam.
+  // — the euro by default, since that is what the bank account is in — and the
+  // amounts are still *stored* in whatever the market quoted, so they keep
+  // matching Pricempire and Steam.
   //
-  // The rate can be fetched from the same place as the ETF quotes, or typed in.
-  // `usdToEur` is what gets used either way; `rateFetchedAt` says how old it is,
-  // and is null when it was entered by hand.
-  currency: { base: 'EUR', usdToEur: 0.92, autoRate: false, rateFetchedAt: null },
+  //  - base:   what everything is rendered in. Any code in web/src/lib/currencies.js.
+  //  - rates:  euros per one unit, fetched. The euro is the pivot and is not in
+  //            here: its rate against itself is 1, and storing that only invites
+  //            someone to edit it.
+  //  - manual: rates typed by hand. These win, and a refresh does not touch
+  //            them — someone who typed a rate meant it.
+  //  - usdToEur: the scalar this used to be, still written so that rolling the
+  //            code back reads its own file. `loadSettings` migrates the other
+  //            way for a file written before the table existed.
+  currency: {
+    base: PIVOT,
+    // Empty on purpose. A default row here would be laid over a stored file by
+    // the one-level merge below *before* `migrateCurrency` gets to look, so an
+    // installation upgrading from the old scalar would silently keep the shipped
+    // 0.92 instead of its own rate — every dollar amount wrong by whatever the
+    // two differ by, with nothing on screen saying so. The scalar below is what
+    // seeds the dollar row, for a fresh install and an upgrade alike.
+    rates: {},
+    manual: {},
+    autoRate: false,
+    rateFetchedAt: null,
+    usdToEur: 0.92,
+  },
   // Moving money between the owner's own accounts is not spending. The bank
   // books both legs of such a move, so both have to be recognised.
   //
@@ -83,6 +104,22 @@ const DEFAULT_SETTINGS = {
     textures: false,
     tables: false,
   },
+  // Chart shapes that are being tried out rather than shipped. Off for anyone
+  // who installs this; the flags are what let a chart be judged in use instead
+  // of argued about, and what lets one be deleted without an archaeology dig.
+  //
+  // A sibling of `appearance` rather than part of it on purpose: appearance is
+  // mirrored to localStorage and stamped onto <html> because the first paint
+  // needs it, and a flag only decides whether a component mounts.
+  experimental: {
+    sankey: false,
+    treemap: false,
+    sunburst: false,
+    streamgraph: false,
+    waterfall: false,
+    calendar: false,
+    chord: false,
+  },
 };
 
 function file() {
@@ -101,17 +138,44 @@ function file() {
 export function loadSettings() {
   if (!existsSync(file())) return structuredClone(DEFAULT_SETTINGS);
   const stored = JSON.parse(readFileSync(file(), 'utf-8'));
-  return {
+  const merged = {
     ...structuredClone(DEFAULT_SETTINGS),
     ...stored,
     schedules: { ...structuredClone(DEFAULT_SETTINGS.schedules), ...(stored.schedules || {}) },
     llm: { ...DEFAULT_SETTINGS.llm, ...(stored.llm || {}) },
     quotes: { ...DEFAULT_SETTINGS.quotes, ...(stored.quotes || {}) },
-    currency: { ...DEFAULT_SETTINGS.currency, ...(stored.currency || {}) },
+    currency: { ...structuredClone(DEFAULT_SETTINGS.currency), ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
+    experimental: { ...DEFAULT_SETTINGS.experimental, ...(stored.experimental || {}) },
     modules: { ...(stored.modules || {}) },
   };
+  return migrateCurrency(merged);
+}
+
+/**
+ * A settings file written before the rate table existed carries one scalar,
+ * `usdToEur`. It is the same number in the same orientation — euros per dollar —
+ * so it becomes the table's first row and nothing about the installation
+ * changes.
+ *
+ * Runs after the merge rather than inside it, because the merge is one level
+ * deep by design and `rates` is a level below that. The scalar keeps being
+ * written alongside the table so that rolling the code back still reads its own
+ * file; it is a mirror from here on, never the source.
+ */
+function migrateCurrency(settings) {
+  const currency = settings.currency;
+  if (!currency.rates || typeof currency.rates !== 'object') currency.rates = {};
+  if (!currency.manual || typeof currency.manual !== 'object') currency.manual = {};
+  if (currency.rates.USD == null && Number.isFinite(currency.usdToEur)) {
+    currency.rates.USD = currency.usdToEur;
+  }
+  // The pivot is implicit. A stored EUR row could only ever be 1, and a hand-
+  // edited one that is not would silently rescale the whole ledger.
+  delete currency.rates[PIVOT];
+  delete currency.manual[PIVOT];
+  return settings;
 }
 
 /** The reader's language, for the one server-side decision that depends on it. */

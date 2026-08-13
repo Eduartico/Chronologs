@@ -145,8 +145,6 @@ export default {
   'settings.appearance.preview': 'Pré-visualização de {name}',
   'settings.language.title': 'Idioma',
   'settings.language.help': 'Define também a língua em que a IA local escreve as notas.',
-  'settings.language.en': 'English',
-  'settings.language.pt': 'Português',
 
   'settings.a11y.title': 'Acessibilidade',
   'settings.a11y.finance': 'Cores acessíveis para ganhos e perdas',
@@ -531,7 +529,7 @@ export default {
   /* ---- definições (continuação) ---- */
   'settings.currency.dollars': 'dólares',
   'settings.currency.euros': 'euros',
-  'settings.llm.step1': 'Instala o Ollama a partir de',
+  'settings.llm.step1': 'Instala o Ollama a partir de {site} e deixa-o a correr — escuta na tua máquina, nada sai dela.',
   'settings.llm.step3': 'Confirma que o endereço abaixo é onde ele está à escuta (normalmente o predefinido).',
   'settings.llm.step4': 'Liga-o, escolhe o modelo da lista, e carrega em "Testar ligação".',
 
@@ -666,4 +664,170 @@ export default {
   'country.JP': 'Japão',
   'country.TH': 'Tailândia',
   'country.AE': 'Emirados Árabes Unidos',
+
+  /* ---- partilhado ---- */
+  'common.count': 'Nº',
+  'common.period': 'Período',
+  'common.doubleClickToEdit': 'Duplo-clique para editar',
+  'common.confirmDelete': 'Confirmar — apaga',
+  'common.cannotEdit': 'Não é possível editar isto',
+  'common.cannotDelete': 'Não é possível apagar isto',
+
+  /* ---- tipos de gráfico ---- */
+  'chart.type.bar': 'Barras',
+  'chart.type.line': 'Linhas',
+  'chart.type.area': 'Área',
+  'chart.type.pie': 'Sopa',
+
+  /* ---- dashboard ---- */
+  'dashboard.merchant': 'Comerciante',
+  'dashboard.spent': 'Gasto',
+  'dashboard.rate': 'Taxa',
+  'dashboard.historySince': 'histórico desde {date}',
+  'dashboard.savingsRateSubtitle': 'Percentagem das receitas que sobrou em cada período',
+  'dashboard.savingsRateClamped': {
+    one: 'Percentagem das receitas que sobrou · {count} mês abaixo de −100% desenhado no limite',
+    other: 'Percentagem das receitas que sobrou · {count} meses abaixo de −100% desenhados no limite',
+  },
+  'dashboard.granularity.month': 'Mensal',
+  'dashboard.granularity.quarter': 'Trimestral',
+  'dashboard.granularity.year': 'Anual',
+  'dashboard.preset.12m': 'Últimos 12 meses',
+  'dashboard.preset.24m': 'Últimos 24 meses',
+  'dashboard.preset.ytd': 'Este ano',
+  'dashboard.preset.all': 'Tudo',
+
+  /* ---- insights ---- */
+  'insights.summaryShare': '{percent}% do que gastaste foi em {category}',
+
+  /* ---- definições: geral ---- */
+  'settings.saved': 'Definições guardadas — agendador recarregado',
+  'settings.tab.experimental': 'Experiências',
+  'settings.schedules.help':
+    'Cada módulo actualiza-se no seu próprio horário enquanto o servidor estiver a correr. Podes accionar estes endpoints a partir do n8n — nesse caso desliga aqui o agendamento interno.',
+  'settings.schedules.running': 'A correr…',
+  'settings.schedules.preset.hourly': 'A cada hora',
+  'settings.schedules.preset.every6h': 'A cada 6 horas',
+  'settings.schedules.preset.daily': 'Diário (08:00)',
+  'settings.schedules.preset.weekly': 'Semanal (Seg 08:00)',
+  'settings.schedules.preset.custom': 'Cron à medida…',
+  'settings.llm.help':
+    'Com isto ligado, o modelo Ollama local dá uma segunda opinião no consultor de regras e sugere categorias para o que mais nada reconhece. Nada aqui é obrigatório — todos os botões dependentes de IA ficam cinzentos com uma explicação até isto estar ligado, e o resto funciona exactamente na mesma sem ele.',
+  'settings.llm.step2': 'Descarrega um modelo num terminal, p. ex. {command}.',
+  'settings.llm.reachable': {
+    one: 'Ollama acessível — {count} modelo encontrado',
+    other: 'Ollama acessível — {count} modelos encontrados',
+  },
+
+  /* ---- definições: moeda ---- */
+  'settings.currency.help':
+    'Os valores são guardados na moeda em que foram cotados, para continuarem a bater certo com o mercado de onde vieram. Isto é só a moeda em que aparecem no ecrã.',
+  'settings.currency.currency': 'Moeda',
+  'settings.currency.rate': '{base} por unidade',
+  'settings.currency.source': 'Origem',
+  'settings.currency.typed': 'Introduzida à mão',
+  'settings.currency.fetched': 'Obtida',
+  'settings.currency.noRate': 'Por obter',
+  'settings.currency.editRate': 'Introduzir um câmbio',
+  'settings.currency.clearRate': 'Limpar o câmbio introduzido',
+  'settings.currency.clearRateConfirm': 'Confirmar — volta ao câmbio obtido',
+  'settings.currency.nothingToClear': 'Este câmbio foi obtido automaticamente, não há nada para limpar',
+  'settings.currency.refreshNow': 'Obter câmbios agora',
+  'settings.currency.refreshing': 'A obter câmbios…',
+  'settings.currency.refreshed': {
+    one: '{count} câmbio actualizado',
+    other: '{count} câmbios actualizados',
+  },
+  'settings.currency.refreshFailed': 'Não foi possível obter os câmbios',
+  'settings.currency.neverFetched': 'Ainda não foi obtido nenhum câmbio',
+  'settings.currency.fetchedAt': 'Obtidos em {when}',
+  'settings.currency.fetchedStale': 'Obtidos em {when} — já têm mais de uma semana',
+  'settings.currency.tableCaption': 'Câmbios, e com que valores os montantes em {base} são convertidos',
+  'settings.currency.baseNoRate': 'Ainda não foi obtido nenhum câmbio para {base}, por isso os valores continuam a aparecer na moeda em que foram guardados. Obtém os câmbios, ou introduz um em baixo.',
+
+  /* ---- definições: experiências ---- */
+  'settings.experimental.title': 'Gráficos experimentais',
+  'settings.experimental.help':
+    'Formas de gráfico em experiência. Cada uma aparece ao lado do que já existe, nunca em vez disso, para poderes julgá-la contra o gráfico que talvez venha a substituir. Nenhuma toca nos teus dados, e qualquer uma pode ser removida.',
+  'settings.experimental.all': 'Ligar tudo',
+  'settings.experimental.allHelp': '{on} de {total} ligadas.',
+  'settings.experimental.surface.dashboard': 'Aparece no fundo do painel.',
+  'settings.experimental.surface.accounts': 'Aparece no fundo da página de contas.',
+  'settings.experimental.sankey.label': 'Diagrama de fluxo (Sankey)',
+  'settings.experimental.sankey.help':
+    'Receitas à esquerda, contas ao meio, categorias à direita, com a largura de cada faixa a ser o montante. O único gráfico que mostra que receita pagou que despesa.',
+  'settings.experimental.treemap.label': 'Mapa de áreas',
+  'settings.experimental.treemap.help':
+    'Despesa por categoria em rectângulos, dimensionados pelo montante. Mantém todas as categorias no ecrã, onde a sopa fica sem espaço por volta das seis.',
+  'settings.experimental.sunburst.label': 'Anéis concêntricos',
+  'settings.experimental.sunburst.help':
+    'Dois anéis: categorias-mãe por dentro, subcategorias por fora. Responde a «quanto foi para transportes ao todo» sem somar fatias a olho.',
+  'settings.experimental.streamgraph.label': 'Fluxo empilhado',
+  'settings.experimental.streamgraph.help':
+    'Despesa por categoria ao longo do tempo, empilhada à volta de um centro flutuante. Torna a forma de cada categoria mais fácil de seguir e o total mensal mais difícil de ler.',
+  'settings.experimental.waterfall.label': 'Cascata',
+  'settings.experimental.waterfall.help':
+    'Cada mês como um degrau acima ou abaixo do saldo acumulado, para o gráfico mostrar como o total foi de onde começou até onde acabou.',
+  'settings.experimental.calendar.label': 'Mapa de calor por dia',
+  'settings.experimental.calendar.help':
+    'Todos os dias do intervalo, sombreados pelo que se gastou. Mostra ritmos — dias de ordenado, fins-de-semana, a semana a seguir a férias — que um total mensal esconde.',
+  'settings.experimental.chord.label': 'Diagrama de transferências',
+  'settings.experimental.chord.help':
+    'Movimentos entre a conta à ordem e cada cofre, em faixas com peso pelo tráfego. Provavelmente o mais fraco destes: os dados são um centro e um leque de raios.',
+
+  /* ---- gráficos experimentais ---- */
+  'experimental.share': 'Peso',
+  'experimental.sankey.title': 'Para onde foi o dinheiro',
+  'experimental.sankey.subtitle': 'Receitas, pelas contas que as seguraram, até ao que pagaram',
+  'experimental.sankey.empty': 'Sem receitas nem despesas neste intervalo',
+  'experimental.sankey.footnote': '{income} a entrar, {expense} a sair. A diferença é desenhada como faixa própria.',
+  'experimental.sankey.from': 'De',
+  'experimental.sankey.to': 'Para',
+  'experimental.sankey.kind.source': 'Receita',
+  'experimental.sankey.kind.account': 'Conta',
+  'experimental.sankey.kind.category': 'Categoria',
+  'experimental.sankey.kind.residual': 'Saldo',
+  'experimental.sankey.node.saved': 'Não gasto',
+  'experimental.sankey.node.drawn': 'Das poupanças',
+  'experimental.sankey.node.unknownAccount': 'Conta não registada',
+  'experimental.treemap.title': 'Despesa por área',
+  'experimental.treemap.subtitle': 'Todas as categorias num tamanho comparável, ao contrário da sopa',
+  'experimental.sunburst.title': 'Categorias e os seus grupos',
+  'experimental.sunburst.subtitle': 'Categorias-mãe por dentro, subcategorias por fora',
+  'experimental.sunburst.group': 'Grupo',
+  'experimental.streamgraph.title': 'Categorias ao longo do tempo',
+  'experimental.streamgraph.subtitle': 'A forma de cada categoria ao longo do intervalo',
+  'experimental.streamgraph.footnote':
+    'Não há escala de propósito: a pilha flutua, por isso só a largura de cada faixa quer dizer alguma coisa. Os valores estão na tabela.',
+  'experimental.waterfall.title': 'Como o saldo chegou aqui',
+  'experimental.waterfall.subtitle': 'Cada período como um degrau a partir do acumulado',
+  'experimental.waterfall.change': 'Variação',
+  'experimental.waterfall.runningTotal': 'Acumulado',
+  'experimental.waterfall.footnote': 'Fecha em {closing}',
+  'experimental.calendar.title': 'Despesa por dia',
+  'experimental.calendar.subtitle': 'Um quadrado por dia, mais escuro onde se gastou mais',
+  'experimental.calendar.biggest': 'Maior linha',
+  'experimental.calendar.footnote':
+    'O sombreado é por quintil, não pelo máximo, para que um dia muito grande não achate o resto do ano.',
+  'experimental.calendar.cell': '{date}: {amount} em {count}, sobretudo {top}',
+  'experimental.calendar.cellEmpty': '{date}: nada gasto',
+  'experimental.chord.title': 'Entre as tuas próprias contas',
+  'experimental.chord.subtitle': 'Tráfego entre a conta à ordem e cada cofre',
+  'experimental.chord.footnote':
+    'Uma faixa tracejada só correu num sentido — o dinheiro entrou e nunca saiu, ou o contrário.',
+  'experimental.chord.vault': 'Cofre',
+  'experimental.chord.deposited': 'Entrou',
+  'experimental.chord.withdrawn': 'Saiu',
+  'experimental.chord.net': 'Líquido',
+  'experimental.chord.unnamed': 'Sem nome',
+  'experimental.chord.currentAccount': 'Conta à ordem',
+  'experimental.chord.band': '{vault}: {deposited} a entrar, {withdrawn} a sair',
+
+  /* ---- módulos ---- */
+  'module.fx.label': 'Câmbios',
+
+  /* ---- erros ---- */
+  'api.error.autoRateOff': 'Câmbio automático desligado — activa-o em Definições',
+  'api.error.unknownCurrency': 'Essa não é uma moeda que a aplicação conheça',
+  'api.error.badRate': 'Um câmbio tem de ser um número maior que zero',
 };

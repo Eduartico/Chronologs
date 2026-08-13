@@ -30,6 +30,47 @@
       "file": "documents.json",
       "path": "$['pricempire/*']",
       "why": "Gone from the capture, and they were noise. Documents are now re-read by the module instance that stored them; Pricempire declares no bank-document parser, so its portfolio exports are skipped. The baseline entries were those CSVs fed to the ActivoBank statement parsers, which read zero transactions out of a hundred rows each and reported one unparsed line — a measurement of nothing."
+    },
+
+    {
+      "file": "api/analytics_flow.json",
+      "why": "New endpoint. GET /api/analytics/flow, the income → account → category aggregate behind the experimental Sankey. Deliberately its own route rather than two more fields on /analytics: that response is in this baseline, and keeping it byte-identical is what makes this whole comparison a signal. Nothing asks for this endpoint unless the flag is on."
+    },
+    {
+      "file": "api/analytics_daily.json",
+      "why": "New endpoint. GET /api/analytics/daily, one row per day with spending, behind the experimental calendar heatmap. Same reasoning as the flow route above."
+    },
+    {
+      "file": "api/currency_rates.json",
+      "why": "New endpoint. GET /api/currency/rates, the whole exchange-rate table now that the app converts between forty-five currencies rather than two. The single-pair routes it generalises (/currency/rate and its refresh) are deliberately untouched and are compared as before — if either of those ever drifts, that is a bug in the wrapper, not a diff to accept."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.experimental",
+      "why": "New key. Which experimental charts are switched on. Every one ships false; this installation's own settings.json turns them all on, which is a data fact rather than a default."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.currency",
+      "why": "New keys `rates` and `manual` beside the old `usdToEur`, which is still written and still holds the same number. Conversion used to be one dollar-to-euro scalar; it is now a table against the euro pivot, because the app ships fourteen languages and 'the dollar rate' is not a currency system. `loadSettings` migrates the scalar into `rates.USD` on read, so an installation that predates the table sees no change in what anything is worth."
+    },
+    {
+      "file": "api/analytics_insights.json",
+      "path": "$.body.summary",
+      "why": "Shape change: each entry is now {key, params} instead of a finished sentence. It was the last hardcoded Portuguese string the server put on screen — 'X% do que gastaste foi em Y' — which read Portuguese in all fourteen languages. Nothing in the interface renders this field today, so the visible effect is nil; the point is that it can now be rendered in the reader's language when something does."
+    },
+
+    {
+      "//": [
+        "Below this line: not caused by any code change. The baseline was captured",
+        "on 2026-08-11 and the ledger has lived since — quotes refreshed, a sync ran,",
+        "an appearance switch was flipped. They are listed rather than silently",
+        "tolerated so that the next person can tell a stale baseline from a",
+        "regression, which is the one distinction this file exists to preserve.",
+        "Re-taking the baseline would clear them and hide whatever drifted alongside."
+      ],
+      "file": "«data drift»",
+      "why": "api/assets.json, api/investments*.json, api/securities.json and api/analytics*.json allocation values move with the market — the CS2 position went 475.35 → 465.62 and an ETF 56.686 → 57.476 because the quote fetcher ran. api/events.json $.body.bytes grew with the ledger. api/pricempire_status.json $.body.lastSync is a later sync. projections.json $.assetSnapshots went 7 → 9 for the same reason. api/settings.json $.body.appearance.textures went false → true because the switch was flipped in Settings. No code in this change reads or writes any of them."
     }
   ]
 }

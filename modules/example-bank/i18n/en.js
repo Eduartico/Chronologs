@@ -1,7 +1,7 @@
 /**
  * This module's own strings.
  *
- * Kept here rather than in `web/src/i18n/en.js` so that a module is one folder
+ * Kept here rather than in `web/src/i18n/locales/en.js` so that a module is one folder
  * you can copy, fork or delete whole. The browser merges these by globbing
  * `modules/*​/i18n/`; the server reads them from the manifest's `i18n` field.
  * Core keys win a collision, so a module cannot redefine "Save".

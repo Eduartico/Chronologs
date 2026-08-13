@@ -22,8 +22,8 @@ modules/my-bank/
   module.js        the manifest — the contract, and the only required file
   ingest.js        your parser and whatever it needs
   ui.jsx           optional: your own card, when a described one won't do
-  i18n/en.js       optional: your own strings
-  i18n/pt.js
+  i18n/en.js       optional: your own strings — but if you bring any,
+  i18n/pt.js       bring both of these
   my-bank.test.js  run by `npm test` along with everything else
 ```
 
@@ -83,7 +83,7 @@ a sentence saying which rule it broke.
 | `emits` | Event types you write. Checked against what the projections actually read, so a typo is caught rather than silently ignored. |
 | `schedule` | The default cron for a new instance. |
 | `configSchema` | What an instance needs to know. Drives the generic card. |
-| `i18n` | `{ en, pt }` — your own strings. |
+| `i18n` | `{ en, pt }` — your own strings, in at least those two. |
 | `capabilities` / `hooks` | What can be done with you. |
 
 ### Capabilities
@@ -267,11 +267,19 @@ portfolio picker both qualify. If you do:
 
 ## Strings
 
-Two locales, `en` and `pt`. Put your keys in `modules/<id>/i18n/`; the browser
-globs them, the server reads them from your manifest's `i18n` field, and core
-keys win a collision. Every key must exist in **both** languages — one that
-exists in only one shows a raw key on screen in the other, and the contract test
-fails.
+The app ships fourteen locales, but a module is asked for **two**: `en` and
+`pt` — `REQUIRED_MODULE_LOCALES` in `server/framework/contracts.js`. English is
+where every lookup ends, Portuguese is what this installation is actually read
+in, and a module missing either shows a raw dotted key on screen to the person
+running it. Anything else you bring is welcome; anything you omit falls back to
+English exactly as a core key does.
+
+Put your keys in `modules/<id>/i18n/<locale>.js` and declare them on the
+manifest as `i18n: { en, pt }`. Both halves read the same files by different
+routes — the browser globs `modules/*/i18n/*.js` from `web/src/i18n/index.js`,
+the server reads your manifest's `i18n` field — and core keys win a collision,
+so you cannot redefine "Save" out from under the app. `contract.test.js` fails
+on a key you define in one required language and not the other.
 
 Notifications are stored as `{key, params}` and rendered whenever they are
 opened, so they read in whatever language is current *then*. Each needs a

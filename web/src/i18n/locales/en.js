@@ -153,8 +153,6 @@ export default {
   'settings.appearance.preview': '{name} preview',
   'settings.language.title': 'Language',
   'settings.language.help': 'Also sets the language the local AI writes its notes in.',
-  'settings.language.en': 'English',
-  'settings.language.pt': 'Português',
 
   'settings.a11y.title': 'Accessibility',
   'settings.a11y.finance': 'Accessible finance colours',
@@ -548,7 +546,7 @@ export default {
   /* ---- settings (continued) ---- */
   'settings.currency.dollars': 'dollars',
   'settings.currency.euros': 'euros',
-  'settings.llm.step1': 'Install Ollama from',
+  'settings.llm.step1': 'Install Ollama from {site} and leave it running — it listens on your machine, nothing leaves it.',
   'settings.llm.step3': 'Confirm the address below matches where it is listening (usually the default).',
   'settings.llm.step4': 'Turn it on, pick the model from the list, and press "Test connection".',
 
@@ -689,4 +687,170 @@ export default {
   'country.JP': 'Japan',
   'country.TH': 'Thailand',
   'country.AE': 'United Arab Emirates',
+
+  /* ---- shared ---- */
+  'common.count': 'Count',
+  'common.period': 'Period',
+  'common.doubleClickToEdit': 'Double-click to edit',
+  'common.confirmDelete': 'Confirm — this deletes',
+  'common.cannotEdit': 'This cannot be edited',
+  'common.cannotDelete': 'This cannot be deleted',
+
+  /* ---- chart types ---- */
+  'chart.type.bar': 'Bars',
+  'chart.type.line': 'Lines',
+  'chart.type.area': 'Area',
+  'chart.type.pie': 'Pie',
+
+  /* ---- dashboard additions ---- */
+  'dashboard.merchant': 'Merchant',
+  'dashboard.spent': 'Spent',
+  'dashboard.rate': 'Rate',
+  'dashboard.historySince': 'history since {date}',
+  'dashboard.savingsRateSubtitle': 'Share of income left over in each period',
+  'dashboard.savingsRateClamped': {
+    one: 'Share of income left over · {count} month below −100% drawn at the limit',
+    other: 'Share of income left over · {count} months below −100% drawn at the limit',
+  },
+  'dashboard.granularity.month': 'Monthly',
+  'dashboard.granularity.quarter': 'Quarterly',
+  'dashboard.granularity.year': 'Yearly',
+  'dashboard.preset.12m': 'Last 12 months',
+  'dashboard.preset.24m': 'Last 24 months',
+  'dashboard.preset.ytd': 'This year',
+  'dashboard.preset.all': 'Everything',
+
+  /* ---- insights ---- */
+  'insights.summaryShare': '{percent}% of what you spent went on {category}',
+
+  /* ---- settings: general ---- */
+  'settings.saved': 'Settings saved — scheduler reloaded',
+  'settings.tab.experimental': 'Experiments',
+  'settings.schedules.help':
+    'Each module refreshes on its own schedule while the server is running. You can drive these endpoints from n8n instead — in that case switch the internal schedule off here.',
+  'settings.schedules.running': 'Running…',
+  'settings.schedules.preset.hourly': 'Every hour',
+  'settings.schedules.preset.every6h': 'Every 6 hours',
+  'settings.schedules.preset.daily': 'Daily (08:00)',
+  'settings.schedules.preset.weekly': 'Weekly (Mon 08:00)',
+  'settings.schedules.preset.custom': 'Custom cron…',
+  'settings.llm.help':
+    'When this is on, your local Ollama model gives a second opinion in the rule advisor and suggests categories for what nothing else recognises. Nothing here is required — every AI-gated button is greyed out with an explanation until it is on, and everything else works exactly the same without it.',
+  'settings.llm.step2': 'Pull a model in a terminal, e.g. {command}.',
+  'settings.llm.reachable': {
+    one: 'Ollama reachable — {count} model found',
+    other: 'Ollama reachable — {count} models found',
+  },
+
+  /* ---- settings: currency ---- */
+  'settings.currency.help':
+    'Amounts are stored in the currency they were quoted in, so they keep matching the market they came from. This is only the currency they are shown in.',
+  'settings.currency.currency': 'Currency',
+  'settings.currency.rate': '{base} per unit',
+  'settings.currency.source': 'Source',
+  'settings.currency.typed': 'Typed by hand',
+  'settings.currency.fetched': 'Fetched',
+  'settings.currency.noRate': 'Not fetched',
+  'settings.currency.editRate': 'Type a rate',
+  'settings.currency.clearRate': 'Clear the typed rate',
+  'settings.currency.clearRateConfirm': 'Confirm — back to the fetched rate',
+  'settings.currency.nothingToClear': 'This rate was fetched, so there is nothing to clear',
+  'settings.currency.refreshNow': 'Fetch rates now',
+  'settings.currency.refreshing': 'Fetching rates…',
+  'settings.currency.refreshed': {
+    one: '{count} rate updated',
+    other: '{count} rates updated',
+  },
+  'settings.currency.refreshFailed': 'The rates could not be fetched',
+  'settings.currency.neverFetched': 'No rate has been fetched yet',
+  'settings.currency.fetchedAt': 'Fetched {when}',
+  'settings.currency.fetchedStale': 'Fetched {when} — over a week old',
+  'settings.currency.tableCaption': 'Exchange rates, and what {base} amounts are converted with',
+  'settings.currency.baseNoRate': 'No rate has been fetched for {base} yet, so amounts are still shown in the currency they were stored in. Fetch the rates, or type one in below.',
+
+  /* ---- settings: experiments ---- */
+  'settings.experimental.title': 'Experimental charts',
+  'settings.experimental.help':
+    'Chart shapes that are being tried out. Each one is added alongside what is already there, never in place of it, so you can judge it against the chart it might replace. None of them touch your data, and any of them may be removed.',
+  'settings.experimental.all': 'Turn everything on',
+  'settings.experimental.allHelp': '{on} of {total} switched on.',
+  'settings.experimental.surface.dashboard': 'Appears at the bottom of the dashboard.',
+  'settings.experimental.surface.accounts': 'Appears at the bottom of the accounts page.',
+  'settings.experimental.sankey.label': 'Flow diagram (Sankey)',
+  'settings.experimental.sankey.help':
+    'Income on the left, accounts in the middle, categories on the right, with the width of each band being the amount. The only chart that shows which income paid for which spending.',
+  'settings.experimental.treemap.label': 'Treemap',
+  'settings.experimental.treemap.help':
+    'Spending by category as nested rectangles, sized by amount. Keeps every category on screen where the pie runs out of room at about six.',
+  'settings.experimental.sunburst.label': 'Sunburst',
+  'settings.experimental.sunburst.help':
+    'Two rings: parent categories inside, their subcategories outside. Answers "how much went on transport altogether" without adding slices up by eye.',
+  'settings.experimental.streamgraph.label': 'Streamgraph',
+  'settings.experimental.streamgraph.help':
+    'Category spending over time, stacked around a floating centre. Makes the shape of each category easier to follow and the monthly total harder to read.',
+  'settings.experimental.waterfall.label': 'Waterfall',
+  'settings.experimental.waterfall.help':
+    'Each month as a step up or down from the running balance, so the chart shows how the total got from where it started to where it ended.',
+  'settings.experimental.calendar.label': 'Calendar heatmap',
+  'settings.experimental.calendar.help':
+    'Every day of the range, shaded by what was spent on it. Shows rhythm — paydays, weekends, the week after a holiday — that a monthly total hides.',
+  'settings.experimental.chord.label': 'Transfer diagram',
+  'settings.experimental.chord.help':
+    'Movements between the current account and each savings vault, as bands weighted by traffic. Probably the weakest of these: the data is one hub and a fan of spokes.',
+
+  /* ---- experimental charts ---- */
+  'experimental.share': 'Share',
+  'experimental.sankey.title': 'Where the money went',
+  'experimental.sankey.subtitle': 'Income, through the accounts that held it, into what it paid for',
+  'experimental.sankey.empty': 'No income or spending in this range',
+  'experimental.sankey.footnote': '{income} in, {expense} out. The difference is drawn as its own band.',
+  'experimental.sankey.from': 'From',
+  'experimental.sankey.to': 'To',
+  'experimental.sankey.kind.source': 'Income',
+  'experimental.sankey.kind.account': 'Account',
+  'experimental.sankey.kind.category': 'Category',
+  'experimental.sankey.kind.residual': 'Balance',
+  'experimental.sankey.node.saved': 'Not spent',
+  'experimental.sankey.node.drawn': 'From savings',
+  'experimental.sankey.node.unknownAccount': 'Account not recorded',
+  'experimental.treemap.title': 'Spending by area',
+  'experimental.treemap.subtitle': 'Every category at a comparable size, unlike a pie',
+  'experimental.sunburst.title': 'Categories and their groups',
+  'experimental.sunburst.subtitle': 'Parent categories inside, subcategories outside',
+  'experimental.sunburst.group': 'Group',
+  'experimental.streamgraph.title': 'Categories over time',
+  'experimental.streamgraph.subtitle': 'The shape of each category through the range',
+  'experimental.streamgraph.footnote':
+    'There is no scale on purpose: the stack floats, so only the width of each band means anything. The table has the figures.',
+  'experimental.waterfall.title': 'How the balance got here',
+  'experimental.waterfall.subtitle': 'Each period as a step from the running total',
+  'experimental.waterfall.change': 'Change',
+  'experimental.waterfall.runningTotal': 'Running total',
+  'experimental.waterfall.footnote': 'Closing at {closing}',
+  'experimental.calendar.title': 'Spending by day',
+  'experimental.calendar.subtitle': 'One square per day, darker where more was spent',
+  'experimental.calendar.biggest': 'Biggest line',
+  'experimental.calendar.footnote':
+    'Shading is by quintile, not by the maximum, so one very large day does not flatten the rest of the year.',
+  'experimental.calendar.cell': '{date}: {amount} over {count}, mostly {top}',
+  'experimental.calendar.cellEmpty': '{date}: nothing spent',
+  'experimental.chord.title': 'Between your own accounts',
+  'experimental.chord.subtitle': 'Traffic between the current account and each vault',
+  'experimental.chord.footnote':
+    'A dashed band only ever ran one way — money went in and never came out, or the other way round.',
+  'experimental.chord.vault': 'Vault',
+  'experimental.chord.deposited': 'In',
+  'experimental.chord.withdrawn': 'Out',
+  'experimental.chord.net': 'Net',
+  'experimental.chord.unnamed': 'Unnamed',
+  'experimental.chord.currentAccount': 'Current account',
+  'experimental.chord.band': '{vault}: {deposited} in, {withdrawn} out',
+
+  /* ---- modules ---- */
+  'module.fx.label': 'Exchange rates',
+
+  /* ---- errors ---- */
+  'api.error.autoRateOff': 'Automatic exchange rates are off — switch them on in Settings',
+  'api.error.unknownCurrency': 'That is not a currency this app knows',
+  'api.error.badRate': 'A rate has to be a number greater than zero',
 };

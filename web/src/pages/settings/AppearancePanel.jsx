@@ -1,6 +1,6 @@
 import { THEMES } from '../../styles/themes.js';
 import { useAppearance } from '../../state/SettingsProvider.jsx';
-import { LOCALES } from '../../lib/locale.js';
+import { localeCodes, localeName } from '../../lib/locale.js';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -64,10 +64,15 @@ export default function AppearancePanel() {
       <div className="card">
         <h3>{t('settings.language.title')}</h3>
         <p className="hint">{t('settings.language.help')}</p>
+        {/* Each language named in itself. "Japonês" is only readable by someone
+            who already reads Portuguese, which is the wrong way round for the
+            one control whose job is getting you out of a language you cannot
+            read — and it keeps fourteen language names out of fourteen
+            catalogues. `lang` on the option so a screen reader switches voice. */}
         <select value={locale} onChange={(e) => set({ locale: e.target.value })}>
-          {Object.keys(LOCALES).map((code) => (
-            <option key={code} value={code}>
-              {t(`settings.language.${code}`)}
+          {localeCodes().map((code) => (
+            <option key={code} value={code} lang={code}>
+              {localeName(code)}
             </option>
           ))}
         </select>

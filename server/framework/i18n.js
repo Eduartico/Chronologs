@@ -8,16 +8,22 @@
  * `import.meta.glob`, a Vite-only mechanism Node cannot use.
  *
  * So the two halves read the same files by different routes: the browser globs
- * them, and a manifest declares them as `i18n: { en, pt }` for this side. They
- * are registered once at startup into a plain object that `english()` consults
- * after the core catalogue.
+ * them (`web/src/i18n/index.js`), and a manifest declares them as
+ * `i18n: { en, pt }` for this side. They are registered once at startup into a
+ * plain object that `english()` consults after the core catalogue.
  *
  * Registration is synchronous and additive on purpose. Before it runs — during
  * boot, before any module has been asked for anything — lookups fall through to
  * the core catalogue, which is exactly right, because nothing that could need a
  * module string has happened yet.
+ *
+ * The object starts empty rather than pre-seeded with the shipped locales. The
+ * app now ships fourteen, and a module author is asked for two of them
+ * (`REQUIRED_MODULE_LOCALES` in `contracts.js`); anything else it brings is
+ * welcome and anything it omits falls back to English, so a locale list here
+ * would only be a third place to forget to update.
  */
-const registered = { en: {}, pt: {} };
+const registered = {};
 
 /** Folds every installed module's catalogue in. Called once, from index.js. */
 export function registerModuleCatalogues(manifests) {

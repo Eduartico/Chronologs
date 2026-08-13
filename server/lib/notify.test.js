@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import en from '../../web/src/i18n/en.js';
+import en from '../../web/src/i18n/locales/en.js';
 import { loadRegistry } from '../framework/registry.js';
 import { registerModuleCatalogues } from '../framework/i18n.js';
 

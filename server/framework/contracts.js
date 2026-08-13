@@ -23,6 +23,17 @@
  */
 
 /**
+ * The languages a module has to bring its own strings in.
+ *
+ * The app ships fourteen locales; demanding all fourteen of anyone who writes a
+ * module would make writing one a translation project. English is the fallback
+ * every lookup ends at, and Portuguese is the language this installation is
+ * actually read in — a module missing either shows a raw dotted key on screen to
+ * the person running it. Everything else is welcome and optional.
+ */
+export const REQUIRED_MODULE_LOCALES = ['en', 'pt'];
+
+/**
  * Event types the ledger knows how to project.
  *
  * A module emitting anything else is not wrong so much as invisible: the event

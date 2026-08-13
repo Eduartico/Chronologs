@@ -64,6 +64,12 @@ const del = (url) => fetch(`${BASE}${url}`, { method: 'DELETE' }).then(unwrap);
 const clean = (params) =>
   Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''));
 
+/** The same rule as `clean`, as a ready-to-append suffix. */
+const qs = (params) => {
+  const query = new URLSearchParams(clean(params || {})).toString();
+  return query ? `?${query}` : '';
+};
+
 export const api = {
   // Ingestion
   ingestActivobank: () => post('/ingest/activobank'),
@@ -160,8 +166,21 @@ export const api = {
   applyTravel: (id, options) => post(`/travels/${id}/apply`, options || {}),
   getTravelAnomalies: () => get('/travels/anomalies'),
 
+  // The two aggregates behind the experimental charts. Separate endpoints so
+  // /analytics stays byte-identical for the snapshot baseline, and so a page
+  // with the flag off never asks for them.
+  getFlow: (params) => get(`/analytics/flow${qs(params)}`),
+  getDailySpend: (params) => get(`/analytics/daily${qs(params)}`),
+
   getCurrencyRate: () => get('/currency/rate'),
   refreshCurrencyRate: (force) => post('/currency/rate/refresh', { force }),
+
+  // The whole table. The two single-rate calls above are the dollar row of the
+  // same data and are kept because the snapshot baseline records them.
+  getCurrencyRates: () => get('/currency/rates'),
+  refreshCurrencyRates: (force) => post('/currency/rates/refresh', { force }),
+  /** `rate: null` clears a hand-typed rate and falls back to the fetched one. */
+  setCurrencyRate: (code, rate) => put(`/currency/rates/${code}`, { rate }),
 
   // Institution profile: the five patterns that let a statement's own wording
   // for "money left this account" etc. be recognised, so the internal-transfer

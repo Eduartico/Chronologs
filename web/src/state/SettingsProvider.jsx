@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 
 import { api } from '../lib/api.js';
 import { configureMoney } from '../lib/money.js';
-import { setLocale, currentLocale, LOCALES, DEFAULT_LOCALE } from '../lib/locale.js';
+import { setLocale, currentLocale, localeTag, DEFAULT_LOCALE } from '../lib/locale.js';
 import { inkOn } from '../lib/contrastInk.js';
 import { themeById, DEFAULT_THEME } from '../styles/themes.js';
 
@@ -65,7 +65,7 @@ function applyToDom(appearance) {
   root.dataset.finance = appearance.finance === 'cvd' ? 'cvd' : 'standard';
   root.dataset.textures = appearance.textures ? 'on' : 'off';
   root.dataset.tables = appearance.tables ? 'on' : 'off';
-  root.lang = LOCALES[appearance.locale] || LOCALES[DEFAULT_LOCALE];
+  root.lang = localeTag(appearance.locale);
 
   // CSS cannot decide which ink is readable on a filled colour, so it is computed
   // once per theme and written as inline custom properties, which outrank the
@@ -168,4 +168,20 @@ export function useSettings() {
 export function useAppearance() {
   const { appearance, theme, setAppearance, saving } = useSettings();
   return { ...appearance, theme, locale: appearance.locale ?? currentLocale(), set: setAppearance, saving };
+}
+
+/**
+ * The experimental flags.
+ *
+ * Deliberately a sibling of `appearance` rather than a part of it. Appearance is
+ * mirrored to localStorage and stamped onto <html> because the first paint needs
+ * it; a flag only decides whether a chart component mounts, which React knows in
+ * time without any of that machinery. Keeping them apart means an experiment can
+ * never be the reason a theme flashes.
+ */
+export function useExperiments() {
+  const { settings, save, saving } = useSettings();
+  const flags = settings?.experimental || {};
+  const set = useCallback((patch) => save({ experimental: { ...flags, ...patch } }), [flags, save]);
+  return { flags, set, saving };
 }

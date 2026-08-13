@@ -445,13 +445,199 @@ export function computeInsights(transactions, categorizedMap, monthlyCashflow) {
     // Written out only where there is something to say. The old version emitted
     // "You spent 0.0% on income" — a sentence that is both meaningless and
     // English, on a screen that is otherwise Portuguese.
+    //
+    // A key and its parameters rather than a sentence, like every other piece of
+    // server-side text: this one was the last hardcoded Portuguese string the
+    // server put on screen, so it read Portuguese in all fourteen languages.
     summary: totalSpending
       ? topCategories
           .filter((c) => c.expense / totalSpending >= 0.03)
-          .map(
-            (c) =>
-              `${((c.expense / totalSpending) * 100).toFixed(0)}% do que gastaste foi em ${c.category}`
-          )
+          .map((c) => ({
+            key: 'insights.summaryShare',
+            params: {
+              percent: ((c.expense / totalSpending) * 100).toFixed(0),
+              category: c.category,
+            },
+          }))
       : [],
   };
+}
+
+/* ---- flow and daily spend ---------------------------------------------------
+   Two aggregates the existing set could not express, added for the experimental
+   charts. Both are pure and both read the same rows every other function here
+   reads, so nothing new lands in the ledger for either. */
+
+/**
+ * Money as a flow: where it came in, which account held it, where it went.
+ *
+ * Nothing in the existing set is flow-shaped. `computeCategoryBreakdown`
+ * collapses the account dimension and `computeCategoryTrend` collapses it too
+ * and buckets by period — but every row already carries `account`, `category`
+ * and a signed `amount`, so a three-column Sankey needs no new event data, only
+ * a grouping nothing had asked for yet.
+ *
+ * Three things are worth knowing about the result:
+ *
+ *  - **Income sources are merchants.** There is no payer entity in a bank
+ *    statement; the name on a credit is the closest thing to one.
+ *  - **`account` can be null.** The parser supplies it where the statement says
+ *    it and `enrichAccounts` backfills the rest, but a row without one is
+ *    ordinary. Those go to a named "unknown" node rather than being dropped — a
+ *    Sankey whose totals do not match the dashboard is worse than one with an
+ *    honest unlabelled band.
+ *  - **The two sides do not balance**, ever, over a real period. What is left
+ *    over is not an error, it is savings — so a surplus terminates in its own
+ *    node and a shortfall opens in one. Without that the account nodes have
+ *    different in and out totals, which Recharts draws as a lopsided ribbon and
+ *    a reader quite reasonably reads as a bug.
+ */
+export function computeFlow(transactions, categorizedMap = {}, options = {}) {
+  const { maxSources = 8, maxCategories = 12, unknownAccount = 'unknown', otherLabel = 'other' } = options;
+
+  const accountOf = (tx) => tx.account || tx.accountId || unknownAccount;
+  const categoryOf = (tx) => categorizedMap[tx.id] || tx.category || 'uncategorized';
+  const sourceOf = (tx) => tx.merchant || tx.description || 'unknown';
+
+  const income = new Map();
+  const expense = new Map();
+
+  for (const tx of transactions) {
+    const amount = amountOf(tx);
+    if (!amount) continue;
+    const account = String(accountOf(tx));
+    if (amount > 0) {
+      const key = sourceOf(tx);
+      const byAccount = income.get(key) || new Map();
+      byAccount.set(account, (byAccount.get(account) || 0) + amount);
+      income.set(key, byAccount);
+    } else {
+      const byCategory = expense.get(account) || new Map();
+      const category = categoryOf(tx);
+      byCategory.set(category, (byCategory.get(category) || 0) + Math.abs(amount));
+      expense.set(account, byCategory);
+    }
+  }
+
+  const sources = capOuter(income, maxSources, otherLabel);
+  const categories = capInner(expense, maxCategories, otherLabel);
+
+  const nodes = [];
+  const index = new Map();
+  const nodeAt = (name, kind) => {
+    const key = `${kind}:${name}`;
+    if (!index.has(key)) {
+      index.set(key, nodes.length);
+      nodes.push({ name, kind });
+    }
+    return index.get(key);
+  };
+
+  const links = [];
+  const inflows = new Map();
+  const outflows = new Map();
+
+  for (const [source, byAccount] of sources) {
+    for (const [account, value] of byAccount) {
+      links.push({ source: nodeAt(source, 'source'), target: nodeAt(account, 'account'), value });
+      inflows.set(account, (inflows.get(account) || 0) + value);
+    }
+  }
+
+  for (const [account, byCategory] of categories) {
+    for (const [category, value] of byCategory) {
+      links.push({ source: nodeAt(account, 'account'), target: nodeAt(category, 'category'), value });
+      outflows.set(account, (outflows.get(account) || 0) + value);
+    }
+  }
+
+  for (const account of new Set([...inflows.keys(), ...outflows.keys()])) {
+    const residual = round2((inflows.get(account) || 0) - (outflows.get(account) || 0));
+    if (residual > 0.005) {
+      links.push({ source: nodeAt(account, 'account'), target: nodeAt('saved', 'residual'), value: residual });
+    } else if (residual < -0.005) {
+      links.push({ source: nodeAt('drawn', 'residual'), target: nodeAt(account, 'account'), value: -residual });
+    }
+  }
+
+  return {
+    nodes,
+    links: links.map((l) => ({ ...l, value: round2(l.value) })).filter((l) => l.value > 0),
+    totals: {
+      income: round2([...inflows.values()].reduce((a, b) => a + b, 0)),
+      expense: round2([...outflows.values()].reduce((a, b) => a + b, 0)),
+    },
+  };
+}
+
+/** Folds the smallest *outer* keys of a two-level map into one bucket. */
+function capOuter(map, max, otherLabel) {
+  if (map.size <= max) return map;
+  const totals = [...map.entries()].map(([key, inner]) => [key, sumMap(inner)]);
+  totals.sort((a, b) => b[1] - a[1]);
+  const keep = new Set(totals.slice(0, max - 1).map(([key]) => key));
+  const capped = new Map();
+  for (const [key, inner] of map) {
+    const target = keep.has(key) ? key : otherLabel;
+    const existing = capped.get(target) || new Map();
+    for (const [k, v] of inner) existing.set(k, (existing.get(k) || 0) + v);
+    capped.set(target, existing);
+  }
+  return capped;
+}
+
+/** The same fold, one level in: the *inner* keys are what gets capped. */
+function capInner(map, max, otherLabel) {
+  const totals = new Map();
+  for (const inner of map.values()) {
+    for (const [key, value] of inner) totals.set(key, (totals.get(key) || 0) + value);
+  }
+  if (totals.size <= max) return map;
+  const keep = new Set(
+    [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, max - 1).map(([key]) => key)
+  );
+  const capped = new Map();
+  for (const [outer, inner] of map) {
+    const folded = new Map();
+    for (const [key, value] of inner) {
+      const target = keep.has(key) ? key : otherLabel;
+      folded.set(target, (folded.get(target) || 0) + value);
+    }
+    capped.set(outer, folded);
+  }
+  return capped;
+}
+
+const sumMap = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * One row per day that had any spending, for the calendar heatmap.
+ *
+ * Days with nothing are absent rather than zero: a year is 365 rows, most of
+ * them empty for most people, and the chart draws its own empty cells from the
+ * range anyway. Zeroes here would multiply the payload to say nothing.
+ */
+export function computeDailySpend(transactions, categorizedMap = {}) {
+  const days = new Map();
+  for (const tx of transactions) {
+    const amount = amountOf(tx);
+    if (amount >= 0) continue;
+    const date = dateOf(tx);
+    if (!date) continue;
+    const day = days.get(date) || { date, total: 0, count: 0, top: null, topAmount: 0 };
+    const magnitude = Math.abs(amount);
+    day.total += magnitude;
+    day.count += 1;
+    // The biggest single line of the day, so a hovered cell can say what made it
+    // dark rather than only how dark it is.
+    if (magnitude > day.topAmount) {
+      day.topAmount = magnitude;
+      day.top = categorizedMap[tx.id] || tx.category || 'uncategorized';
+    }
+    days.set(date, day);
+  }
+  return [...days.values()]
+    .map((d) => ({ ...d, total: round2(d.total), topAmount: round2(d.topAmount) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }

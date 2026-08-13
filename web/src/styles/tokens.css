@@ -115,6 +115,25 @@
   --chart-axis: color-mix(in srgb, var(--text-muted) 60%, transparent);
   --chart-cursor: color-mix(in srgb, var(--text-muted) 14%, transparent);
 
+  /* ---- sequential ramp ------------------------------------------------------
+     The eight above are categorical: eight things that are not each other. A
+     heatmap needs the opposite — one hue, five steps of "more". Mixing them by
+     hand out of two arbitrary colours is how a heatmap ends up with a step that
+     is lighter than the one below it.
+
+     Derived from --accent, and from the surface rather than from white, so the
+     low end disappears into the card on a dark theme exactly as it does on a
+     light one. Because it descends from a *theme* anchor and not from
+     --pnl-up/--pnl-down, it is untouched by [data-finance='cvd'] — a spending
+     heatmap is not a gain or a loss, and it must not change colour when the
+     finance pair does. */
+  --seq-0: color-mix(in srgb, var(--text-muted) 10%, var(--surface-2));
+  --seq-1: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+  --seq-2: color-mix(in srgb, var(--accent) 42%, var(--surface-2));
+  --seq-3: color-mix(in srgb, var(--accent) 62%, var(--surface-2));
+  --seq-4: color-mix(in srgb, var(--accent) 82%, var(--surface-2));
+  --seq-5: var(--accent);
+
   /* ---- elevation ------------------------------------------------------------
      Not derived either: correcting a shadow for a light page is not a hue shift,
      it is an alpha collapse. A rgba(0,0,0,.5) drop on a white card reads as dirt. */

@@ -146,3 +146,57 @@ test('the month grid starts on Monday and is whole weeks', () => {
   assert.equal(grid[6].iso, '2026-03-01');
   assert.equal(grid.filter((c) => !c.outside).length, 31);
 });
+
+/* ---- other field orders ----------------------------------------------------
+   The tests above all run in the default locale, which is day-first. These walk
+   the two other shapes the shipped locales come in, because "dd/mm/yyyy" was
+   hardcoded into the typing, the masking and the parsing and every one of those
+   was a separate place to get it wrong. */
+
+test('a year-first locale reads a full date its own way', () => {
+  // Japanese formats 2026-11-22 as 2026/11/22, so that is what typing it means.
+  assert.equal(parse('20261122', { locale: 'ja' }), '2026-11-22');
+  assert.equal(parse('2026/11/22', { locale: 'ja' }), '2026-11-22');
+  assert.equal(displayDate('2026-11-22', 'ja'), '2026/11/22');
+  assert.equal(maskDateTyping('20261122', 'ja'), '2026/11/22');
+  // Same digits, day-first: an entirely different date, and that is the point.
+  assert.equal(parse('22112026'), '2026-11-22');
+});
+
+test('a dot-separator locale renders and accepts dots', () => {
+  // German, Russian, Polish and Turkish all write 22.11.2026.
+  for (const locale of ['de', 'ru', 'pl', 'tr']) {
+    assert.equal(displayDate('2026-11-22', locale), '22.11.2026', locale);
+    assert.equal(maskDateTyping('22112026', locale), '22.11.2026', locale);
+    assert.equal(parse('22.11.2026', { locale }), '2026-11-22', locale);
+  }
+  // Dutch uses hyphens, which the parser must not mistake for a relative offset.
+  assert.equal(displayDate('2026-11-22', 'nl'), '22-11-2026');
+  assert.equal(parse('22-11-2026', { locale: 'nl' }), '2026-11-22');
+  assert.equal(parse('-2', { locale: 'nl', today: TODAY }), '2026-08-02');
+});
+
+test('the shorthand still completes from a neighbour in any order', () => {
+  // Two digits is a day wherever the year sits, because a year is the one field
+  // that cannot be completed from the field next to it.
+  for (const locale of ['ja', 'de', 'en', 'zh-CN']) {
+    assert.equal(parse('25', { anchor: '2025-01-21', role: 'end', locale }), '2025-01-25', locale);
+  }
+});
+
+test('each locale accepts its own word for today', () => {
+  const words = { de: 'heute', fr: 'aujourd’hui'.replace('’', "'"), ja: '今日', ru: 'сегодня', pl: 'dziś' };
+  for (const [locale, word] of Object.entries(words)) {
+    assert.equal(parse(word, { locale }), TODAY, locale);
+  }
+  // English and Portuguese are accepted whatever the interface is showing.
+  assert.equal(parse('today', { locale: 'ja' }), TODAY);
+  assert.equal(parse('hoje', { locale: 'de' }), TODAY);
+});
+
+test('the completion works in a year-first locale too', () => {
+  // Typed in full, there is nothing left to add.
+  assert.equal(completionFor('2026/11/22', { locale: 'ja' }), '');
+  // A partial year-first date completes its own tail.
+  assert.equal(completionFor('2026', { locale: 'ja', anchor: '', today: TODAY }), '');
+});

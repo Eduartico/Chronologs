@@ -31,9 +31,11 @@ export default function RowActions({
   deleteMode = 'inline',
   editLabel,
   deleteLabel,
-  confirmDeleteLabel = 'Confirmar — apaga',
-  editBlockedReason = 'Não é possível editar isto',
-  deleteBlockedReason = 'Não é possível apagar isto',
+  // No defaults here: a default cannot call a hook, and these are user-visible
+  // copy that has to follow the language. Resolved at use, below.
+  confirmDeleteLabel,
+  editBlockedReason,
+  deleteBlockedReason,
   onEdit,
   onSave,
   onCancel,
@@ -65,7 +67,7 @@ export default function RowActions({
         <IconButton icon="pencil" label={editLabel ?? t('common.edit')} disabled />
         <IconButton
           icon="check"
-          label={confirmDeleteLabel}
+          label={confirmDeleteLabel ?? t('common.confirmDelete')}
           tone="armed"
           disabled={busy}
           onClick={onConfirmDelete}
@@ -80,7 +82,7 @@ export default function RowActions({
       {canEdit ? (
         <IconButton icon="pencil" label={editLabel ?? t('common.edit')} disabled={busy} onClick={onEdit} />
       ) : (
-        <IconButton icon="pencil" label={editBlockedReason} disabled />
+        <IconButton icon="pencil" label={editBlockedReason ?? t('common.cannotEdit')} disabled />
       )}
       {/*
         A blocked delete is still drawn, greyed, with the reason on hover.
@@ -90,7 +92,7 @@ export default function RowActions({
       {canDelete ? (
         <IconButton icon="trash" label={deleteLabel ?? t('common.delete')} tone="danger" disabled={busy} onClick={onAskDelete} />
       ) : (
-        <IconButton icon="trash" label={deleteBlockedReason} disabled />
+        <IconButton icon="trash" label={deleteBlockedReason ?? t('common.cannotDelete')} disabled />
       )}
     </div>
   );

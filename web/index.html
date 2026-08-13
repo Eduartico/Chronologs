@@ -38,7 +38,12 @@
           root.dataset.finance = saved.finance === 'cvd' ? 'cvd' : 'standard';
           root.dataset.textures = saved.textures ? 'on' : 'off';
           root.dataset.tables = saved.tables ? 'on' : 'off';
-          root.lang = saved.locale === 'pt' ? 'pt-PT' : 'en';
+          /* The stored code is already a valid BCP-47 primary subtag for every
+             language but the two that want a region: `ja`, `ru`, `zh-CN` and the
+             rest pass straight through, so adding a language costs nothing
+             here. This script cannot import lib/locale.js — it runs before any
+             module does — so the two exceptions are spelled out. */
+          root.lang = { en: 'en-GB', pt: 'pt-PT' }[saved.locale] || saved.locale || 'en-GB';
           if (saved.bg) {
             var meta = document.querySelector('meta[name="theme-color"]');
             if (meta) meta.setAttribute('content', saved.bg);

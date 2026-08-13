@@ -16,17 +16,23 @@
  *
  * Pure functions, no React, so the rules can be tested on their own.
  */
-import { firstDayOfWeek } from './locale.js';
+import { firstDayOfWeek, dateFieldOrder, currentLocale } from './locale.js';
 
 /**
  * Words that mean a date.
  *
- * Both languages are accepted whichever one the interface is in, and they always
- * have been for Portuguese — someone who types `hoje` out of habit should not be
- * told it is unreadable because the app is showing English that day. Accents are
- * optional on the way in; nothing here is ever displayed.
+ * English and Portuguese are accepted whatever the interface is showing, and
+ * they always have been — someone who types `hoje` out of habit should not be
+ * told it is unreadable because the app is in English that day. The active
+ * language's own three words are added on top.
+ *
+ * These live here rather than in the catalogues because this module is pure and
+ * has no React around it, and because they are parser input rather than copy:
+ * nothing here is ever displayed, accents are optional on the way in, and a
+ * translator improving the wording of a *label* must not silently change what
+ * the field will accept.
  */
-const KEYWORDS = {
+const ALWAYS = {
   hoje: 0,
   today: 0,
   ontem: -1,
@@ -35,6 +41,36 @@ const KEYWORDS = {
   'amanhã': 1,
   tomorrow: 1,
 };
+
+/** [today, yesterday, tomorrow] per locale, unaccented spellings included. */
+const KEYWORDS_BY_LOCALE = {
+  es: [['hoy'], ['ayer'], ['manana', 'mañana']],
+  fr: [["aujourd'hui", 'aujourdhui'], ['hier'], ['demain']],
+  de: [['heute'], ['gestern'], ['morgen']],
+  it: [['oggi'], ['ieri'], ['domani']],
+  nl: [['vandaag'], ['gisteren'], ['morgen']],
+  pl: [['dzis', 'dziś'], ['wczoraj'], ['jutro']],
+  ru: [['сегодня'], ['вчера'], ['завтра']],
+  tr: [['bugun', 'bugün'], ['dun', 'dün'], ['yarin', 'yarın']],
+  // Hindi uses कल for both yesterday and tomorrow — the tense of the verb
+  // decides, and there is no verb in a date box. Only "today" is unambiguous;
+  // the relative `+1` / `-1` form covers the other two in every language.
+  hi: [['आज'], [], []],
+  ja: [['今日', 'きょう'], ['昨日', 'きのう'], ['明日', 'あした']],
+  ko: [['오늘'], ['어제'], ['내일']],
+  'zh-CN': [['今天'], ['昨天'], ['明天']],
+};
+
+function keywords(locale = currentLocale()) {
+  const table = { ...ALWAYS };
+  const entry = KEYWORDS_BY_LOCALE[locale];
+  if (entry) {
+    entry[0].forEach((w) => (table[w] = 0));
+    entry[1].forEach((w) => (table[w] = -1));
+    entry[2].forEach((w) => (table[w] = 1));
+  }
+  return table;
+}
 
 /** Today, as the ISO day the rest of the app speaks. */
 export function todayIso(now = new Date()) {
@@ -69,24 +105,62 @@ function shiftDays(iso, days) {
 }
 
 /**
- * Splits what was typed into the numbers it contains.
+ * Splits what was typed into the fields it contains, in this locale's order.
  *
  * With separators the parts are whatever the person typed. Without them the
- * digits are cut by length, the way a keypad user expects: `25` is a day,
- * `2503` is a day and a month, `25032026` is the lot.
+ * digits are cut by length, the way a keypad user expects: in Lisbon `25` is a
+ * day, `2503` is a day and a month, `25032026` is the lot; in Tokyo the same
+ * three inputs are a month, a month and a day, and a full year-first date.
+ *
+ * Two orders are in play, and that is deliberate. A *complete* date follows the
+ * locale exactly — `20261122` in Japanese is 2026-11-22. A *partial* one drops
+ * the year and keeps only the day and month in their relative order, because
+ * the whole point of typing two digits is that the field completes the rest
+ * from its neighbour, and a year cannot be completed from anything.
+ *
+ * Returns `{ day, month, year }` with the parts that were supplied, or null.
  */
-function digitGroups(text) {
+function digitGroups(text, locale) {
+  const { order } = dateFieldOrder(locale);
+  const short = order.filter((f) => f !== 'year');
+  const assign = (fields, values) => {
+    const out = {};
+    fields.forEach((f, i) => {
+      if (values[i] !== undefined) out[f] = values[i];
+    });
+    return out;
+  };
+
   const raw = text.trim();
   if (/[^\d]/.test(raw)) {
     const parts = raw.split(/[^\d]+/).filter(Boolean).map(Number);
-    return parts.length >= 1 && parts.length <= 3 ? parts : null;
+    if (parts.length < 1 || parts.length > 3) return null;
+    // Typed separators mean the reader is spelling the date out, so the full
+    // locale order applies — except for two parts, which is still the shorthand.
+    if (parts.length === 1) return { day: parts[0] };
+    return assign(parts.length === 3 ? order : short, parts);
   }
+
   const d = raw;
-  if (d.length <= 2) return [Number(d)];
-  if (d.length === 3) return [Number(d.slice(0, 1)), Number(d.slice(1))];
-  if (d.length === 4) return [Number(d.slice(0, 2)), Number(d.slice(2))];
-  if (d.length === 6) return [Number(d.slice(0, 2)), Number(d.slice(2, 4)), Number(d.slice(4))];
-  if (d.length === 8) return [Number(d.slice(0, 2)), Number(d.slice(2, 4)), Number(d.slice(4))];
+  const cut = (widths) => {
+    const values = [];
+    let at = 0;
+    for (const w of widths) {
+      values.push(Number(d.slice(at, at + w)));
+      at += w;
+    }
+    return values;
+  };
+
+  // One number on its own is always a day, in every locale. The shorthand's
+  // whole purpose is "complete the rest from the field next door", and a bare
+  // month has nothing to complete — so month-first order applies from two
+  // numbers upward, not from one.
+  if (d.length <= 2) return { day: Number(d) };
+  if (d.length === 3) return assign(short, [Number(d.slice(0, 1)), Number(d.slice(1))]);
+  if (d.length === 4) return assign(short, [Number(d.slice(0, 2)), Number(d.slice(2))]);
+  if (d.length === 6) return assign(order, cut(order.map(() => 2)));
+  if (d.length === 8) return assign(order, cut(order.map((f) => (f === 'year' ? 4 : 2))));
   return null;
 }
 
@@ -141,32 +215,39 @@ function scanByYear(ref, day, month, forward) {
  * @param anchor the ISO date of the field this one is paired with, if any
  * @param role   `end` completes forward from the anchor, `start` backwards
  * @param today  injectable, so the tests do not depend on the clock
+ * @param locale injectable, so the tests can walk every field order
  * @returns ISO string, `''` for an empty box, or `null` when it cannot be read
  */
-export function parseDateInput(text, { anchor = '', role = 'end', today = todayIso() } = {}) {
+export function parseDateInput(
+  text,
+  { anchor = '', role = 'end', today = todayIso(), locale = currentLocale() } = {},
+) {
   const input = String(text ?? '').trim().toLowerCase();
   if (!input) return '';
 
   const base = partsOf(anchor) ? anchor : today;
 
-  if (input in KEYWORDS) {
-    return KEYWORDS[input] === 0 ? today : shiftDays(today, KEYWORDS[input]);
+  const words = keywords(locale);
+  if (input in words) {
+    return words[input] === 0 ? today : shiftDays(today, words[input]);
   }
 
   // `+3` / `-2`: relative to the paired field when there is one, otherwise to
-  // today. This is how a three-night trip gets entered without arithmetic.
+  // today. This is how a three-night trip gets entered without arithmetic, and
+  // it is the only shorthand that reads the same in every language.
   const relative = /^([+-])(\d{1,3})$/.exec(input);
   if (relative) {
     const n = Number(relative[2]) * (relative[1] === '-' ? -1 : 1);
     return shiftDays(base, n);
   }
 
-  const groups = digitGroups(input);
+  const groups = digitGroups(input, locale);
   if (!groups) return null;
-  const [day, month, year] = groups;
+  const { day, month, year } = groups;
+  const supplied = Object.keys(groups).length;
   if (!Number.isFinite(day) || day < 1 || day > 31) return null;
 
-  if (groups.length === 3) {
+  if (supplied === 3) {
     const y = fullYear(year);
     return isRealDate(y, month, day) ? isoOf(y, month, day) : null;
   }
@@ -174,7 +255,7 @@ export function parseDateInput(text, { anchor = '', role = 'end', today = todayI
   const ref = partsOf(base);
   const forward = role !== 'start';
 
-  if (groups.length === 2) {
+  if (supplied === 2) {
     if (month < 1 || month > 12) return null;
     // With no paired field there is nothing to complete from, so the current
     // year is the answer and a date that does not exist is an error, not an
@@ -206,37 +287,55 @@ export function parseDateInput(text, { anchor = '', role = 'end', today = todayI
  */
 export function completionFor(text, options = {}) {
   const typed = String(text ?? '');
-  if (!typed.trim() || /[a-z+\-]/i.test(typed)) return '';
+  // A leading sign is the relative form, and anything that is not a digit or a
+  // separator is a keyword. Neither has a tail to complete. `.` and `-` are
+  // separators in half the shipped locales, so they can no longer be read as
+  // "this is not a date".
+  if (!typed.trim() || /^[+-]/.test(typed) || /[^\d\s./-]/.test(typed)) return '';
 
   const iso = parseDateInput(typed, options);
   if (!iso) return '';
 
-  const full = displayDate(iso);
+  const full = displayDate(iso, options.locale);
   // Only ever an extension of what is on screen, never a correction of it.
   return full.startsWith(typed) ? full.slice(typed.length) : '';
 }
 
-/** ISO → what the box shows. */
-export function displayDate(iso) {
+/** ISO → what the box shows, in this locale's order and with its separator. */
+export function displayDate(iso, locale) {
   const p = partsOf(iso);
   if (!p) return '';
-  return `${String(p.day).padStart(2, '0')}/${String(p.month).padStart(2, '0')}/${p.year}`;
+  const { order, separator } = dateFieldOrder(locale);
+  const width = { day: 2, month: 2, year: 4 };
+  return order.map((f) => String(p[f]).padStart(width[f], '0')).join(separator);
 }
 
 /**
- * Slashes typed for you, while you type.
+ * Separators typed for you, while you type.
  *
  * Only ever adds — never removes and never reorders — so backspacing through
  * the field behaves the way it looks like it should. Keywords and `+3` pass
  * through untouched.
+ *
+ * Follows the full locale order, including the year's position and width, so
+ * what the mask builds is what `displayDate` would have rendered. In a
+ * day-first locale that is byte-for-byte the `dd/mm/yyyy` this used to hardcode.
  */
-export function maskDateTyping(text) {
+export function maskDateTyping(text, locale) {
   const raw = String(text ?? '');
-  if (/[a-z+\-]/i.test(raw)) return raw;
+  if (/^[+-]/.test(raw) || /[^\d\s./-]/.test(raw)) return raw;
+  const { order, separator } = dateFieldOrder(locale);
+  const widths = order.map((f) => (f === 'year' ? 4 : 2));
   const digits = raw.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+
+  const out = [];
+  let at = 0;
+  for (const w of widths) {
+    if (at >= digits.length) break;
+    out.push(digits.slice(at, at + w));
+    at += w;
+  }
+  return out.join(separator);
 }
 
 /** The days a month grid needs, Monday first, with the neighbours it borrows. */

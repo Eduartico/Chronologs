@@ -1,4 +1,5 @@
 import { money, pct as formatPct, nativeOf } from '../../lib/money.js';
+import { nf } from '../../lib/locale.js';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -55,7 +56,10 @@ export default function Value({
   // repeat it as a hyphen-minus, which reads as a dash next to a real minus sign.
   const text =
     format === 'percent' ? formatPct(magnitude).replace(/^\+/, '')
-    : format === 'plain' ? new Intl.NumberFormat().format(magnitude)
+    // `nf()`, never a bare Intl formatter: a bare one follows the machine's
+    // locale, so a plain count read Portuguese on one laptop and English on the
+    // next while every money value on the same row followed the app.
+    : format === 'plain' ? nf().format(magnitude)
     : money(magnitude, { from });
 
   return (

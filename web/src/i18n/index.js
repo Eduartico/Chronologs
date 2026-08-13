@@ -2,9 +2,10 @@
  * Translation.
  *
  * Hand-rolled, and deliberately so. i18next brings ~40 kB, an init lifecycle, a
- * Suspense story and a namespace loader, and this app has one user, two languages,
- * no lazy loading and no right-to-left. The single feature worth importing a
- * library for — plural rules — is already in the platform as `Intl.PluralRules`.
+ * Suspense story and a namespace loader, and this app has one user, no lazy
+ * loading and no right-to-left. The single feature worth importing a library
+ * for — plural rules — is already in the platform as `Intl.PluralRules`, and it
+ * carries every category Russian and Polish need without being told.
  *
  * The other reason is the server. `server/lib/notify.js` renders an English
  * fallback into the stored notification so exports and old rows still read, which
@@ -16,11 +17,67 @@
  */
 import { createContext, createElement, useContext, useMemo, useSyncExternalStore } from 'react';
 
-import en from './en.js';
-import pt from './pt.js';
-import { currentLocale, setLocale, onLocaleChange, intlLocale, DEFAULT_LOCALE } from '../lib/locale.js';
+import { currentLocale, setLocale, onLocaleChange, intlLocale, localeTag, DEFAULT_LOCALE } from '../lib/locale.js';
 
-const CATALOGUES = { en, pt };
+/**
+ * Catalogues are discovered, not registered.
+ *
+ * There used to be a hardcoded `{ en, pt }` and two static imports, so adding a
+ * language meant editing this file — the same "list you must not forget" that
+ * `modules/*​/module.js` was globbed to get rid of. Dropping `locales/sv.js` in
+ * is now the whole of adding Swedish, and the parity test will immediately say
+ * which of the 568 keys it is missing.
+ *
+ * Eager, because `t()` is synchronous in several hundred call sites and a lazy
+ * catalogue would make every one of them a loading state. The whole set is
+ * strings; it costs a fraction of what the chart library does.
+ *
+ * Module catalogues are merged underneath, so a module can name its own screens
+ * — core keys win a collision, matching what `registerModuleCatalogues` does on
+ * the server.
+ */
+/*
+ * The `try` is not defensiveness, it is the seam between two runtimes.
+ * `import.meta.glob` is Vite's and is replaced with an object literal at build
+ * time; under plain Node — which is what `node --test` gives the pure modules in
+ * lib/ — it does not exist. Catching means `money.js` and friends can be
+ * imported by a test without dragging Vite in. `t()` returns its key there,
+ * which is exactly what a test of currency arithmetic wants; a test that needs
+ * real strings imports `locales/en.js` directly, as i18n.test.js does.
+ */
+let CORE = {};
+let MODULE = {};
+try {
+  CORE = import.meta.glob('./locales/*.js', { eager: true, import: 'default' });
+  MODULE = import.meta.glob('../../../modules/*/i18n/*.js', { eager: true, import: 'default' });
+} catch {
+  /* not running under Vite */
+}
+
+function byLocale(files, nameOf) {
+  const out = {};
+  for (const [path, strings] of Object.entries(files)) {
+    const code = nameOf(path);
+    if (!code) continue;
+    out[code] = { ...(out[code] || {}), ...strings };
+  }
+  return out;
+}
+
+const moduleStrings = byLocale(MODULE, (p) => p.match(/\/i18n\/([\w-]+)\.js$/)?.[1]);
+const coreStrings = byLocale(CORE, (p) => p.match(/\/locales\/([\w-]+)\.js$/)?.[1]);
+
+const CATALOGUES = Object.fromEntries(
+  Object.keys(coreStrings).map((code) => [code, { ...(moduleStrings[code] || {}), ...coreStrings[code] }]),
+);
+
+const en = CATALOGUES[DEFAULT_LOCALE] || {};
+
+/** Every locale that actually has a catalogue file. The locale registry in
+    lib/locale.js and this list are asserted equal by i18n.test.js. */
+export function catalogueCodes() {
+  return Object.keys(CATALOGUES);
+}
 
 export function catalogue(locale = currentLocale()) {
   return CATALOGUES[locale] || CATALOGUES[DEFAULT_LOCALE];

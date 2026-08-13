@@ -49,9 +49,11 @@ the rule" — kept short since the skill itself has the generalizable reasoning.
    `uncategorized` and repoints any rule that named it. That's
    [`ConfirmDialog.jsx`](../web/src/components/ui/ConfirmDialog.jsx),
    reached via `RowActions`'s `deleteMode="modal"` prop, with the exact count
-   fetched before the dialog opens (`api.getCategoryUsage`). Subcategorias
-   and Regras stay on the plain armed-button gesture — nothing else
-   references them.
+   fetched before the dialog opens (`api.getCategoryUsage`). Subcategorias,
+   Regras and the exchange-rate table in Definições stay on the plain
+   armed-button gesture — nothing else references what they hold. Clearing a
+   typed rate only drops back to the fetched one, which is a second's work to
+   redo; that is the test for which gesture a row deserves.
 
 3. **No chrome on the editing field.** Went through four rounds before it
    stuck. Filled background + border: removed outright. A `border-bottom`

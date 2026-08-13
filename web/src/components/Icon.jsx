@@ -66,6 +66,16 @@ const PATHS = {
   chartLine: 'M3 20h18M4 16l5-6 4 3 6-8',
   chartArea: 'M3 20h18M4 17l5-6 4 3 6-8v11z',
   chartPie: 'M12 3a9 9 0 109 9h-9z',
+  // The experimental shapes. Each one draws its own diagram rather than a
+  // generic graph glyph, because the switch that turns it on is the only place
+  // the reader sees the shape before deciding whether to try it.
+  chartSankey: 'M3 5h3c4 0 4 6 8 6h7M3 12h3c4 0 4 7 8 7h7M3 19h3',
+  chartTreemap: 'M3 4h18v16H3zM3 13h11M14 4v16M14 9h7M3 17h11',
+  chartSunburst: 'M12 12a4 4 0 100-.01zM12 3a9 9 0 019 9M12 12V3M12 12h9M12 12l6 6M12 8a4 4 0 000 8',
+  chartStream: 'M3 12c3-5 6 5 9 0s6-5 9 0M3 16c3-4 6 4 9 0s6-4 9 0M3 8c3-4 6 4 9 0s6-4 9 0',
+  chartWaterfall: 'M3 6h4v5H3zM8 11h4v4H8zM13 15h4v3h-4zM18 9h3v9h-3M3 20h18',
+  chartCalendar: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4M7 13h2v2H7zM11 13h2v2h-2zM15 13h2v2h-2zM7 17h2v2H7z',
+  chartChord: 'M12 3a9 9 0 100 18 9 9 0 000-18zM6 7c5 3 7 8 12 10M6 17c5-3 7-8 12-10',
   // The other half of the chart/table switch: every chart can be read as rows.
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
   // The two Settings tabs added with the theme engine.

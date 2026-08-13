@@ -81,6 +81,27 @@ export const BUILTIN_MODULES = [
   },
 
   {
+    id: 'fx',
+    kind: 'engine',
+    label: 'module.fx.label',
+    icon: 'wallet',
+    // The ECB publishes its daily reference rates at about 16:00 CET, so asking
+    // an hour later gets today's figures rather than yesterday's. Weekdays only:
+    // there is no weekend fixing to fetch.
+    schedule: { preset: 'daily', cron: '0 17 * * 1-5' },
+    hooks: {
+      // Same shape as `quotes` below, and for the same reason: this is the other
+      // feature that reaches the internet, it is opt-in, and reporting the skip
+      // rather than throwing keeps a switched-off feature out of the bell.
+      scheduledJob: async () => {
+        const { refreshRates, autoRateEnabled } = await import('../ingestion/quotes/fx.js');
+        if (!autoRateEnabled()) return { skipped: true, reason: 'automatic exchange rates are off' };
+        return refreshRates();
+      },
+    },
+  },
+
+  {
     id: 'quotes',
     kind: 'engine',
     label: 'module.quotes.label',

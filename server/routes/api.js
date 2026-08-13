@@ -79,7 +79,8 @@ import {
 } from '../engines/securities.js';
 import { refreshQuotes, quotesEnabled } from '../ingestion/quotes/yahoo.js';
 import { analyzeAccounts, deriveSelfNames, DEFAULT_PROFILE } from '../engines/accounts.js';
-import { refreshRate, currentRate } from '../ingestion/quotes/fx.js';
+import { refreshRate, currentRate, refreshRates, currentRates } from '../ingestion/quotes/fx.js';
+import { currencyCodes, isKnownCurrency } from '../../web/src/lib/currencies.js';
 import {
   collapseCandidates,
   applyCollapse,
@@ -132,6 +133,8 @@ import {
   computeSavingsRate,
   filterTransactions,
   applyTransactionFilters,
+  computeFlow,
+  computeDailySpend,
 } from '../engines/analytics.js';
 import { getProjections, invalidateProjections } from '../projections/cache.js';
 import { replayEvents } from '../ledger/eventStore.js';
@@ -1496,7 +1499,9 @@ router.post('/securities/quotes/refresh', async (req, res) => {
   }
 });
 
-/** What the app is converting with, and how old it is. */
+/** What the app is converting with, and how old it is. The single-pair pair of
+    routes is kept byte-for-byte: it is in the snapshot baseline, and the table
+    below is additive rather than a replacement. */
 router.get('/currency/rate', (req, res) => {
   res.json(currentRate());
 });
@@ -1507,6 +1512,41 @@ router.post('/currency/rate/refresh', async (req, res) => {
   } catch (err) {
     failFrom(res, err, 400);
   }
+});
+
+/** The whole table: what is fetched, what was typed by hand, and how old it is. */
+router.get('/currency/rates', (req, res) => {
+  res.json({ ...currentRates(), base: loadSettings().currency?.base || 'EUR', currencies: currencyCodes() });
+});
+
+router.post('/currency/rates/refresh', async (req, res) => {
+  try {
+    res.json(await refreshRates({ force: req.body?.force === true }));
+  } catch (err) {
+    failFrom(res, err, 400);
+  }
+});
+
+/**
+ * Type a rate, or clear one back to the fetched value.
+ *
+ * A manual rate is a separate map rather than a write into `rates`, so a refresh
+ * can leave it alone without having to remember which rows a person touched.
+ */
+router.put('/currency/rates/:code', (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!isKnownCurrency(code) || code === 'EUR') return fail(res, 400, 'api.error.unknownCurrency');
+
+  const settings = loadSettings();
+  const manual = { ...settings.currency.manual };
+  const value = req.body?.rate;
+
+  if (value == null || value === '') delete manual[code];
+  else if (!Number.isFinite(Number(value)) || Number(value) <= 0) return fail(res, 400, 'api.error.badRate');
+  else manual[code] = Number(value);
+
+  saveSettings({ currency: { ...settings.currency, manual } });
+  res.json(currentRates());
 });
 
 router.post('/securities/price', async (req, res) => {
@@ -1612,6 +1652,46 @@ router.get('/analytics', async (req, res) => {
       vaults: projections.vaults,
       vaultTotal: projections.vaultTotal,
     });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/*
+ * The two aggregates the experimental charts need.
+ *
+ * Separate routes rather than two more fields on `/analytics`, deliberately.
+ * That response is in the snapshot baseline, and every read-only endpoint being
+ * byte-identical after a refactor is what makes `npm run snapshot:verify` a
+ * signal rather than a diff to skim. New endpoints sit outside the baseline the
+ * way `/api/modules/*` already does, and neither of these is wanted by a page
+ * that has the flag switched off.
+ */
+router.get('/analytics/flow', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const projections = await getProjections();
+    const transactions = filterTransactions(projections.spendingTransactions, {
+      from,
+      to,
+      categoryMap: projections.categoryMap,
+    });
+    res.json(computeFlow(transactions, projections.categoryMap));
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+router.get('/analytics/daily', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const projections = await getProjections();
+    const transactions = filterTransactions(projections.spendingTransactions, {
+      from,
+      to,
+      categoryMap: projections.categoryMap,
+    });
+    res.json({ days: computeDailySpend(transactions, projections.categoryMap), from: from || null, to: to || null });
   } catch (err) {
     failFrom(res, err);
   }

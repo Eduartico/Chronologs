@@ -2,7 +2,16 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
 import { useT } from '../i18n/index.js';
-import { nf } from '../lib/locale.js';
+/*
+ * Amounts here are euro-denominated in the ledger and are rendered in whatever
+ * the display currency is, by the one module allowed to decide that.
+ *
+ * This page used to hold its own `Intl.NumberFormat` pinned to EUR — fine while
+ * the euro was the only currency the app could show, and a lie the moment the
+ * display currency became a setting: every other number followed it and the
+ * dashboard's did not.
+ */
+import { eur } from '../lib/money.js';
 import {
   AreaChart,
   Area,
@@ -26,6 +35,13 @@ import ChartTooltip from '../components/charts/ChartTooltip.jsx';
 import ChartTypeToggle from '../components/charts/ChartTypeToggle.jsx';
 import { useSeriesToggle } from '../components/charts/useSeriesToggle.jsx';
 import { DateRangeField } from '../components/ui/DateField.jsx';
+import { useExperiments } from '../state/SettingsProvider.jsx';
+import SankeyFlow from '../components/charts/experimental/SankeyFlow.jsx';
+import CategoryTreemap from '../components/charts/experimental/CategoryTreemap.jsx';
+import CategorySunburst from '../components/charts/experimental/CategorySunburst.jsx';
+import CategoryStream from '../components/charts/experimental/CategoryStream.jsx';
+import CashflowWaterfall from '../components/charts/experimental/CashflowWaterfall.jsx';
+import SpendCalendar from '../components/charts/experimental/SpendCalendar.jsx';
 import {
   SERIES,
   STATUS,
@@ -38,17 +54,19 @@ import {
   cartesianDefaults,
 } from '../components/charts/chartTheme.js';
 
+/* `labelKey`, not `label`: these are user-visible copy, and `t()` cannot be
+   called at module scope — see web/src/lib/i18nScope.test.js. */
 const GRANULARITIES = [
-  { id: 'month', label: 'Mensal' },
-  { id: 'quarter', label: 'Trimestral' },
-  { id: 'year', label: 'Anual' },
+  { id: 'month', labelKey: 'dashboard.granularity.month' },
+  { id: 'quarter', labelKey: 'dashboard.granularity.quarter' },
+  { id: 'year', labelKey: 'dashboard.granularity.year' },
 ];
 
 const PRESETS = [
-  { id: '12m', label: 'Últimos 12 meses', months: 12 },
-  { id: '24m', label: 'Últimos 24 meses', months: 24 },
-  { id: 'ytd', label: 'Este ano', ytd: true },
-  { id: 'all', label: 'Tudo' },
+  { id: '12m', labelKey: 'dashboard.preset.12m', months: 12 },
+  { id: '24m', labelKey: 'dashboard.preset.24m', months: 24 },
+  { id: 'ytd', labelKey: 'dashboard.preset.ytd', ytd: true },
+  { id: 'all', labelKey: 'dashboard.preset.all' },
 ];
 
 function isoMonthsAgo(n) {
@@ -64,13 +82,6 @@ function rangeFor(preset) {
   return { from: isoMonthsAgo(p?.months ?? 12), to: '' };
 }
 
-/** Whole euros, for stat tiles and table cells where the cents are noise.
-    The locale was the literal 'pt-PT' here — one of six places outside
-    format.js/money.js where it had leaked. `nf()` memoises per locale and is
-    invalidated when the language changes. */
-function eur(v) {
-  return nf({ style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
-}
 
 function Stat({ label, value, tone, hint }) {
   const color = tone === 'good' ? STATUS.good : tone === 'bad' ? STATUS.critical : INK.primary;
@@ -85,6 +96,7 @@ function Stat({ label, value, tone, hint }) {
 
 export default function Dashboard() {
   const { t } = useT();
+  const { flags } = useExperiments();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   // Persist the *choice*, derive the range from it.
@@ -157,7 +169,10 @@ export default function Dashboard() {
 
   // The legend is the filter, on every chart that has one.
   const trendFilter = useSeriesToggle('dashboard.hiddenCats', trend.categories);
-  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', ['Receitas', t('dashboard.expenses')]);
+  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', [
+    t('dashboard.income'),
+    t('dashboard.expenses'),
+  ]);
 
   const breakdownAll = useMemo(
     () =>
@@ -212,7 +227,8 @@ export default function Dashboard() {
           {data?.range && (
             <p style={{ color: INK.secondary, fontSize: 13, marginTop: 2 }}>
               {t('transactions.countOf', { shown: data.range.matched, total: data.range.total })}
-              {data.range.earliest && ` · histórico desde ${formatDate(data.range.earliest)}`}
+              {data.range.earliest &&
+                ` · ${t('dashboard.historySince', { date: formatDate(data.range.earliest) })}`}
             </p>
           )}
         </div>
@@ -223,7 +239,7 @@ export default function Dashboard() {
       <div className="filter-bar">
         <select value={preset} onChange={(e) => setPreset(e.target.value)}>
           {PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}</option>
+            <option key={p.id} value={p.id}>{t(p.labelKey)}</option>
           ))}
           {/* Named, so a hand-picked range never leaves the control blank. */}
           <option value="custom">{t('dashboard.customRange')}</option>
@@ -238,7 +254,7 @@ export default function Dashboard() {
         />
         <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
           {GRANULARITIES.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
+            <option key={g.id} value={g.id}>{t(g.labelKey)}</option>
           ))}
         </select>
         <select
@@ -536,9 +552,13 @@ export default function Dashboard() {
           storageKey="merchants"
           table={{
             rows: data?.topMerchants || [],
+            // `merchant`/`total`, not `name`/`value`: this spec named the keys of
+            // a different chart's rows, so the accessible fallback for this card
+            // rendered a column of blanks — the exact failure the table is here
+            // to prevent.
             columns: [
-              { key: 'name', label: 'Comerciante' },
-              { key: 'value', label: t('common.amount'), align: 'right', format: eur },
+              { key: 'merchant', label: t('dashboard.merchant') },
+              { key: 'total', label: t('common.amount'), align: 'right', format: eur },
             ],
           }}
         >
@@ -560,7 +580,7 @@ export default function Dashboard() {
               content={<ChartTooltip formatValue={tooltipMoney} />}
               cursor={{ fill: 'rgba(139,148,158,0.08)' }}
             />
-            <Bar dataKey="total" name="Gasto" fill={SERIES[0]} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="total" name={t('dashboard.spent')} fill={SERIES[0]} radius={[0, 4, 4, 0]} />
           </BarChart>
         </ChartCard>
       </div>
@@ -569,8 +589,8 @@ export default function Dashboard() {
         title={t('dashboard.savingsRate')}
         subtitle={
           clampedMonths
-            ? `Percentagem das receitas que sobrou · ${clampedMonths} mês(es) abaixo de −100% desenhados no limite`
-            : 'Percentagem das receitas que sobrou em cada período'
+            ? t('dashboard.savingsRateClamped', { count: clampedMonths })
+            : t('dashboard.savingsRateSubtitle')
         }
         loading={loading}
         empty={!savingsRate.some((r) => r.rate != null)}
@@ -581,7 +601,7 @@ export default function Dashboard() {
           rows: savingsRate,
           columns: [
             { key: 'month', label: t('common.date'), format: axisMonth },
-            { key: 'rate', label: 'Taxa', align: 'right', format: (v) => (v == null ? '—' : `${v.toFixed(1)}%`) },
+            { key: 'rate', label: t('dashboard.rate'), align: 'right', format: (v) => (v == null ? '—' : `${v.toFixed(1)}%`) },
           ],
         }}
       >
@@ -637,6 +657,21 @@ export default function Dashboard() {
           />
         </LineChart>
       </ChartCard>
+
+      {/*
+        The experiments, appended rather than substituted.
+        Nothing above this line changes when a flag goes on: the point of trying
+        a Sankey is to see it next to the pie it might replace, and a chart that
+        has quietly taken another one's place cannot be compared with it.
+      */}
+      {flags.sankey && <SankeyFlow from={range.from} to={range.to} />}
+      {flags.waterfall && <CashflowWaterfall cashflow={cashflow} loading={loading} />}
+      {flags.streamgraph && <CategoryStream trend={data?.categoryTrend} loading={loading} />}
+      <div className="grid-2">
+        {flags.treemap && <CategoryTreemap breakdown={data?.categoryBreakdown} loading={loading} />}
+        {flags.sunburst && <CategorySunburst breakdown={data?.categoryBreakdown} loading={loading} />}
+      </div>
+      {flags.calendar && <SpendCalendar from={range.from} to={range.to} />}
     </div>
   );
 }

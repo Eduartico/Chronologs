@@ -21,6 +21,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 const PROBED = [
   ...Array.from({ length: 8 }, (_, i) => `--series-${i + 1}`),
+  // Six steps of one hue, for the heatmap. Categorical and sequential are
+  // different jobs and neither ramp can do the other's.
+  ...Array.from({ length: 6 }, (_, i) => `--seq-${i}`),
   '--chart-grid',
   '--chart-axis',
   '--chart-cursor',
@@ -45,6 +48,7 @@ const PROBED = [
     no colours at all is a blank page, and that is the failure worth preventing. */
 const FALLBACK = {
   series: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+  sequential: ['#1e242c', '#213347', '#254a68', '#2b6395', '#317dc3', '#4b93ec'],
   grid: 'rgba(139, 148, 158, 0.15)',
   axis: 'rgba(139, 148, 158, 0.35)',
   cursor: 'rgba(139, 148, 158, 0.08)',
@@ -83,6 +87,7 @@ function shape(read) {
   const root = document.documentElement;
   return {
     series: FALLBACK.series.map((f, i) => value(`--series-${i + 1}`, f)),
+    sequential: FALLBACK.sequential.map((f, i) => value(`--seq-${i}`, f)),
     grid: value('--chart-grid', FALLBACK.grid),
     axis: value('--chart-axis', FALLBACK.axis),
     cursor: value('--chart-cursor', FALLBACK.cursor),

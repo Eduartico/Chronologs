@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { english, fail, httpError, failFrom } from './httpError.js';
-import en from '../../web/src/i18n/en.js';
+import en from '../../web/src/i18n/locales/en.js';
 
 const SERVER = fileURLToPath(new URL('..', import.meta.url));
 

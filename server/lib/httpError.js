@@ -17,7 +17,7 @@
  * is not, so this could be — and was — rolled out one route at a time.
  */
 
-import en from '../../web/src/i18n/en.js';
+import en from '../../web/src/i18n/locales/en.js';
 import { moduleString } from '../framework/i18n.js';
 
 /**

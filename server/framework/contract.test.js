@@ -13,13 +13,15 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { validateManifest, KNOWN_EVENT_TYPES } from './contracts.js';
+import { validateManifest, KNOWN_EVENT_TYPES, REQUIRED_MODULE_LOCALES } from './contracts.js';
 import { loadRegistry, listModules, MODULES_DIR } from './registry.js';
 import { registerModuleCatalogues } from './i18n.js';
-// Both catalogues are plain ESM objects precisely so the server can read them;
+// The catalogues are plain ESM objects precisely so the server can read them;
 // see the note at the top of web/src/i18n/index.js.
-import en from '../../web/src/i18n/en.js';
-import pt from '../../web/src/i18n/pt.js';
+import en from '../../web/src/i18n/locales/en.js';
+import pt from '../../web/src/i18n/locales/pt.js';
+
+const SHIPPED = { en, pt };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const icons = readFileSync(join(__dirname, '..', '..', 'web', 'src', 'components', 'Icon.jsx'), 'utf-8');
@@ -39,30 +41,42 @@ test('every manifest satisfies the contract', async () => {
   }
 });
 
-test('every module names itself with a key both catalogues carry', async () => {
+test('every module names itself with a key the required catalogues carry', async () => {
   const modules = await listModules();
   // A module may bring its own strings in `modules/<id>/i18n/` rather than
   // editing a shipped catalogue — that is what makes a module one folder you can
   // copy or delete whole. Both places count, and a key present in only one
   // language shows a raw key on screen in the other.
   const contributed = registerModuleCatalogues(modules);
-  const has = (catalogue, extra, key) => catalogue[key] !== undefined || extra[key] !== undefined;
+  const has = (catalogue, extra, key) => catalogue[key] !== undefined || extra?.[key] !== undefined;
 
   for (const manifest of modules) {
     const keys = [manifest.label, ...(manifest.configSchema ?? []).map((f) => f.label)].filter(Boolean);
     for (const key of keys) {
-      assert.ok(has(en, contributed.en, key), `${manifest.id}: "${key}" has no English text`);
-      assert.ok(has(pt, contributed.pt, key), `${manifest.id}: "${key}" has no Portuguese text`);
+      for (const locale of REQUIRED_MODULE_LOCALES) {
+        assert.ok(
+          has(SHIPPED[locale], contributed[locale], key),
+          `${manifest.id}: "${key}" has no ${locale} text`
+        );
+      }
     }
   }
 });
 
-test('a module that brings strings brings them in both languages', async () => {
+test('a module that brings strings brings them in every required language', async () => {
+  // Only the required pair, not all fourteen: the app's own catalogues are held
+  // to full parity by i18n.test.js, but asking a module author for fourteen
+  // translations would make writing a module a translation project. Anything a
+  // module omits falls back to English the same way a core key does.
   for (const manifest of await listModules()) {
-    const english = Object.keys(manifest.i18n?.en ?? {});
-    const portuguese = new Set(Object.keys(manifest.i18n?.pt ?? {}));
-    for (const key of english) {
-      assert.ok(portuguese.has(key), `${manifest.id} defines "${key}" in English only`);
+    const union = new Set(REQUIRED_MODULE_LOCALES.flatMap((l) => Object.keys(manifest.i18n?.[l] ?? {})));
+    for (const key of union) {
+      for (const locale of REQUIRED_MODULE_LOCALES) {
+        assert.ok(
+          manifest.i18n?.[locale]?.[key] !== undefined,
+          `${manifest.id} defines "${key}" but not in ${locale}`
+        );
+      }
     }
   }
 });

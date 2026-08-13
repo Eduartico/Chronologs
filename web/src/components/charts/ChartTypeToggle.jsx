@@ -11,13 +11,6 @@ import { useT } from '../../i18n/index.js';
  *
  * Icon-only: at this size the shapes are the labels.
  */
-const LABELS = {
-  bar: 'Barras',
-  line: 'Linhas',
-  area: 'Área',
-  pie: 'Sopa',
-};
-
 const ICONS = {
   bar: 'chartBar',
   line: 'chartLine',
@@ -35,8 +28,8 @@ export default function ChartTypeToggle({ value, onChange, options = ['bar', 'li
           type="button"
           className={`seg-btn ${value === opt ? 'is-on' : ''}`.trim()}
           onClick={() => onChange(opt)}
-          title={LABELS[opt]}
-          aria-label={LABELS[opt]}
+          title={t(`chart.type.${opt}`)}
+          aria-label={t(`chart.type.${opt}`)}
           aria-pressed={value === opt}
         >
           <Icon name={ICONS[opt]} size={15} />

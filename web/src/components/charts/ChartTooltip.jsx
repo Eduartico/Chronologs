@@ -11,12 +11,15 @@ import { useT } from '../../i18n/index.js';
  * lighter, where some series would fall under 3:1 as a bare fill — WCAG 1.4.11 is
  * satisfied by the adjacent border instead.
  */
-export default function ChartTooltip({ active, payload, label, formatLabel, formatValue, total }) {
+export default function ChartTooltip({ active, payload, label, formatLabel, formatValue, total, filter }) {
   const theme = useChartTheme();
   const { t } = useT();
   if (!active || !payload?.length) return null;
 
-  const rows = payload.filter((p) => p.value != null && p.value !== 0);
+  // `filter` exists for the charts that stack scaffolding under the data — a
+  // waterfall's invisible offset bar is a real series to Recharts and a
+  // meaningless number to a reader.
+  const rows = payload.filter((p) => p.value != null && p.value !== 0 && (!filter || filter(p)));
   if (rows.length === 0) return null;
 
   const sum = total ? rows.reduce((s, r) => s + Math.abs(r.value), 0) : null;
@@ -35,7 +38,9 @@ export default function ChartTooltip({ active, payload, label, formatLabel, form
     >
       {label != null && (
         <div style={{ color: theme.text, fontWeight: 600, marginBottom: 6 }}>
-          {formatLabel ? formatLabel(label) : label}
+          {/* The payload goes along too, for the charts whose heading is a
+              property of the hovered datum rather than an axis value. */}
+          {formatLabel ? formatLabel(label, payload) : label}
         </div>
       )}
       {rows.map((row) => (

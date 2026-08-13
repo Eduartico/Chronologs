@@ -33,6 +33,9 @@ A data source is a folder under `modules/`, discovered by globbing
 authoring manual in `docs/modules.md`; `modules/example-bank/` is a working
 template with passing tests, and `npm run new:module <id>` copies it.
 
+- A module ships its strings in `modules/<id>/i18n/`, and is asked for
+  `REQUIRED_MODULE_LOCALES` (`en` and `pt`) rather than all fourteen —
+  anything else it brings is welcome, anything it omits falls back.
 - A **module** is code; an **instance** is that code pointed at one account.
   The instance id is written as `source` onto every event it produces, so it is
   permanent — renaming one orphans its history in an append-only ledger. This
@@ -170,16 +173,72 @@ not preferences; a component that breaks one is not finished.
   `scripts/validate_palette.js` (pairwise ΔE2000 under normal vision and
   three kinds of colour blindness, plus contrast against the worst surface
   each ramp has to sit on). Never edit one value in isolation — run it.
+- **`--seq-0..5` is the sequential ramp**, six steps of one hue derived from
+  `--accent` for the calendar heatmap. Categorical and sequential are different
+  jobs and neither ramp can do the other's. Because it descends from a theme
+  anchor rather than the finance pair, `[data-finance='cvd']` correctly leaves
+  it alone — a week's groceries is not a gain or a loss.
+
+## Experimental charts
+
+Chart shapes being tried out live behind per-chart flags, declared once in
+`web/src/experiments.js` and stored in a top-level `experimental` block in
+settings. Each appears **alongside** what is already there, never in its
+place — the point of trying a Sankey is to see it next to the pie it might
+replace. Components are in `web/src/components/charts/experimental/`;
+`web/src/lib/experiments.test.js` ties the registry, the server defaults, the
+catalogues, `Icon.jsx` and the hosting pages together, because nothing in the
+running app forces those five to agree.
+
+The two aggregates they need — `computeFlow` and `computeDailySpend` in
+`engines/analytics.js` — are served from their own routes rather than added to
+`/analytics`, so that response stays byte-identical for the snapshot baseline.
+
+## Money
+
+The euro is the pivot. Every rate is stored as **euros per one unit** in
+`currency.rates`, which is the orientation the ECB publishes the reciprocal of
+and the one the old `usdToEur` scalar used. `web/src/lib/currencies.js` is the
+one table of what the app can display, ~45 currencies; names and minor-unit
+counts are *not* in it, because `Intl.DisplayNames` and `Intl.NumberFormat`
+already know both in every shipped language.
+
+- Nothing formats or converts money outside `web/src/lib/money.js`. A currency
+  with no rate returns the number untouched rather than a guess: wrong by a
+  rate is recoverable, 400 baht silently read as 400 euros is not.
+- Rates come from the ECB's daily reference feed (one request, thirty
+  currencies, no key), with the Yahoo endpoint filling the gaps it does not
+  publish — the rouble since 2022, and most of Latin America, the Gulf and
+  Africa — and only for currencies the ledger actually holds.
+- A hand-typed rate lives in `currency.manual`, wins over the fetched one, and
+  a refresh never touches it.
 
 ## Language
 
-Two locales, `en` (shipped default) and `pt` (Eduardo's). No i18n library:
-`web/src/i18n/index.js` is ~120 lines, and the catalogue is a plain ESM
-object so the *server* can import it for English notification fallbacks.
+Fourteen locales, `en` (shipped default) and thirteen others including `pt`
+(Eduardo's). No i18n library: `web/src/i18n/index.js` is ~130 lines, and each
+catalogue is a plain ESM object so the *server* can import English for
+notification fallbacks.
 
+- **Catalogues are discovered, not registered.** `i18n/index.js` globs
+  `locales/*.js`; dropping `locales/sv.js` in and adding a row to `LOCALES` is
+  the whole of adding Swedish. `i18n.test.js` then names every one of the 684
+  keys it is missing.
+- **`LOCALES` in `web/src/lib/locale.js` is the registry** — tag, endonym and
+  first-day-of-week per locale. The picker shows each language *in itself*
+  ("日本語", not "Japanese"), which is both findable by someone who cannot read
+  the current language and 196 strings that never have to exist.
+- Dates and numbers follow the active locale, always through `format.js` /
+  `dateInput.js` / `nf()` — including the **order and separator a date is typed
+  in**, derived from `Intl.DateTimeFormat().formatToParts()`. A reader in Tokyo
+  types `2026/11/22`; one in Lisbon types `22/11/2026`. Never format inline.
+- The **plural test** holds each catalogue to the categories
+  `Intl.PluralRules` actually selects for its locale over realistic counts. A
+  `{one, other}` pasted into `ru.js` builds, passes every other check, and
+  renders "5 дня".
 - **No user-visible string literals in JSX.** `t('key')`, or `tx()` when the
   sentence contains markup. `node scripts/find_untranslated.js` lists what is
-  left — currently ~20 hits, all of them identifiers, product names, or
+  left — currently 17 hits, all of them identifiers, product names, or
   Google-console labels that would send the reader hunting for a menu item
   that does not exist if translated.
 - **Never call `t()` at module scope.** A column descriptor written as
@@ -193,15 +252,20 @@ object so the *server* can import it for English notification fallbacks.
   resolve at use: `label ?? t('common.delete')`.
 - `pt.js` is **pre-AO90** — "transacções", "actualizar", "correcção". That
   is Eduardo's register, not a typo; `i18n.test.js` fails if the post-1990
-  spellings appear.
+  spellings appear. That check is scoped to `pt` alone and stays that way: it
+  is a fact about one catalogue, and pointing it at the others would flag
+  correct Spanish.
 - Locale lives in `web/src/lib/locale.js` — never write `'pt-PT'` anywhere
   else, and never build an `Intl` formatter outside `nf()`/`df()`.
 - **Server-side text is keys, not sentences.** `fail(res, 404, 'api.error.x')`
   from `server/lib/httpError.js`; `notify(type, 'notify.x', params)` stores
   `{key, params}` so a notification reads in whatever language is current
   when it is opened. `notify.test.js` fails on a key with no catalogue entry.
-- **LLM prompts follow the reader's language** (`server/engines/prompts/`),
-  but the wire format never does: the advisor's `"concordo"`/`"discordo"`
+- **LLM prompts follow the reader's language** (`server/engines/prompts/`).
+  Only `en` and `pt` have prompt files of their own; every other locale gets
+  the English prompt with `Write every human-readable sentence in <endonym>`
+  appended, so a German interface does not show English advisor notes.
+  The wire format never follows the language: the advisor's `"concordo"`/`"discordo"`
   verdicts and its Portuguese JSON keys are the parse contract in both
   languages, and `normaliseVerdict()` catches a model that translates them
   anyway.

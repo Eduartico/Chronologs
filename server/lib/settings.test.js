@@ -29,12 +29,22 @@ test('a settings file with only a version still yields every default', async () 
   write({ version: 1 });
   const loaded = loadSettings();
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    assert.deepEqual(
-      loaded[key],
-      DEFAULT_SETTINGS[key],
-      `loadSettings() dropped "${key}" — add it to the per-key merge in settings.js`,
-    );
+    // `currency.rates` is the one derived value: it is empty in the defaults and
+    // seeded from `usdToEur` on read, so that an installation upgrading from the
+    // old scalar keeps *its* rate rather than the shipped one. Everything else
+    // must come back exactly as declared — this loop is what makes a forgotten
+    // line in the per-key merge impossible to ship.
+    const [got, want] =
+      key === 'currency'
+        ? [{ ...loaded[key], rates: undefined }, { ...DEFAULT_SETTINGS[key], rates: undefined }]
+        : [loaded[key], DEFAULT_SETTINGS[key]];
+    assert.deepEqual(got, want, `loadSettings() dropped "${key}" — add it to the per-key merge in settings.js`);
   }
+  assert.deepEqual(
+    loaded.currency.rates,
+    { USD: DEFAULT_SETTINGS.currency.usdToEur },
+    'a fresh install still starts with the dollar rate the scalar carries',
+  );
 });
 
 test('a partial write of one section keeps the rest of that section', async () => {
@@ -74,4 +84,55 @@ test('every theme the appearance default names actually exists', async () => {
   const { DEFAULT_SETTINGS } = await import('./settings.js');
   const { themeById } = await import('../../web/src/styles/themes.js');
   assert.equal(themeById(DEFAULT_SETTINGS.appearance.theme).id, DEFAULT_SETTINGS.appearance.theme);
+});
+
+/* ---- the currency migration ------------------------------------------------
+   Conversion went from one scalar to a table against the euro pivot. The one
+   thing that must not happen is an existing installation reading differently
+   afterwards, so the scalar becomes the table's dollar row on load rather than
+   asking anyone to re-enter it. */
+
+test('a settings file written before the rate table keeps its dollar rate', async () => {
+  const { loadSettings } = await import('./settings.js');
+  write({ version: 1, currency: { base: 'EUR', usdToEur: 0.865876, autoRate: true, rateFetchedAt: '2026-08-06T06:34:21.194Z' } });
+  const { currency } = loadSettings();
+
+  assert.equal(currency.rates.USD, 0.865876, 'the old scalar is the table’s dollar row');
+  assert.equal(currency.usdToEur, 0.865876, 'and is still written, so a rollback reads its own file');
+  assert.deepEqual(currency.manual, {}, 'nothing is silently treated as hand-entered');
+  assert.equal(currency.autoRate, true, 'the rest of the section survives the migration');
+});
+
+test('the pivot is never stored as a rate against itself', async () => {
+  const { loadSettings } = await import('./settings.js');
+  // A hand-edited file could put one here, and a EUR row that is not exactly 1
+  // would rescale every amount in the ledger without anything saying so.
+  write({ version: 1, currency: { base: 'EUR', rates: { EUR: 1.5, USD: 0.9 }, manual: { EUR: 2 } } });
+  const { currency } = loadSettings();
+
+  assert.equal(currency.rates.EUR, undefined);
+  assert.equal(currency.manual.EUR, undefined);
+  assert.equal(currency.rates.USD, 0.9, 'the currencies that are not the pivot are left alone');
+});
+
+test('a file already carrying the table is not re-migrated over', async () => {
+  const { loadSettings } = await import('./settings.js');
+  write({ version: 1, currency: { base: 'JPY', rates: { USD: 0.91, JPY: 0.0061 }, manual: { JPY: 0.0062 }, usdToEur: 0.5 } });
+  const { currency } = loadSettings();
+
+  assert.equal(currency.rates.USD, 0.91, 'the stale scalar does not overwrite a fetched rate');
+  assert.equal(currency.manual.JPY, 0.0062, 'a hand-typed rate survives a reload');
+  assert.equal(currency.base, 'JPY');
+});
+
+test('experimental flags ship off and survive a partial write', async () => {
+  const { loadSettings, DEFAULT_SETTINGS } = await import('./settings.js');
+  write({ version: 1, experimental: { sankey: true } });
+  const { experimental } = loadSettings();
+
+  assert.equal(experimental.sankey, true, 'what was stored is kept');
+  for (const id of Object.keys(DEFAULT_SETTINGS.experimental)) {
+    assert.equal(typeof experimental[id], 'boolean', `${id} vanished on a partial write`);
+  }
+  assert.equal(experimental.treemap, false, 'and the rest keep their shipped default');
 });

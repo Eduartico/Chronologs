@@ -1,4 +1,5 @@
 import DateField from './DateField.jsx';
+import { useT } from '../../i18n/index.js';
 
 /**
  * A value that becomes writable where it already is.
@@ -46,13 +47,15 @@ export default function EditableField({
   autoFocus,
   title,
 }) {
+  const { t } = useT();
+
   if (!editing) {
     return (
       <span
         className={`editable ${disabled ? 'is-locked' : ''}`.trim()}
         style={align === 'right' ? { textAlign: 'right', display: 'inline-block' } : undefined}
         onDoubleClick={disabled ? undefined : onStartEdit}
-        title={title || (disabled ? undefined : 'Duplo-clique para editar')}
+        title={title || (disabled ? undefined : t('common.doubleClickToEdit'))}
       >
         {render ? render(value) : value || <span className="muted">—</span>}
       </span>

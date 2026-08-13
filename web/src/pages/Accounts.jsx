@@ -6,6 +6,8 @@ import { api } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 import SortHeader from '../components/ui/SortHeader.jsx';
 import { useSortableRows } from '../lib/useSortableRows.js';
+import { useExperiments } from '../state/SettingsProvider.jsx';
+import TransferChord from '../components/charts/experimental/TransferChord.jsx';
 
 /**
  * Where the money sits, and what the app had to work out to know that.
@@ -35,6 +37,7 @@ const VAULT_COLUMNS = [
 
 export default function Accounts() {
   const { t } = useT();
+  const { flags } = useExperiments();
   const [data, setData] = useState(null);
   const [movements, setMovements] = useState([]);
   const [openVault, setOpenVault] = useState(null);
@@ -287,6 +290,10 @@ export default function Accounts() {
           </p>
         )}
       </div>
+
+      {/* Appended, never substituted — the vault table above stays exactly as it
+          was so the diagram can be judged against it rather than instead of it. */}
+      {flags.chord && <TransferChord />}
     </>
   );
 }
