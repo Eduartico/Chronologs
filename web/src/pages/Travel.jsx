@@ -958,15 +958,15 @@ export default function Travel() {
           {showRejected && (
             <table style={{ marginTop: 12 }}>
               <tbody>
-                {rejected.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.countryName || t.country}</td>
-                    <td className="muted">{formatRange(t.startDate, t.endDate)}</td>
+                {rejected.map((tr) => (
+                  <tr key={tr.id}>
+                    <td>{tr.countryName || tr.country}</td>
+                    <td className="muted">{formatRange(tr.startDate, tr.endDate)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <IconButton
                         icon="refresh"
-                        disabled={busy === t.id}
-                        onClick={() => removeTravel(t.id)}
+                        disabled={busy === tr.id}
+                        onClick={() => removeTravel(tr.id)}
                         label={t('travel.unreject')}
                       />
                     </td>

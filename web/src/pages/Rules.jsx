@@ -324,13 +324,13 @@ export default function Rules() {
               />
             ) : (
               <>
-            {draft.conditions.text.map((t, i) => (
+            {draft.conditions.text.map((cond, i) => (
               <div key={i} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <select
-                  value={t.field}
+                  value={cond.field}
                   onChange={(e) => {
                     const text = [...draft.conditions.text];
-                    text[i] = { ...t, field: e.target.value };
+                    text[i] = { ...cond, field: e.target.value };
                     setDraft({ ...draft, conditions: { ...draft.conditions, text } });
                   }}
                 >
@@ -339,10 +339,10 @@ export default function Rules() {
                   <option value="merchant">merchant</option>
                 </select>
                 <select
-                  value={t.op}
+                  value={cond.op}
                   onChange={(e) => {
                     const text = [...draft.conditions.text];
-                    text[i] = { ...t, op: e.target.value };
+                    text[i] = { ...cond, op: e.target.value };
                     setDraft({ ...draft, conditions: { ...draft.conditions, text } });
                   }}
                 >
@@ -352,11 +352,11 @@ export default function Rules() {
                 </select>
                 <input
                   placeholder={t('rules.textShort')}
-                  value={t.value}
+                  value={cond.value}
                   style={{ flex: 1, minWidth: 140 }}
                   onChange={(e) => {
                     const text = [...draft.conditions.text];
-                    text[i] = { ...t, value: e.target.value };
+                    text[i] = { ...cond, value: e.target.value };
                     setDraft({ ...draft, conditions: { ...draft.conditions, text } });
                   }}
                 />

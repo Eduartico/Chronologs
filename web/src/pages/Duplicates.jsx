@@ -227,22 +227,22 @@ export default function Duplicates({ onCountChange }) {
                 )}
 
                 <div style={{ marginTop: 12 }}>
-                  {g.transactions.map((t) => (
-                    <div key={t.id} className="dup-row">
-                      <span style={{ minWidth: 84 }}>{formatDate(t.date)}</span>
-                      <span style={{ flex: 1, minWidth: 140 }}>{t.description}</span>
-                      {t.occurrence > 1 && (
-                        <span className="evidence">ocorrência {t.occurrence}</span>
+                  {g.transactions.map((tx) => (
+                    <div key={tx.id} className="dup-row">
+                      <span style={{ minWidth: 84 }}>{formatDate(tx.date)}</span>
+                      <span style={{ flex: 1, minWidth: 140 }}>{tx.description}</span>
+                      {tx.occurrence > 1 && (
+                        <span className="evidence">ocorrência {tx.occurrence}</span>
                       )}
-                      {t.ingestions > 1 && (
+                      {tx.ingestions > 1 && (
                         <span className="evidence" title={t('duplicates.sameDocument')}>
-                          lido {t.ingestions}×
+                          lido {tx.ingestions}×
                         </span>
                       )}
-                      <span className="doc">{t.documentFilename || '—'}</span>
+                      <span className="doc">{tx.documentFilename || '—'}</span>
                       <button
                         className="btn-ghost btn-sm"
-                        onClick={() => keepOnly(g, t.id)}
+                        onClick={() => keepOnly(g, tx.id)}
                         title={t('duplicates.keepOnlyThisHelp')}
                       >{t('duplicates.keepOnlyThis')}</button>
                     </div>
@@ -265,12 +265,12 @@ export default function Duplicates({ onCountChange }) {
             <h3>{t('duplicates.voided')}</h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>{t('duplicates.voidedHelp')}</p>
             {voided.length === 0 && <p>{t('duplicates.none')}</p>}
-            {voided.map((t) => (
-              <div key={t.id} className="dup-row">
-                <span style={{ minWidth: 84 }}>{formatDate(t.date)}</span>
-                <span style={{ flex: 1 }}>{t.description}</span>
-                <span>{formatAmount(t.amount)}</span>
-                <button className="btn-ghost btn-sm" onClick={() => restore(t.id)}>{t('duplicates.restore')}</button>
+            {voided.map((tx) => (
+              <div key={tx.id} className="dup-row">
+                <span style={{ minWidth: 84 }}>{formatDate(tx.date)}</span>
+                <span style={{ flex: 1 }}>{tx.description}</span>
+                <span>{formatAmount(tx.amount)}</span>
+                <button className="btn-ghost btn-sm" onClick={() => restore(tx.id)}>{t('duplicates.restore')}</button>
               </div>
             ))}
             <div className="modal-actions">

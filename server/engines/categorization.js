@@ -21,6 +21,30 @@ const DEFAULT_CATEGORIES_FILE = join(__dirname, '..', 'config', 'defaults', 'cat
 export const PROTECTED_CATEGORY = 'uncategorized';
 
 /**
+ * Builds a `category_assignment`, stamped with the moment it was decided.
+ *
+ * The timestamp is deliberately part of the hashed payload, for the same reason
+ * `transaction_void` carries one: moving a transaction to travel, back to
+ * uncategorized, and to travel again is a legitimate sequence, and without a
+ * distinguishing stamp the second assignment collides with the first and is
+ * swallowed by `appendIfNew`. The category then stays at whatever the *last
+ * surviving* event said — the trip tag attached, the category silently did not.
+ *
+ * Nothing is lost by dropping the hash guard here: every caller already compares
+ * against the transaction's current category before emitting, which is the only
+ * dedup question a state transition can meaningfully ask.
+ */
+function categoryAssignment(source, { transactionId, category, confidence = 1, ruleId = null }) {
+  return createEvent('category_assignment', source, {
+    event_id: transactionId,
+    category,
+    confidence,
+    rule_id: ruleId,
+    at: new Date().toISOString(),
+  });
+}
+
+/**
  * System categories carry meaning the engines rely on, so their names are
  * fixed: `internal_transfer` is what keeps money moved between the owner's own
  * accounts out of the spending totals, and renaming it would quietly turn that
@@ -117,12 +141,7 @@ async function repointCategory(from, to) {
 
   for (const tx of projections.transactions) {
     if (tx.category !== from) continue;
-    const ev = createEvent('category_assignment', 'category-edit', {
-      event_id: tx.id,
-      category: to,
-      confidence: 1,
-      rule_id: null,
-    });
+    const ev = categoryAssignment('category-edit', { transactionId: tx.id, category: to });
     if (appendIfNewIndexed(ev, index)) moved++;
   }
 
@@ -226,12 +245,7 @@ export async function mergeCategories(target, source) {
   const projections = await getProjections();
   for (const tx of projections.transactions) {
     if (tx.category === source) {
-      const ev = createEvent('category_assignment', 'merge', {
-        event_id: tx.id,
-        category: target,
-        confidence: 1,
-        rule_id: null,
-      });
+      const ev = categoryAssignment('merge', { transactionId: tx.id, category: target });
       await appendIfNew(ev);
     }
   }
@@ -242,12 +256,7 @@ export async function mergeCategories(target, source) {
 }
 
 export async function applyCategorization(transactionId, category, confidence = 1, ruleId = null, source = 'engine') {
-  const ev = createEvent('category_assignment', source, {
-    event_id: transactionId,
-    category,
-    confidence,
-    rule_id: ruleId,
-  });
+  const ev = categoryAssignment(source, { transactionId, category, confidence, ruleId });
   await appendIfNew(ev);
   return ev;
 }
@@ -281,12 +290,7 @@ export async function applyCategorizationBulk(transactionIds, category, source =
       result.unchanged++;
       continue;
     }
-    const ev = createEvent('category_assignment', source, {
-      event_id: id,
-      category,
-      confidence: 1,
-      rule_id: null,
-    });
+    const ev = categoryAssignment(source, { transactionId: id, category });
     if (appendIfNewIndexed(ev, index)) result.applied++;
     else result.unchanged++;
   }
@@ -295,10 +299,13 @@ export async function applyCategorizationBulk(transactionIds, category, source =
 }
 
 export async function applyManualOverride(transactionId, originalCategory, newCategory) {
+  // Stamped for the same reason as `categoryAssignment` above: correcting a
+  // transaction back to a category it already held once must not be swallowed.
   const ev = createEvent('manual_override', 'manual', {
     event_id: transactionId,
     original_category: originalCategory,
     new_category: newCategory,
+    at: new Date().toISOString(),
   });
   await appendIfNew(ev);
   return ev;

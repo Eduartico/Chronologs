@@ -71,3 +71,52 @@ test('no row accessor names its parameter `t`', () => {
   }
   assert.deepEqual(offenders, [], 'rename the parameter to `row` — `t` is the translator');
 });
+
+/**
+ * A callback parameter named `t` shadows the translator for the whole callback
+ * body — and JSX callbacks are exactly where `t('…')` gets used.
+ *
+ * `{g.transactions.map((t) => <button title={t('duplicates.keepOnlyThis')} …>)}`
+ * builds, type-checks as far as anything here does, and throws
+ * `t is not a function` the moment the list is non-empty. That took the whole
+ * Duplicates page down; Rules and Travel carried the same shape, waiting for a
+ * text condition and a rejected proposal respectively.
+ *
+ * The rule is narrow on purpose: `.map((t) => t.id)` with no translation in it
+ * is harmless and stays legal. Only a `t('…')` call *inside* a callback that
+ * rebound `t` is an error.
+ */
+test('no callback shadows the translator and then calls it', () => {
+  const CALLBACK = /\.\s*(map|filter|find|forEach|some|every|flatMap|sort|reduce)\(\s*\(?\s*t\s*[,)]/;
+  const offenders = [];
+
+  for (const file of sources(SRC)) {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      if (!CALLBACK.test(line)) return;
+      let depth = 0;
+      let opened = false;
+      for (let j = i; j < lines.length; j++) {
+        const text = j === i ? lines[j].slice(lines[j].search(CALLBACK)) : lines[j];
+        const probe = j === i ? text.replace(CALLBACK, '') : text;
+        if (/[^.\w]t\(['"`]/.test(probe)) {
+          offenders.push(`${file.slice(SRC.length)}:${j + 1}  ${lines[j].trim().slice(0, 70)}`);
+        }
+        for (const ch of text) {
+          if ('([{'.includes(ch)) {
+            depth++;
+            opened = true;
+          } else if (')]}'.includes(ch)) depth--;
+        }
+        if (opened && depth <= 0) break;
+      }
+    });
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'these call t() inside a callback whose parameter is also named `t`.\n' +
+      'Rename the parameter (`tx`, `row`, `cond`) — `t` is the translator.',
+  );
+});
