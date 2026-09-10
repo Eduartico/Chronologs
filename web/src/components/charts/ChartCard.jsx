@@ -2,6 +2,7 @@ import { ResponsiveContainer } from 'recharts';
 
 import { useChartTheme } from './ChartThemeProvider.jsx';
 import ChartTable from './ChartTable.jsx';
+import ViewToggle from './ViewToggle.jsx';
 import Icon from '../Icon.jsx';
 import { usePersistentState } from '../../lib/usePersistentState.js';
 import { useT } from '../../i18n/index.js';
@@ -21,6 +22,25 @@ import { useT } from '../../i18n/index.js';
  * prop. Every call site already has the array in a local variable, so it is a few
  * lines each, and a chart that omits it warns in development rather than failing
  * silently — that warning is how the remaining ones get found.
+ *
+ * ## One toggle, not two
+ *
+ * A card used to carry a "lines / bars" control *and*, beside it, a separate
+ * "chart / table" pair. Both answer the same question — how do I want to look at
+ * this — and splitting that question across two controls meant the reader had to
+ * work out which of the two owned the answer. `views` now names every way this
+ * card can be drawn, `table` among them, and one segmented control switches
+ * between them.
+ *
+ * ## Controlled or not
+ *
+ * A dashboard node owns its own view: it is stored on the server as a property of
+ * that node, which is what lets the same widget appear twice on one dashboard, a
+ * pie and a table. Those cards pass `view` and `onViewChange` and this component
+ * holds no state at all.
+ *
+ * Cards that are not nodes — the Investments page — pass neither, and fall back to
+ * the per-sitting `sessionStorage` behaviour they have always had.
  */
 export default function ChartCard({
   title,
@@ -33,16 +53,26 @@ export default function ChartCard({
   footnote,
   table,
   storageKey,
+  views,
+  view,
+  onViewChange,
+  // Node chrome. A card that is not a dashboard node passes none of these and is
+  // rendered exactly as it was before the grid existed.
+  actions,
+  headerProps,
+  className = '',
   children,
 }) {
   const theme = useChartTheme();
   const { t } = useT();
 
-  // Per-chart, per-sitting: which view you left a given card in. sessionStorage,
-  // matching the convention for every other view preference in the app — the
-  // durable "prefer tables everywhere" answer is the accessibility setting.
-  const [view, setView] = usePersistentState(storageKey ? `chart.view.${storageKey}` : 'chart.view', null);
-  const showing = view ?? (theme.tables ? 'table' : 'chart');
+  const [stored, setStored] = usePersistentState(
+    storageKey ? `chart.view.${storageKey}` : 'chart.view',
+    null,
+  );
+  const controlled = view != null && typeof onViewChange === 'function';
+  const showing = controlled ? view : (stored ?? (theme.tables ? 'table' : 'chart'));
+  const setShowing = controlled ? onViewChange : setStored;
 
   if (import.meta.env?.DEV && !table && !loading && !empty) {
     console.warn(`[ChartCard] "${title}" has no table= prop, so it has no accessible fallback.`);
@@ -53,47 +83,29 @@ export default function ChartCard({
   );
 
   const tableEl = table ? <ChartTable title={title} {...table} /> : null;
+  // Uncontrolled cards only ever had two: the chart they draw, and its rows.
+  const options = views ?? (tableEl ? ['chart', 'table'] : null);
 
   return (
-    <div className="card chart-container">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 12,
-          marginBottom: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
+    <div className={`card chart-container ${className}`.trim()}>
+      <div className="chart-head" {...headerProps}>
+        {/* The handle is only drawn where the header is actually a drag source,
+            so a card that cannot be moved does not advertise that it can. */}
+        {headerProps?.draggable && (
+          <span className="dash-grip" aria-hidden="true">
+            <Icon name="grip" size={14} />
+          </span>
+        )}
+        <div className="chart-head-title">
           <h3 style={{ fontSize: 13, fontWeight: 600, color: theme.text, margin: 0 }}>{title}</h3>
           {subtitle && <p style={{ fontSize: 12, color: theme.textSecondary, margin: '2px 0 0' }}>{subtitle}</p>}
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div className="chart-head-controls">
           {controls}
-          {tableEl && (
-            <div className="chart-view-toggle" role="group" aria-label={title}>
-              <button
-                type="button"
-                className={`seg-btn${showing === 'chart' ? ' is-on' : ''}`}
-                aria-pressed={showing === 'chart'}
-                title={t('chart.showChart')}
-                onClick={() => setView('chart')}
-              >
-                <Icon name="chartLine" size={14} />
-              </button>
-              <button
-                type="button"
-                className={`seg-btn${showing === 'table' ? ' is-on' : ''}`}
-                aria-pressed={showing === 'table'}
-                title={t('chart.showTable')}
-                onClick={() => setView('table')}
-              >
-                <Icon name="table" size={14} />
-              </button>
-            </div>
+          {options && options.length > 1 && (
+            <ViewToggle value={showing} onChange={setShowing} options={options} label={title} />
           )}
+          {actions}
         </div>
       </div>
 

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../../lib/api.js';
-import { eur } from '../../../lib/money.js';
-import { useT } from '../../../i18n/index.js';
-import ChartCard from '../ChartCard.jsx';
-import { useChartTheme } from '../ChartThemeProvider.jsx';
-import { seriesFill } from '../ChartPatterns.jsx';
-import { colorScale } from '../chartTheme.js';
+import { api } from '../../lib/api.js';
+import { eur } from '../../lib/money.js';
+import { useT } from '../../i18n/index.js';
+import ChartCard from './ChartCard.jsx';
+import { useChartTheme } from './ChartThemeProvider.jsx';
+import { seriesFill } from './ChartPatterns.jsx';
+import { colorScale } from './chartTheme.js';
 
 /**
  * Money moved between the owner's own places.
@@ -48,7 +48,7 @@ export default function TransferChord() {
   const vaults = useMemo(() => {
     const totals = new Map();
     for (const movement of movements || []) {
-      const name = movement.vault || t('experimental.chord.unnamed');
+      const name = movement.vault || t('accounts.chord.unnamed');
       const entry = totals.get(name) || { name, deposited: 0, withdrawn: 0, count: 0 };
       const amount = Math.abs(Number(movement.amount) || 0);
       if (movement.direction === 'withdrawal') entry.withdrawn += amount;
@@ -65,22 +65,22 @@ export default function TransferChord() {
 
   return (
     <ChartCard
-      title={t('experimental.chord.title')}
-      subtitle={t('experimental.chord.subtitle')}
+      title={t('accounts.chord.title')}
+      subtitle={t('accounts.chord.subtitle')}
       loading={loading}
       empty={!vaults.length}
       height={360}
       storageKey="x-chord"
-      footnote={t('experimental.chord.footnote')}
+      footnote={t('accounts.chord.footnote')}
       table={{
         rows: vaults,
         colorBy: 'name',
         colorOf: (row) => colours(row.name),
         columns: [
-          { key: 'name', label: t('experimental.chord.vault') },
-          { key: 'deposited', label: t('experimental.chord.deposited'), align: 'right', format: eur },
-          { key: 'withdrawn', label: t('experimental.chord.withdrawn'), align: 'right', format: eur },
-          { key: 'net', label: t('experimental.chord.net'), align: 'right', format: eur },
+          { key: 'name', label: t('accounts.chord.vault') },
+          { key: 'deposited', label: t('accounts.chord.deposited'), align: 'right', format: eur },
+          { key: 'withdrawn', label: t('accounts.chord.withdrawn'), align: 'right', format: eur },
+          { key: 'net', label: t('accounts.chord.net'), align: 'right', format: eur },
           { key: 'count', label: t('common.count'), align: 'right' },
         ],
       }}
@@ -126,7 +126,7 @@ function ChordRibbons({ vaults, colours, theme, t }) {
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={t('experimental.chord.title')}
+      aria-label={t('accounts.chord.title')}
     >
       {positions.map((vault, i) => {
         const thickness = 2 + (vault.total / busiest) * 18;
@@ -146,7 +146,7 @@ function ChordRibbons({ vaults, colours, theme, t }) {
               strokeLinecap="round"
             >
               <title>
-                {t('experimental.chord.band', {
+                {t('accounts.chord.band', {
                   vault: vault.name,
                   deposited: eur(vault.deposited),
                   withdrawn: eur(vault.withdrawn),
@@ -175,7 +175,7 @@ function ChordRibbons({ vaults, colours, theme, t }) {
       {/* The hub's name sits to its left, away from the fan, so it can never
           land on top of a vault's label however many vaults there are. */}
       <text x={HUB_X - 18} y={hubY + 4} textAnchor="end" fill={theme.text} fontSize={12}>
-        {t('experimental.chord.currentAccount')}
+        {t('accounts.chord.currentAccount')}
       </text>
     </svg>
   );

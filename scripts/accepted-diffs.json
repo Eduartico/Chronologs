@@ -47,7 +47,12 @@
     {
       "file": "api/settings.json",
       "path": "$.body.experimental",
-      "why": "New key. Which experimental charts are switched on. Every one ships false; this installation's own settings.json turns them all on, which is a data fact rather than a default."
+      "why": "Gone. It briefly held a flag per experimental chart. Those charts are now ordinary entries in the dashboard's widget catalogue, added and removed by the reader, so the flag was a second place to switch on something the add/remove gesture already governs."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.dashboard",
+      "why": "New key. The cards the dashboard is made of, in the order they are drawn: {id, widget, view, size} per node. `view` lives on the node rather than in the browser, which is both how a view preference survives a restart and how the same widget can appear twice on one dashboard as a chart and as a table. The shipped default is six cards; this installation's own settings.json carries twelve, which is a data fact rather than a default."
     },
     {
       "file": "api/settings.json",
@@ -70,7 +75,7 @@
         "Re-taking the baseline would clear them and hide whatever drifted alongside."
       ],
       "file": "«data drift»",
-      "why": "api/assets.json, api/investments*.json, api/securities.json and api/analytics*.json allocation values move with the market — the CS2 position went 475.35 → 465.62 and an ETF 56.686 → 57.476 because the quote fetcher ran. api/events.json $.body.bytes grew with the ledger. api/pricempire_status.json $.body.lastSync is a later sync. projections.json $.assetSnapshots went 7 → 9 for the same reason. api/settings.json $.body.appearance.textures went false → true because the switch was flipped in Settings. No code in this change reads or writes any of them."
+      "why": "api/assets.json, api/investments*.json, api/securities.json and api/analytics*.json allocation values move with the market — the CS2 position is 475.35 → 461.05 as of this writing, because the quote fetcher keeps running. api/events.json $.body.bytes grew with the ledger, which is 2912 movements in the baseline and 2989 now: statements have been ingested since, so api/transactions.json, api/accounts*.json, documents.json and everything derived from them differ by exactly that. api/settings.json $.body.appearance.locale went pt → en and $.body.appearance.textures false → true because the switches were flipped in Settings. Thirty-four of fifty-eight files differ on this count alone, and the same thirty-four differ with the dashboard work reverted — which is how it was checked. Re-taking the baseline would clear them and hide whatever drifted alongside."
     }
   ]
 }

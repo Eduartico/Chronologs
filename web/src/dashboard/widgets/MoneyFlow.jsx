@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sankey, Tooltip, Layer, Rectangle } from 'recharts';
-import { api } from '../../../lib/api.js';
-import { eur } from '../../../lib/money.js';
-import { useT } from '../../../i18n/index.js';
-import ChartCard from '../ChartCard.jsx';
-import ChartTooltip from '../ChartTooltip.jsx';
-import { useChartTheme } from '../ChartThemeProvider.jsx';
-import { seriesFill } from '../ChartPatterns.jsx';
-import { colorScale } from '../chartTheme.js';
+import { api } from '../../lib/api.js';
+import { eur } from '../../lib/money.js';
+import { useT } from '../../i18n/index.js';
+import ChartCard from '../../components/charts/ChartCard.jsx';
+import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
+import { useChartTheme } from '../../components/charts/ChartThemeProvider.jsx';
+import { seriesFill } from '../../components/charts/ChartPatterns.jsx';
+import { colorScale } from '../../components/charts/chartTheme.js';
 
 /**
  * Where the money came from, which account held it, and where it went.
@@ -27,7 +27,9 @@ import { colorScale } from '../chartTheme.js';
  *    ordinary in this ledger. Hiding those would make this chart quietly
  *    disagree with every other total on the page.
  */
-export default function SankeyFlow({ from, to }) {
+export default function MoneyFlow({ card, range }) {
+  const from = range?.from;
+  const to = range?.to;
   const { t } = useT();
   const theme = useChartTheme();
   const [data, setData] = useState(null);
@@ -48,10 +50,10 @@ export default function SankeyFlow({ from, to }) {
 
   const label = useMemo(
     () => ({
-      source: t('experimental.sankey.kind.source'),
-      account: t('experimental.sankey.kind.account'),
-      category: t('experimental.sankey.kind.category'),
-      residual: t('experimental.sankey.kind.residual'),
+      source: t('widget.flow.kind.source'),
+      account: t('widget.flow.kind.account'),
+      category: t('widget.flow.kind.category'),
+      residual: t('widget.flow.kind.residual'),
     }),
     [t],
   );
@@ -76,23 +78,22 @@ export default function SankeyFlow({ from, to }) {
 
   return (
     <ChartCard
-      title={t('experimental.sankey.title')}
-      subtitle={t('experimental.sankey.subtitle')}
+      {...card}
+      title={t('widget.flow.name')}
+      subtitle={t('widget.flow.desc')}
       loading={loading}
       empty={!links.length}
-      emptyMessage={t('experimental.sankey.empty')}
-      height={420}
-      storageKey="x-sankey"
+      emptyMessage={t('widget.flow.empty')}
       footnote={
         data
-          ? t('experimental.sankey.footnote', { income: eur(data.totals.income), expense: eur(data.totals.expense) })
+          ? t('widget.flow.footnote', { income: eur(data.totals.income), expense: eur(data.totals.expense) })
           : undefined
       }
       table={{
         rows,
         columns: [
-          { key: 'from', label: t('experimental.sankey.from') },
-          { key: 'to', label: t('experimental.sankey.to') },
+          { key: 'from', label: t('widget.flow.from') },
+          { key: 'to', label: t('widget.flow.to') },
           { key: 'value', label: t('common.amount'), align: 'right', format: eur },
         ],
       }}
@@ -125,8 +126,8 @@ export default function SankeyFlow({ from, to }) {
     words on screen come from the catalogue rather than from the ledger. */
 function nodeName(node, t) {
   if (!node) return '';
-  if (node.kind === 'residual') return t(`experimental.sankey.node.${node.name}`);
-  if (node.kind === 'account' && node.name === 'unknown') return t('experimental.sankey.node.unknownAccount');
+  if (node.kind === 'residual') return t(`widget.flow.node.${node.name}`);
+  if (node.kind === 'account' && node.name === 'unknown') return t('widget.flow.node.unknownAccount');
   if (node.name === 'other') return t('chart.other');
   return node.name;
 }

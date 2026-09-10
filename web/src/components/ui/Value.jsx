@@ -45,7 +45,13 @@ export default function Value({
 
   const magnitude = Math.abs(n);
   const raw = magnitude <= Math.abs(neutralAt) ? 'flat' : n > 0 ? 'up' : 'down';
-  const dir = raw === 'flat' || !invert ? raw : raw === 'up' ? 'down' : 'up';
+  const signed = raw === 'flat' || !invert ? raw : raw === 'up' ? 'down' : 'up';
+  // `symbol="none"` says this number has no direction, so it gets *none* of the
+  // three encodings — not two of them. It used to drop the glyph and keep the
+  // hue and the weight, which meant a column of expenses came out green because
+  // the amounts happened to be positive. Colour was saying something the data
+  // does not.
+  const dir = symbol === 'none' ? 'flat' : signed;
 
   const glyph =
     symbol === 'none' || raw === 'flat' ? ''
@@ -71,7 +77,7 @@ export default function Value({
     >
       {glyph && <span className="value-sym" aria-hidden="true">{glyph}</span>}
       <span className="value-num">{text}</span>
-      {raw !== 'flat' && <span className="sr-only"> {t(`value.${dir}`)}</span>}
+      {dir !== 'flat' && <span className="sr-only"> {t(`value.${dir}`)}</span>}
     </span>
   );
 }

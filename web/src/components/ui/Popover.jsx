@@ -83,7 +83,13 @@ export default function Popover({
     // panel being scrolled. A scroll that originates inside the panel is left
     // alone; only the page moving under a still panel should close it.
     const onScroll = (e) => {
-      if (panel.current?.contains(e.target)) return;
+      // `e.target instanceof Node` first, because this same handler is the
+      // resize listener below and a resize event's target is `window` — which
+      // `Node.contains()` refuses outright, throwing out of the handler rather
+      // than returning false. The panel then never closed on a resize, and an
+      // uncaught TypeError went to the console every time the window changed
+      // size with anything floating open.
+      if (e.target instanceof Node && panel.current?.contains(e.target)) return;
       onClose?.();
     };
 

@@ -2274,13 +2274,192 @@ th.sortable.num .th-inner {
   border: 0;
 }
 
-/* The chart/table switch in a ChartCard header. */
-.chart-view-toggle {
+/* ---------------- the dashboard grid ---------------- */
+
+/*
+ * Two columns, and three card sizes that span them: half a row, a full row, or
+ * a full row twice as tall.
+ *
+ * `minmax(0, 1fr)` rather than `1fr`, which matters more here than it looks. A
+ * recharts ResponsiveContainer in a plain `1fr` track will not shrink below its
+ * content's intrinsic width, so one wide chart widens its column and squeezes
+ * the card beside it.
+ */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+.dash-cell {
+  min-width: 0;
+  display: flex;
+}
+.dash-cell > * {
+  flex: 1;
+  min-width: 0;
+}
+.dash-size-2 {
+  grid-column: span 2;
+}
+.dash-size-4 {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+/* A card at half width on a phone is unreadable, and one two rows tall is a
+   scroll trap, so every span collapses rather than being honoured at any cost. */
+@media (max-width: 720px) {
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-size-2,
+  .dash-size-4 {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+/* The header is the drag source — never the whole card, which would fight every
+   legend click and every text selection inside it. */
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  /* Not `space-between`. With `flex-wrap` on, a header whose controls have
+     wrapped to a second line leaves the title alone on the first — and
+     space-between then pushes it to the right-hand edge, so the card's own name
+     drifts to the middle of the page the moment it is put into edit mode. The
+     controls are held right by their own auto margin instead, which does the
+     same job and survives the wrap. */
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+.chart-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chart-head-controls {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: center;
+  margin-left: auto;
+}
+.dash-node > .chart-head {
+  cursor: grab;
+}
+.dash-node > .chart-head:active {
+  cursor: grabbing;
+}
+.dash-grip {
   display: inline-flex;
-  gap: 2px;
-  padding: 2px;
+  align-items: center;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.dash-node:hover .dash-grip,
+.dash-node:focus-within .dash-grip {
+  opacity: 0.7;
+}
+.dash-cell.is-dragging {
+  opacity: 0.4;
+}
+/* Where the card will land. Drawn on the cell it would come before, so what is
+   shown is exactly what happens on release. */
+.dash-cell.is-drop-before::before,
+.dash-add.is-drop-before::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inline-size: 3px;
+  margin-inline-start: calc(var(--sp-4) / -2 - 1px);
+  border-radius: 2px;
+  background: var(--accent);
+}
+.dash-cell,
+.dash-add {
+  position: relative;
+}
+
+/* A card being edited says so with its own background and nothing else — no
+   panel opens, no row is added, nothing about the grid moves. */
+.dash-node.is-editing {
+  /* The same tint an editing table row gets, from the same token — a card being
+     edited and a row being edited are the same state, and reaching for a second
+     colour here is how two parts of one app drift apart. */
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+
+/* A node-shaped hole, always last: half the height of a real card and spanning
+   the row, so it reads as "a card could go here" rather than as a toolbar
+   button that happens to sit at the bottom of the page. */
+.dash-add {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 84px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease);
+}
+.dash-add:hover,
+.dash-add:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
+}
+@media (max-width: 720px) {
+  .dash-add {
+    grid-column: auto;
+  }
+}
+
+/* Which chart a card draws. A wrapped grid of tiles rather than a vertical list
+   of full-width rows: a list reads as a native <select> and inherits its worst
+   trait, no room to show more than a handful at once. */
+.widget-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+}
+.widget-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1px solid transparent;
   border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-align: center;
+  cursor: pointer;
+}
+.widget-tile:hover {
   background: var(--surface-2);
+  color: var(--text);
+}
+.widget-tile.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The size control marks its current value the way the view switch does. */
+.chart-head-controls .icon-btn.is-on {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
 }
 
 /* A chart's data as a table — shown on request, and always present under

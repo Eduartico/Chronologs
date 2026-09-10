@@ -66,7 +66,7 @@ const PATHS = {
   chartLine: 'M3 20h18M4 16l5-6 4 3 6-8',
   chartArea: 'M3 20h18M4 17l5-6 4 3 6-8v11z',
   chartPie: 'M12 3a9 9 0 109 9h-9z',
-  // The experimental shapes. Each one draws its own diagram rather than a
+  // The less common shapes. Each one draws its own diagram rather than a
   // generic graph glyph, because the switch that turns it on is the only place
   // the reader sees the shape before deciding whether to try it.
   chartSankey: 'M3 5h3c4 0 4 6 8 6h7M3 12h3c4 0 4 7 8 7h7M3 19h3',
@@ -76,8 +76,24 @@ const PATHS = {
   chartWaterfall: 'M3 6h4v5H3zM8 11h4v4H8zM13 15h4v3h-4zM18 9h3v9h-3M3 20h18',
   chartCalendar: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4M7 13h2v2H7zM11 13h2v2h-2zM15 13h2v2h-2zM7 17h2v2H7z',
   chartChord: 'M12 3a9 9 0 100 18 9 9 0 000-18zM6 7c5 3 7 8 12 10M6 17c5-3 7-8 12-10',
+  // Bands of different thickness, sitting on the axis: an absolute stack, where
+  // the height of the whole says as much as any one band.
+  chartStacked: 'M3 20h18M3 16h18M3 11h18M3 6h18M3 20V6M21 20V6',
+  // The same stack squared off to a full-height block, which is what a
+  // hundred-percent stack looks like: only the proportions move.
+  chartShare: 'M3 4h18v16H3zM3 10h18M3 15h18',
   // The other half of the chart/table switch: every chart can be read as rows.
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
+  // --- dashboard layout ---
+  // Two columns of dots: the universal "pick this up and move it". It sits in
+  // the card header, which is the only part of a card that is a drag source —
+  // making the whole card draggable would fight every legend click inside it.
+  grip: 'M9 5h.01M9 9h.01M9 13h.01M9 17h.01M9 21h.01M15 5h.01M15 9h.01M15 13h.01M15 17h.01M15 21h.01',
+  // The three card sizes, drawn as the shape each one occupies in a two-column
+  // grid — the glyph is the label, the way the chart-type icons already are.
+  sizeHalf: 'M3 5h8v14H3zM14 5h7M14 12h7M14 19h7',
+  sizeWide: 'M3 5h18v14H3z',
+  sizeLarge: 'M3 3h18v18H3zM3 12h18',
   // The two Settings tabs added with the theme engine.
   palette: 'M12 3a9 9 0 000 18 2 2 0 001.6-3.2 2 2 0 011.6-3.2H18a3 3 0 003-3 9 9 0 00-9-8.6zM7.5 12.5h.01M9.5 8.5h.01M14 7.5h.01',
   eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7zM12 9a3 3 0 100 6 3 3 0 000-6z',

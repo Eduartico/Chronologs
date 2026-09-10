@@ -125,14 +125,55 @@ test('a file already carrying the table is not re-migrated over', async () => {
   assert.equal(currency.base, 'JPY');
 });
 
-test('experimental flags ship off and survive a partial write', async () => {
-  const { loadSettings, DEFAULT_SETTINGS } = await import('./settings.js');
-  write({ version: 1, experimental: { sankey: true } });
-  const { experimental } = loadSettings();
+/* ---- the dashboard layout --------------------------------------------------
+   The one section that is a list rather than a set of flags, and the one a user
+   edits constantly. Its failure mode is the same as every other section's — a
+   forgotten merge line drops it on the next partial save — but louder, because
+   losing it means losing an arrangement someone built by hand. */
 
-  assert.equal(experimental.sankey, true, 'what was stored is kept');
-  for (const id of Object.keys(DEFAULT_SETTINGS.experimental)) {
-    assert.equal(typeof experimental[id], 'boolean', `${id} vanished on a partial write`);
+test('a stored dashboard layout wins over the shipped one entirely', async () => {
+  const { loadSettings } = await import('./settings.js');
+  // Not merged element-by-element: a layout is an ordered list, and laying the
+  // defaults under it would resurrect nodes the reader deleted.
+  write({ version: 1, dashboard: { nodes: [{ id: 'a', widget: 'breakdown', view: 'table', size: 2 }] } });
+  const { dashboard } = loadSettings();
+
+  assert.equal(dashboard.nodes.length, 1, 'the shipped nodes do not come back underneath');
+  assert.deepEqual(dashboard.nodes[0], { id: 'a', widget: 'breakdown', view: 'table', size: 2 });
+});
+
+test('an empty dashboard is a layout, not a missing one', async () => {
+  const { loadSettings } = await import('./settings.js');
+  // Removing every card is a thing someone can do, and the next load must not
+  // helpfully put six back.
+  write({ version: 1, dashboard: { nodes: [] } });
+  assert.deepEqual(loadSettings().dashboard.nodes, []);
+});
+
+test('a settings file written before the dashboard existed gets the shipped one', async () => {
+  const { loadSettings, DEFAULT_SETTINGS } = await import('./settings.js');
+  write({ version: 1, appearance: { theme: 'jacarina' } });
+  assert.deepEqual(loadSettings().dashboard, DEFAULT_SETTINGS.dashboard);
+});
+
+test('every shipped node is well formed and names a widget once each', async () => {
+  const { DEFAULT_SETTINGS } = await import('./settings.js');
+  const ids = new Set();
+  for (const node of DEFAULT_SETTINGS.dashboard.nodes) {
+    assert.ok(node.id && !ids.has(node.id), `duplicate or missing node id: ${node.id}`);
+    ids.add(node.id);
+    assert.equal(typeof node.widget, 'string');
+    assert.equal(typeof node.view, 'string');
+    assert.ok([1, 2, 4].includes(node.size), `node ${node.id} has size ${node.size}`);
   }
-  assert.equal(experimental.treemap, false, 'and the rest keep their shipped default');
+});
+
+test('the shipped layout is not one user’s layout', async () => {
+  const { DEFAULT_SETTINGS } = await import('./settings.js');
+  // Someone installing this gets a plain six-card dashboard. The longer list
+  // with duplicate nodes lives in user-data, which is the distinction the whole
+  // defaults/user-data split exists for.
+  assert.equal(DEFAULT_SETTINGS.dashboard.nodes.length, 6);
+  const widgets = DEFAULT_SETTINGS.dashboard.nodes.map((n) => n.widget);
+  assert.equal(new Set(widgets).size, widgets.length, 'the shipped default has no duplicate cards');
 });

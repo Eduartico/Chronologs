@@ -171,17 +171,21 @@ export function useAppearance() {
 }
 
 /**
- * The experimental flags.
+ * The dashboard layout slice.
  *
  * Deliberately a sibling of `appearance` rather than a part of it. Appearance is
  * mirrored to localStorage and stamped onto <html> because the first paint needs
- * it; a flag only decides whether a chart component mounts, which React knows in
- * time without any of that machinery. Keeping them apart means an experiment can
- * never be the reason a theme flashes.
+ * it; a layout is only read once React is running, so it never has to be the
+ * reason a theme flashes.
+ *
+ * `nodes` is `null` while settings are still in flight, which is different from
+ * `[]` — an empty array is a dashboard someone emptied, and putting six cards
+ * back would undo that. The grid uses the distinction to hold off drawing the
+ * add button over a layout it has not seen yet.
  */
-export function useExperiments() {
+export function useDashboardSettings() {
   const { settings, save, saving } = useSettings();
-  const flags = settings?.experimental || {};
-  const set = useCallback((patch) => save({ experimental: { ...flags, ...patch } }), [flags, save]);
-  return { flags, set, saving };
+  const nodes = settings?.dashboard?.nodes ?? null;
+  const setNodes = useCallback((next) => save({ dashboard: { nodes: next } }), [save]);
+  return { nodes, setNodes, saving };
 }

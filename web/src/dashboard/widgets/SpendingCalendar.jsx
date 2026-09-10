@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../../lib/api.js';
-import { eur } from '../../../lib/money.js';
-import { formatDate } from '../../../lib/format.js';
-import { weekdayNames, firstDayOfWeek, df } from '../../../lib/locale.js';
-import { useT } from '../../../i18n/index.js';
-import ChartCard from '../ChartCard.jsx';
-import { useChartTheme } from '../ChartThemeProvider.jsx';
+import { api } from '../../lib/api.js';
+import { eur } from '../../lib/money.js';
+import { formatDate } from '../../lib/format.js';
+import { weekdayNames, firstDayOfWeek, df } from '../../lib/locale.js';
+import { useT } from '../../i18n/index.js';
+import ChartCard from '../../components/charts/ChartCard.jsx';
+import { useChartTheme } from '../../components/charts/ChartThemeProvider.jsx';
 
 /**
  * Every day of the range, shaded by what was spent on it.
@@ -28,7 +28,9 @@ import { useChartTheme } from '../ChartThemeProvider.jsx';
  * Hand-drawn SVG rather than Recharts, which has no heatmap and whose axis
  * machinery would be doing nothing useful for a grid of rectangles.
  */
-export default function SpendCalendar({ from, to }) {
+export default function SpendingCalendar({ card, range }) {
+  const from = range?.from;
+  const to = range?.to;
   const { t } = useT();
   const theme = useChartTheme();
   const [days, setDays] = useState(null);
@@ -71,20 +73,25 @@ export default function SpendCalendar({ from, to }) {
 
   return (
     <ChartCard
-      title={t('experimental.calendar.title')}
-      subtitle={t('experimental.calendar.subtitle')}
+      {...card}
+      title={t('widget.calendar.name')}
+      subtitle={t('widget.calendar.desc')}
       loading={loading}
       empty={!rows.length}
+      /* The grid decides this, not the card's size. A day is a fixed 12px
+         square and seven rows of them are however tall they are; handing this
+         card the size-2 height instead left a hundred and sixty pixels of empty
+         ground under the squares. Extra room is not something a calendar can
+         spend — a long range scrolls sideways rather than growing. */
       height={height + 34}
-      storageKey="x-calendar"
-      footnote={t('experimental.calendar.footnote')}
+      footnote={t('widget.calendar.footnote')}
       table={{
         rows,
         columns: [
           { key: 'date', label: t('common.date'), format: formatDate },
           { key: 'total', label: t('common.amount'), align: 'right', format: eur },
           { key: 'count', label: t('common.count'), align: 'right' },
-          { key: 'top', label: t('experimental.calendar.biggest') },
+          { key: 'top', label: t('widget.calendar.biggest') },
         ],
       }}
     >
@@ -127,7 +134,7 @@ function CalendarGrid({ grid, byDate, steps, theme, t, weekdays, cell, gap, top,
 
   return (
     <div style={{ overflowX: 'auto', width: '100%' }}>
-      <svg width={width} height={height} role="img" aria-label={t('experimental.calendar.title')}>
+      <svg width={width} height={height} role="img" aria-label={t('widget.calendar.title')}>
         {weekdays.map((name, row) =>
           row % 2 === 0 ? (
             <text
@@ -165,13 +172,13 @@ function CalendarGrid({ grid, byDate, steps, theme, t, weekdays, cell, gap, top,
               >
                 <title>
                   {day
-                    ? t('experimental.calendar.cell', {
+                    ? t('widget.calendar.cell', {
                         date: formatDate(iso),
                         amount: eur(total),
                         count: day.count,
                         top: day.top || '—',
                       })
-                    : t('experimental.calendar.cellEmpty', { date: formatDate(iso) })}
+                    : t('widget.calendar.cellEmpty', { date: formatDate(iso) })}
                 </title>
               </rect>
             );

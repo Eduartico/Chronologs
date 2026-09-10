@@ -9,7 +9,6 @@ import { fetchModules } from '../modules/registry.js';
 import { useSettings } from '../state/SettingsProvider.jsx';
 import AppearancePanel from './settings/AppearancePanel.jsx';
 import AccessibilityPanel from './settings/AccessibilityPanel.jsx';
-import ExperimentsPanel from './settings/ExperimentsPanel.jsx';
 import CurrencyCard from './settings/CurrencyCard.jsx';
 
 /*
@@ -33,7 +32,6 @@ const TABS = [
   { id: 'general', label: (t) => t('settings.tab.general'), icon: 'settings' },
   { id: 'appearance', label: (t) => t('settings.tab.appearance'), icon: 'palette' },
   { id: 'accessibility', label: (t) => t('settings.tab.accessibility'), icon: 'eye' },
-  { id: 'experimental', label: (t) => t('settings.tab.experimental'), icon: 'sparkles' },
 ];
 
 /* `labelKey` rather than `label`: a preset name is user-visible copy, and
@@ -151,7 +149,6 @@ export default function Settings() {
 
       {tab === 'appearance' && <AppearancePanel />}
       {tab === 'accessibility' && <AccessibilityPanel />}
-      {tab === 'experimental' && <ExperimentsPanel />}
 
       <div className="card" hidden={tab !== 'general'} style={{ maxWidth: 760 }}>
         <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

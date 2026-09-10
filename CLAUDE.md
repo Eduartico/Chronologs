@@ -77,6 +77,7 @@ template with passing tests, and `npm run new:module <id>` copies it.
 | Duplicate detection | `server/engines/duplicates.js` |
 | Correlations (bank ↔ marketplace matching) | `server/engines/correlation.js` |
 | Analytics / dashboard aggregates | `server/engines/analytics.js` |
+| Dashboard layout, widget catalogue, node editing | `web/src/dashboard/` |
 | ActivoBank ingestion (Gmail, PDF/CSV parsing) | `modules/activobank/` |
 | Pricempire ingestion | `modules/pricempire/` |
 | Module contract, registry, `ctx`, kits | `server/framework/` |
@@ -179,20 +180,55 @@ not preferences; a component that breaks one is not finished.
   anchor rather than the finance pair, `[data-finance='cvd']` correctly leaves
   it alone — a week's groceries is not a gain or a loss.
 
-## Experimental charts
+## The dashboard is a layout, not a page
 
-Chart shapes being tried out live behind per-chart flags, declared once in
-`web/src/experiments.js` and stored in a top-level `experimental` block in
-settings. Each appears **alongside** what is already there, never in its
-place — the point of trying a Sankey is to see it next to the pie it might
-replace. Components are in `web/src/components/charts/experimental/`;
-`web/src/lib/experiments.test.js` ties the registry, the server defaults, the
-catalogues, `Icon.jsx` and the hosting pages together, because nothing in the
-running app forces those five to agree.
+Every card on the dashboard is a **node the reader placed**, stored in a
+top-level `dashboard.nodes` block in settings — `{id, widget, view, size}` —
+so an arrangement survives a restart, a cache clear and another browser.
 
-The two aggregates they need — `computeFlow` and `computeDailySpend` in
-`engines/analytics.js` — are served from their own routes rather than added to
-`/analytics`, so that response stays byte-identical for the snapshot baseline.
+- `id` is a random handle, deliberately **not** the widget name. That is what
+  lets the same widget appear twice: one node drawn as a pie, another as the
+  same numbers in a table.
+- `view` belongs to the **node**, which is the whole of "remember how I like to
+  look at this". There is no second preference store.
+- `size` is 1 (half a row), 2 (a full row) or 4 (a full row, twice as tall).
+  Height derives from it in `catalogue.js`; storing one would let a node exist
+  at a size its height contradicts.
+- An unknown widget id is skipped and an unknown view falls back to the
+  widget's default. A hand-edited settings file must not take the page down.
+
+`web/src/dashboard/catalogue.js` is the registry — one entry per card, its
+views, its icon. `DashboardGrid` owns the grid, the drag and the FLIP reflow;
+`DashboardNode` owns one card's edit state and reuses `useRowEditor`'s gesture
+vocabulary (see the `inline-table-editing` skill). Each card is its own file
+under `dashboard/widgets/`.
+
+- **Charts that answer the same question are views of one card, not cards.** A
+  waterfall is the running balance in per-period steps; a streamgraph is the
+  category stack recentred; a treemap and a sunburst are the breakdown pie with
+  rectangles and rings. The Sankey stays separate — three columns of a flow is
+  a different question from a share of one total.
+- **One toggle, not two.** `table` is an icon in the same segmented control as
+  `line` and `bar`; a card must never carry a chart-type switch *and* a
+  chart/table switch. `ChartCard` is controlled when a node passes
+  `view`/`onViewChange`, and falls back to `sessionStorage` for cards that are
+  not nodes (Investments).
+- **The filter bar and the summary tiles are not nodes.** They steer every card
+  beneath them, so a layout that removed them would be one gesture from
+  unusable.
+- `web/src/lib/dashboard.test.js` ties the catalogue, the fourteen catalogues,
+  `Icon.jsx`, `DashboardNode`'s component map and the server's shipped nodes
+  together, because nothing in the running app forces those five to agree. It
+  replaced `experiments.test.js`: the per-chart experiment flags are gone, and
+  adding or removing a card is what tries a chart out now.
+
+The two aggregates the flow and calendar cards need — `computeFlow` and
+`computeDailySpend` in `engines/analytics.js` — are served from their own routes
+rather than added to `/analytics`, so that response stays byte-identical for
+the snapshot baseline.
+
+`server/lib/settings.js` ships a six-card default. Eduardo's twelve-card layout
+lives in `user-data/`, which is the distinction defaults exist for.
 
 ## Money
 

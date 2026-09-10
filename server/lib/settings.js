@@ -104,21 +104,36 @@ const DEFAULT_SETTINGS = {
     textures: false,
     tables: false,
   },
-  // Chart shapes that are being tried out rather than shipped. Off for anyone
-  // who installs this; the flags are what let a chart be judged in use instead
-  // of argued about, and what lets one be deleted without an archaeology dig.
+  // What the dashboard is made of, in the order it is drawn.
   //
-  // A sibling of `appearance` rather than part of it on purpose: appearance is
-  // mirrored to localStorage and stamped onto <html> because the first paint
-  // needs it, and a flag only decides whether a component mounts.
-  experimental: {
-    sankey: false,
-    treemap: false,
-    sunburst: false,
-    streamgraph: false,
-    waterfall: false,
-    calendar: false,
-    chord: false,
+  // Each entry is one card the reader placed. `id` is a handle, deliberately not
+  // the widget name: two nodes may be the same widget — one drawn as a pie, one
+  // as the same numbers in a table — and dragging or deleting one of them has to
+  // be able to say which. `view` belongs to the node rather than to the widget
+  // kind for the same reason, and that is also the whole of "remember how I like
+  // to look at this": there is no second preference store, the preference is the
+  // node.
+  //
+  // `size` is 1 (half a row), 2 (a full row) or 4 (a full row, twice as tall).
+  // Height is derived from it rather than stored, so a node cannot exist at a
+  // size its height contradicts.
+  //
+  // A sibling of `appearance` rather than part of it: appearance is mirrored to
+  // localStorage and stamped onto <html> because the first paint needs it, and a
+  // layout is only read once React is running.
+  //
+  // These six are the shipped default — a fair dashboard for a fresh install.
+  // This user's own user-data/state/settings.json carries a longer list; that is
+  // a data fact, not a default.
+  dashboard: {
+    nodes: [
+      { id: 'cashflow', widget: 'cashflow', view: 'line', size: 1 },
+      { id: 'balance', widget: 'balance', view: 'area', size: 1 },
+      { id: 'trend', widget: 'trend', view: 'stacked', size: 2 },
+      { id: 'breakdown', widget: 'breakdown', view: 'pie', size: 1 },
+      { id: 'merchants', widget: 'merchants', view: 'bar', size: 1 },
+      { id: 'savings', widget: 'savings', view: 'line', size: 2 },
+    ],
   },
 };
 
@@ -147,7 +162,7 @@ export function loadSettings() {
     currency: { ...structuredClone(DEFAULT_SETTINGS.currency), ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
-    experimental: { ...DEFAULT_SETTINGS.experimental, ...(stored.experimental || {}) },
+    dashboard: { ...structuredClone(DEFAULT_SETTINGS.dashboard), ...(stored.dashboard || {}) },
     modules: { ...(stored.modules || {}) },
   };
   return migrateCurrency(merged);

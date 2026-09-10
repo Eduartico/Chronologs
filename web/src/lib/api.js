@@ -166,7 +166,7 @@ export const api = {
   applyTravel: (id, options) => post(`/travels/${id}/apply`, options || {}),
   getTravelAnomalies: () => get('/travels/anomalies'),
 
-  // The two aggregates behind the experimental charts. Separate endpoints so
+  // The two aggregates behind the flow and calendar cards. Separate endpoints so
   // /analytics stays byte-identical for the snapshot baseline, and so a page
   // with the flag off never asks for them.
   getFlow: (params) => get(`/analytics/flow${qs(params)}`),

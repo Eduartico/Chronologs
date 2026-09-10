@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
+import { nf } from '../lib/locale.js';
 import { useT } from '../i18n/index.js';
 /*
  * Amounts here are euro-denominated in the ledger and are rendered in whatever
@@ -12,47 +14,11 @@ import { useT } from '../i18n/index.js';
  * dashboard's did not.
  */
 import { eur } from '../lib/money.js';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-} from 'recharts';
 import { api } from '../lib/api.js';
-import ChartCard from '../components/charts/ChartCard.jsx';
-import ChartTooltip from '../components/charts/ChartTooltip.jsx';
-import ChartTypeToggle from '../components/charts/ChartTypeToggle.jsx';
-import { useSeriesToggle } from '../components/charts/useSeriesToggle.jsx';
+import { INK } from '../components/charts/chartTheme.js';
+import Value from '../components/ui/Value.jsx';
 import { DateRangeField } from '../components/ui/DateField.jsx';
-import { useExperiments } from '../state/SettingsProvider.jsx';
-import SankeyFlow from '../components/charts/experimental/SankeyFlow.jsx';
-import CategoryTreemap from '../components/charts/experimental/CategoryTreemap.jsx';
-import CategorySunburst from '../components/charts/experimental/CategorySunburst.jsx';
-import CategoryStream from '../components/charts/experimental/CategoryStream.jsx';
-import CashflowWaterfall from '../components/charts/experimental/CashflowWaterfall.jsx';
-import SpendCalendar from '../components/charts/experimental/SpendCalendar.jsx';
-import {
-  SERIES,
-  STATUS,
-  INK,
-  colorScale,
-  capSeries,
-  axisMoney,
-  tooltipMoney,
-  axisMonth,
-  cartesianDefaults,
-} from '../components/charts/chartTheme.js';
+import DashboardGrid from '../dashboard/DashboardGrid.jsx';
 
 /* `labelKey`, not `label`: these are user-visible copy, and `t()` cannot be
    called at module scope — see web/src/lib/i18nScope.test.js. */
@@ -82,21 +48,44 @@ function rangeFor(preset) {
   return { from: isoMonthsAgo(p?.months ?? 12), to: '' };
 }
 
-
-function Stat({ label, value, tone, hint }) {
-  const color = tone === 'good' ? STATUS.good : tone === 'bad' ? STATUS.critical : INK.primary;
+/**
+ * One headline figure.
+ *
+ * Colour is never the only channel. The number itself goes through `Value`,
+ * which carries direction three independent ways — hue, an explicit sign, and
+ * weight — plus a word for a screen reader. A large expense passes
+ * `symbol="none"`: it is not a loss, and colouring it as one would say something
+ * the data does not.
+ */
+function Stat({ label, value, symbol = 'none', hint }) {
   return (
     <div className="card stat">
-      <div className="stat-value" style={{ color }}>{value}</div>
+      <div className="stat-value">
+        <Value amount={value} symbol={symbol} />
+      </div>
       <div className="stat-label">{label}</div>
       {hint && <div style={{ fontSize: 11, color: INK.secondary, marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }
 
+/**
+ * The page around the grid: what range everything is drawn over, the three
+ * headline figures, and the cards the reader arranged.
+ *
+ * The filter bar and the tiles are deliberately *not* nodes. They steer every
+ * card beneath them, so a dashboard someone had removed the filter bar from
+ * would be one they could no longer aim — and the layout would be one gesture
+ * away from unusable with no obvious way back.
+ *
+ * Everything below them is `DashboardGrid`, which owns the node list, the
+ * dragging and the editing. This file used to hold ten chart definitions and
+ * every piece of state behind them; each chart is now its own file under
+ * `web/src/dashboard/widgets/`, which is what makes any one of them small enough
+ * to hold in your head while changing it.
+ */
 export default function Dashboard() {
   const { t } = useT();
-  const { flags } = useExperiments();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   // Persist the *choice*, derive the range from it.
@@ -107,25 +96,15 @@ export default function Dashboard() {
   // event, leaving no way to put it right. Whatever the control's active state
   // is read from is what has to survive the trip to another tab.
   const [preset, setPreset] = usePersistentState('dashboard.preset', '12m');
-  const [customRange, setCustomRange] = usePersistentState('dashboard.customRange', {
-    from: '',
-    to: '',
-  });
+  const [customRange, setCustomRange] = usePersistentState('dashboard.customRange', { from: '', to: '' });
   const range = useMemo(
     () => (preset === 'custom' ? customRange : rangeFor(preset)),
-    [preset, customRange]
+    [preset, customRange],
   );
   const [granularity, setGranularity] = usePersistentState('dashboard.granularity', 'month');
   const [categories, setCategories] = useState([]);
   const [selectedCats, setSelectedCats] = usePersistentState('dashboard.categories', []);
   const [error, setError] = useState(null);
-
-  // How each card draws its numbers. Income against expense reads better as two
-  // lines than as pairs of bars — the year has a shape, and bars chop it into
-  // twelve separate comparisons — so that is what it opens as.
-  const [cashflowType, setCashflowType] = usePersistentState('dashboard.cashflowType', 'line');
-  const [cumulativeType, setCumulativeType] = usePersistentState('dashboard.cumulativeType', 'area');
-  const [breakdownType, setBreakdownType] = usePersistentState('dashboard.breakdownType', 'pie');
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
@@ -141,7 +120,7 @@ export default function Dashboard() {
           to: range.to || undefined,
           granularity,
           categories: selectedCats.length ? selectedCats.join(',') : undefined,
-        })
+        }),
       );
     } catch (err) {
       setError(err.message);
@@ -161,54 +140,35 @@ export default function Dashboard() {
   }
 
   const cashflow = data?.monthlyCashflow || [];
-  const trend = data?.categoryTrend || { categories: [], rows: [] };
-  const trendColor = useMemo(() => colorScale(trend.categories), [trend.categories]);
-
-  const savingsRate = data?.savingsRate || [];
-  const clampedMonths = savingsRate.filter((r) => r.clamped).length;
-
-  // The legend is the filter, on every chart that has one.
-  const trendFilter = useSeriesToggle('dashboard.hiddenCats', trend.categories);
-  const cashflowFilter = useSeriesToggle('dashboard.hiddenCashflow', [
-    t('dashboard.income'),
-    t('dashboard.expenses'),
-  ]);
-
-  const breakdownAll = useMemo(
-    () =>
-      capSeries(
-        (data?.categoryBreakdown || [])
-          .filter((c) => c.expense > 0)
-          .map((c) => ({ name: c.category, value: c.expense })),
-        { max: 8 }
-      ),
-    [data]
-  );
-  const breakdownColor = useMemo(() => colorScale(breakdownAll.map((b) => b.name)), [breakdownAll]);
-  // A pie has no per-series `hide` prop — the slice has to be gone from the
-  // data itself, so the toggle filters here rather than in the chart markup.
-  const breakdownFilter = useSeriesToggle(
-    'dashboard.hiddenBreakdown',
-    breakdownAll.map((b) => b.name)
-  );
-  const breakdown = useMemo(
-    () => breakdownAll.filter((b) => !breakdownFilter.hidden.has(b.name)),
-    [breakdownAll, breakdownFilter.hidden]
-  );
 
   const totals = useMemo(() => {
     const income = cashflow.reduce((s, m) => s + m.income, 0);
     const expense = cashflow.reduce((s, m) => s + m.expense, 0);
+    // Halves of the range, so "against the period before" means something even
+    // when the range is a hand-picked fortnight.
+    //
+    // Measured on *spending*, not on the net. The net crosses zero routinely —
+    // one month of tuition against one of salary — and a percentage change
+    // across zero is arithmetic, not information: the first version of this read
+    // "1,839.1% against the period before", which is true and says nothing.
+    // Spending is always positive and always comparable.
+    const half = Math.floor(cashflow.length / 2);
+    const prior = cashflow.slice(0, half).reduce((s, m) => s + m.expense, 0);
+    const recent = cashflow.slice(half).reduce((s, m) => s + m.expense, 0);
     return {
       income,
       expense,
       net: income - expense,
       savings: income > 0 ? ((income - expense) / income) * 100 : null,
       avgExpense: cashflow.length ? expense / cashflow.length : 0,
+      // Only offered when there are two halves to compare and the earlier one is
+      // not zero — a percentage change from nothing is not a number.
+      spendShift: half && prior > 0 ? ((recent - prior) / prior) * 100 : null,
     };
   }, [cashflow]);
 
-  const periodWord = granularity === 'year' ? 'ano' : granularity === 'quarter' ? 'trimestre' : 'mês';
+  const periodWord = t(`dashboard.periodWord.${granularity}`);
+  const percent = (v) => `${nf({ maximumFractionDigits: 1 }).format(v)}%`;
 
   if (error) {
     return (
@@ -235,7 +195,8 @@ export default function Dashboard() {
         <button className="btn-ghost" onClick={load}>↻ {t('common.refresh')}</button>
       </div>
 
-      {/* One control row above the charts drives every series on the page. */}
+      {/* One control row above the grid drives every card on the page. It is not
+          a node for exactly that reason. */}
       <div className="filter-bar">
         <select value={preset} onChange={(e) => setPreset(e.target.value)}>
           {PRESETS.map((p) => (
@@ -269,409 +230,29 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
-        <Stat label={t('dashboard.income')} value={eur(totals.income)} tone="good" />
-        <Stat label={t('dashboard.expenses')} value={eur(totals.expense)} tone="bad" hint={`${eur(totals.avgExpense)} por ${periodWord}`} />
+        <Stat label={t('dashboard.income')} value={totals.income} />
+        <Stat
+          label={t('dashboard.expenses')}
+          value={totals.expense}
+          hint={[
+            t('dashboard.perPeriod', { amount: eur(totals.avgExpense), period: periodWord }),
+            totals.spendShift != null ? t('dashboard.shiftHint', { change: percent(totals.spendShift) }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        />
+        {/* The one tile where direction is real: a balance above zero is money
+            kept and below it is money spent that was not earned, so this is the
+            tile that carries a sign and a colour. */}
         <Stat
           label={t('dashboard.balance')}
-          value={eur(totals.net)}
-          tone={totals.net >= 0 ? 'good' : 'bad'}
-          hint={totals.savings != null ? `taxa de poupança ${totals.savings.toFixed(1)}%` : null}
+          value={totals.net}
+          symbol="sign"
+          hint={totals.savings != null ? t('dashboard.savingsRateHint', { rate: percent(totals.savings) }) : null}
         />
       </div>
 
-      <div className="grid-2" style={{ marginBottom: 16 }}>
-        <ChartCard
-          title={t('dashboard.cashflow')}
-          subtitle={`Por ${periodWord} — clica na legenda para isolar uma série`}
-          loading={loading}
-          empty={!cashflow.length}
-          height={280}
-          storageKey="cashflow"
-          /* Every chart passes its own data as a table. ChartCard receives a
-             built recharts element and cannot see behind it, so the spec has to
-             come from here — where the array already is. */
-          table={{
-            rows: cashflow,
-            columns: [
-              { key: 'month', label: t('common.date'), format: axisMonth },
-              { key: 'income', label: t('dashboard.income'), align: 'right', format: eur },
-              { key: 'expense', label: t('dashboard.expenses'), align: 'right', format: eur },
-            ],
-          }}
-          controls={<ChartTypeToggle value={cashflowType} onChange={setCashflowType} options={['line', 'bar']} />}
-        >
-          {cashflowType === 'line' ? (
-            <LineChart data={cashflow} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid {...cartesianDefaults.grid} />
-              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
-              <Legend {...cashflowFilter.legendProps} />
-              <Line
-                type="monotone"
-                dataKey="income"
-                name={t('dashboard.income')}
-                stroke={SERIES[2]}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-                hide={cashflowFilter.hidden.has(t('dashboard.income'))}
-              />
-              <Line
-                type="monotone"
-                dataKey="expense"
-                name={t('dashboard.expenses')}
-                stroke={SERIES[1]}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-                hide={cashflowFilter.hidden.has(t('dashboard.expenses'))}
-              />
-            </LineChart>
-          ) : (
-            <BarChart data={cashflow} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid {...cartesianDefaults.grid} />
-              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-              <Tooltip
-                content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />}
-                cursor={{ fill: 'rgba(139,148,158,0.08)' }}
-              />
-              <Legend {...cashflowFilter.legendProps} />
-              <Bar
-                dataKey="income"
-                name={t('dashboard.income')}
-                fill={SERIES[2]}
-                radius={[4, 4, 0, 0]}
-                hide={cashflowFilter.hidden.has(t('dashboard.income'))}
-              />
-              <Bar
-                dataKey="expense"
-                name={t('dashboard.expenses')}
-                fill={SERIES[1]}
-                radius={[4, 4, 0, 0]}
-                hide={cashflowFilter.hidden.has(t('dashboard.expenses'))}
-              />
-            </BarChart>
-          )}
-        </ChartCard>
-
-        <ChartCard
-          title={t('dashboard.cumulative')}
-          subtitle={t('dashboard.cumulativeSubtitle')}
-          loading={loading}
-          empty={!data?.cumulative?.length}
-          height={280}
-          storageKey="cumulative"
-          table={{
-            rows: data?.cumulative || [],
-            columns: [
-              { key: 'month', label: t('common.date'), format: axisMonth },
-              { key: 'total', label: t('common.total'), align: 'right', format: eur },
-            ],
-          }}
-          controls={
-            <ChartTypeToggle value={cumulativeType} onChange={setCumulativeType} options={['area', 'line']} />
-          }
-        >
-          {cumulativeType === 'area' ? (
-            <AreaChart data={data?.cumulative || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid {...cartesianDefaults.grid} />
-              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
-              <ReferenceLine y={0} stroke={INK.axis} />
-              <Area
-                type="monotone"
-                dataKey="cumulative"
-                name={t('dashboard.cumulative')}
-                stroke={SERIES[0]}
-                strokeWidth={2}
-                fill="url(#gCum)"
-              />
-            </AreaChart>
-          ) : (
-            <LineChart data={data?.cumulative || []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid {...cartesianDefaults.grid} />
-              <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-              <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-              <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
-              <ReferenceLine y={0} stroke={INK.axis} />
-              <Line
-                type="monotone"
-                dataKey="cumulative"
-                name={t('dashboard.cumulative')}
-                stroke={SERIES[0]}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            </LineChart>
-          )}
-        </ChartCard>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <ChartCard
-          title={t('dashboard.trend')}
-          subtitle={
-            trendFilter.hidden.size
-              ? t('dashboard.hiddenSeries', { count: trendFilter.hidden.size })
-              : 'Área empilhada — clica numa categoria da legenda para a esconder, duplo clique para a isolar'
-          }
-          loading={loading}
-          empty={!trend.rows.length}
-          height={300}
-          storageKey="trend"
-          /* One column per category, built from the same list the stack is
-             drawn from — so adding a category cannot leave the table behind. */
-          table={{
-            rows: trend.rows,
-            columns: [
-              { key: 'period', label: t('common.date'), format: axisMonth },
-              ...trend.categories.map((cat) => ({ key: cat, label: cat, align: 'right', format: eur })),
-            ],
-          }}
-        >
-          <AreaChart data={trend.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid {...cartesianDefaults.grid} />
-            <XAxis dataKey="period" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-            <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
-            <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} total />} />
-            {/* The legend is the filter. On a stack of eight bands it is the
-                first thing anyone tries to click, and doing nothing was the
-                surprise. */}
-            <Legend {...trendFilter.legendProps} />
-            {trend.categories.map((cat) => (
-              <Area
-                key={cat}
-                type="monotone"
-                dataKey={cat}
-                name={cat}
-                stackId="spend"
-                hide={trendFilter.hidden.has(cat)}
-                stroke={trendColor(cat)}
-                fill={trendColor(cat)}
-                fillOpacity={0.75}
-                /* A 2px surface-coloured seam keeps adjacent bands legible when
-                   their hues are close. */
-                strokeWidth={2}
-                strokeOpacity={1}
-              />
-            ))}
-          </AreaChart>
-        </ChartCard>
-      </div>
-
-      <div className="grid-2" style={{ marginBottom: 16 }}>
-        <ChartCard
-          title={t('dashboard.breakdown')}
-          subtitle={
-            breakdownFilter.hidden.size
-              ? t('dashboard.hiddenSeries', { count: breakdownFilter.hidden.size })
-              : 'Clica numa categoria da legenda para a esconder, duplo clique para a isolar'
-          }
-          loading={loading}
-          empty={!breakdown.length}
-          height={280}
-          storageKey="breakdown"
-          table={{
-            rows: breakdown,
-            colorBy: 'name',
-            colorOf: (name) => breakdownColor(name),
-            columns: [
-              { key: 'name', label: t('common.category') },
-              { key: 'value', label: t('common.amount'), align: 'right', format: eur },
-            ],
-          }}
-          controls={<ChartTypeToggle value={breakdownType} onChange={setBreakdownType} options={['pie', 'bar']} />}
-        >
-          {breakdownType === 'pie' ? (
-            <PieChart>
-              <Pie
-                data={breakdown}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={104}
-                dataKey="value"
-                paddingAngle={2}
-                stroke={INK.surface}
-                strokeWidth={2}
-              >
-                {breakdown.map((b) => (
-                  <Cell key={b.name} fill={breakdownColor(b.name)} />
-                ))}
-              </Pie>
-              <Tooltip content={<ChartTooltip formatValue={tooltipMoney} />} />
-              <Legend
-                payload={breakdownAll.map((b) => ({
-                  value: b.name,
-                  type: 'circle',
-                  color: breakdownColor(b.name),
-                }))}
-                {...breakdownFilter.legendProps}
-              />
-            </PieChart>
-          ) : (
-            /* Shares are easier to rank as bars and easier to judge as a
-               circle, so the reader picks. */
-            <BarChart
-              data={breakdown}
-              layout="vertical"
-              margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
-              <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} />
-              <YAxis type="category" dataKey="name" width={110} {...cartesianDefaults.axis} />
-              <Tooltip
-                content={<ChartTooltip formatValue={tooltipMoney} />}
-                cursor={{ fill: 'rgba(139,148,158,0.08)' }}
-              />
-              <Bar dataKey="value" name="Despesa" radius={[0, 4, 4, 0]}>
-                {breakdown.map((b) => (
-                  <Cell key={b.name} fill={breakdownColor(b.name)} />
-                ))}
-              </Bar>
-            </BarChart>
-          )}
-        </ChartCard>
-
-        <ChartCard
-          title={t('dashboard.topMerchants')}
-          subtitle={t('dashboard.topMerchantsSubtitle')}
-          loading={loading}
-          empty={!data?.topMerchants?.length}
-          height={280}
-          storageKey="merchants"
-          table={{
-            rows: data?.topMerchants || [],
-            // `merchant`/`total`, not `name`/`value`: this spec named the keys of
-            // a different chart's rows, so the accessible fallback for this card
-            // rendered a column of blanks — the exact failure the table is here
-            // to prevent.
-            columns: [
-              { key: 'merchant', label: t('dashboard.merchant') },
-              { key: 'total', label: t('common.amount'), align: 'right', format: eur },
-            ],
-          }}
-        >
-          <BarChart
-            data={data?.topMerchants || []}
-            layout="vertical"
-            margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
-          >
-            <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
-            <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} />
-            <YAxis
-              type="category"
-              dataKey="merchant"
-              width={140}
-              {...cartesianDefaults.axis}
-              tickFormatter={(v) => (v.length > 20 ? v.slice(0, 20) + '…' : v)}
-            />
-            <Tooltip
-              content={<ChartTooltip formatValue={tooltipMoney} />}
-              cursor={{ fill: 'rgba(139,148,158,0.08)' }}
-            />
-            <Bar dataKey="total" name={t('dashboard.spent')} fill={SERIES[0]} radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ChartCard>
-      </div>
-
-      <ChartCard
-        title={t('dashboard.savingsRate')}
-        subtitle={
-          clampedMonths
-            ? t('dashboard.savingsRateClamped', { count: clampedMonths })
-            : t('dashboard.savingsRateSubtitle')
-        }
-        loading={loading}
-        empty={!savingsRate.some((r) => r.rate != null)}
-        emptyMessage={t('dashboard.savingsRateEmpty')}
-        height={220}
-        storageKey="savings"
-        table={{
-          rows: savingsRate,
-          columns: [
-            { key: 'month', label: t('common.date'), format: axisMonth },
-            { key: 'rate', label: t('dashboard.rate'), align: 'right', format: (v) => (v == null ? '—' : `${v.toFixed(1)}%`) },
-          ],
-        }}
-      >
-        <LineChart data={savingsRate} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid {...cartesianDefaults.grid} />
-          <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          {/* Fixed to ±100%. One student month at −733% used to squash every
-              other month into a flat line at the top of the chart. */}
-          <YAxis
-            domain={[-100, 100]}
-            ticks={[-100, -50, 0, 50, 100]}
-            tickFormatter={(v) => `${v}%`}
-            {...cartesianDefaults.axis}
-            width={44}
-          />
-          <Tooltip
-            content={
-              <ChartTooltip
-                formatLabel={axisMonth}
-                // The line is clamped; the number never is.
-                formatValue={(v, entry) =>
-                  entry?.payload?.clamped ? `${entry.payload.trueRate}%` : `${v}%`
-                }
-              />
-            }
-          />
-          <ReferenceLine y={0} stroke={INK.axis} />
-          <Line
-            type="monotone"
-            dataKey="rate"
-            name={t('dashboard.savingsRate')}
-            stroke={SERIES[2]}
-            strokeWidth={2}
-            // A hollow dot marks a month drawn at the limit rather than at its
-            // real value, so a clipped point never reads as an ordinary one.
-            dot={(props) =>
-              props.payload?.clamped ? (
-                <circle
-                  key={props.payload.month}
-                  cx={props.cx}
-                  cy={props.cy}
-                  r={4}
-                  fill={STATUS.critical}
-                  stroke={SERIES[2]}
-                  strokeWidth={2}
-                />
-              ) : (
-                <circle key={props.payload.month} cx={props.cx} cy={props.cy} r={3} fill={SERIES[2]} />
-              )
-            }
-            activeDot={{ r: 5 }}
-            connectNulls
-          />
-        </LineChart>
-      </ChartCard>
-
-      {/*
-        The experiments, appended rather than substituted.
-        Nothing above this line changes when a flag goes on: the point of trying
-        a Sankey is to see it next to the pie it might replace, and a chart that
-        has quietly taken another one's place cannot be compared with it.
-      */}
-      {flags.sankey && <SankeyFlow from={range.from} to={range.to} />}
-      {flags.waterfall && <CashflowWaterfall cashflow={cashflow} loading={loading} />}
-      {flags.streamgraph && <CategoryStream trend={data?.categoryTrend} loading={loading} />}
-      <div className="grid-2">
-        {flags.treemap && <CategoryTreemap breakdown={data?.categoryBreakdown} loading={loading} />}
-        {flags.sunburst && <CategorySunburst breakdown={data?.categoryBreakdown} loading={loading} />}
-      </div>
-      {flags.calendar && <SpendCalendar from={range.from} to={range.to} />}
+      <DashboardGrid data={data} loading={loading} range={range} periodWord={periodWord} />
     </div>
   );
 }

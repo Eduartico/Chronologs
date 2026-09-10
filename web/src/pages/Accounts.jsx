@@ -6,8 +6,7 @@ import { api } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 import SortHeader from '../components/ui/SortHeader.jsx';
 import { useSortableRows } from '../lib/useSortableRows.js';
-import { useExperiments } from '../state/SettingsProvider.jsx';
-import TransferChord from '../components/charts/experimental/TransferChord.jsx';
+import TransferChord from '../components/charts/TransferChord.jsx';
 
 /**
  * Where the money sits, and what the app had to work out to know that.
@@ -37,7 +36,6 @@ const VAULT_COLUMNS = [
 
 export default function Accounts() {
   const { t } = useT();
-  const { flags } = useExperiments();
   const [data, setData] = useState(null);
   const [movements, setMovements] = useState([]);
   const [openVault, setOpenVault] = useState(null);
@@ -293,7 +291,11 @@ export default function Accounts() {
 
       {/* Appended, never substituted — the vault table above stays exactly as it
           was so the diagram can be judged against it rather than instead of it. */}
-      {flags.chord && <TransferChord />}
+      {/* Traffic between the current account and its vaults. It was behind an
+          experiment flag; the flags are gone, and this is accounts data rather
+          than dashboard data, so it lives here unconditionally instead of
+          joining the dashboard's widget catalogue. */}
+      <TransferChord />
     </>
   );
 }
