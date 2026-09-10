@@ -26,6 +26,35 @@ rules, and the `.icon-btn-armed` styling all live in
 [`web/src/index.css`](../web/src/index.css) — search for the block comments
 titled "The field is the text" and "The grid-mirror autosize trick."
 
+### A row that is not in a table
+
+[`web/src/dashboard/DashboardNode.jsx`](../web/src/dashboard/DashboardNode.jsx)
+is a dashboard *card* rather than a table row, and it consumes the same
+primitives unchanged — because it is the same three states. A card is at rest,
+or being edited, or armed for deletion, and never two of those.
+
+What it borrows, and what it does differently:
+
+- **The gesture is identical.** A pencil in the card's header; pressing it
+  tints the card (`.dash-node.is-editing`, using the same `--accent-soft` a
+  table row gets) and nothing is added to the screen. The bin arms in place and
+  a second press removes the card. `IconButton` carries the mousedown guard;
+  `Popover` carries the widget picker.
+- **The cluster swaps rather than grows.** At rest the header holds the view
+  switch and a pencil. While editing, the view switch is *replaced* by the
+  arrange controls — widget, size, move, bin, done. Showing both put a dozen
+  buttons in one header, which on a half-width card wrapped to a second line and
+  shoved the card's own title sideways.
+- **`useRowEditor` is not used here.** The hook owns a draft object and a
+  save/cancel round trip, and a card has neither: every control writes straight
+  through to the stored layout, so there is nothing to commit and nothing to
+  discard. What the card needs is the arming timer, which is eight lines, and
+  copying those was cheaper than widening the hook's contract to make its draft
+  optional. The `DISARM_MS` value is deliberately the same 1000ms.
+- **The keyed remount still does the animation.** The cluster is
+  `key={armed ? 'armed' : 'edit'}`, so `.row-actions .icon-btn`'s entrance
+  animation plays on the swap, exactly as it does in a table.
+
 ## Where each rule came from
 
 The numbered rules below map onto the general skill's sections 1–10. What

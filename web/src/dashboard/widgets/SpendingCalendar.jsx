@@ -134,7 +134,7 @@ function CalendarGrid({ grid, byDate, steps, theme, t, weekdays, cell, gap, top,
 
   return (
     <div style={{ overflowX: 'auto', width: '100%' }}>
-      <svg width={width} height={height} role="img" aria-label={t('widget.calendar.title')}>
+      <svg width={width} height={height} role="img" aria-label={t('widget.calendar.name')}>
         {weekdays.map((name, row) =>
           row % 2 === 0 ? (
             <text
