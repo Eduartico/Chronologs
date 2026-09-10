@@ -464,9 +464,9 @@ export function computeInsights(transactions, categorizedMap, monthlyCashflow) {
 }
 
 /* ---- flow and daily spend ---------------------------------------------------
-   Two aggregates the existing set could not express, added for the experimental
-   charts. Both are pure and both read the same rows every other function here
-   reads, so nothing new lands in the ledger for either. */
+   Two aggregates the existing set could not express, added for the Money flow
+   and Spending calendar cards. Both are pure and both read the same rows every
+   other function here reads, so nothing new lands in the ledger for either. */
 
 /**
  * Money as a flow: where it came in, which account held it, where it went.

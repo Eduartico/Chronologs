@@ -20,6 +20,23 @@ import { WIDGETS, SIZE_VALUES, widgetById, resolveView } from './catalogue.js';
  * Without that, the response to save number one arrives holding the layout as it
  * was *before* saves two and three, and the cards snap back to where they were a
  * moment ago — the specific bug that makes optimistic UI feel haunted.
+ *
+ * ## Two things a debounce gets wrong unless it is told not to
+ *
+ * **A pending write must be flushed on the way out, never cancelled.** The usual
+ * `useEffect(() => () => clearTimeout(t))` cleanup is right for a timer that
+ * only ever produces UI, and wrong for one that produces the save: dragging a
+ * card and then clicking Transactions inside the debounce window threw the move
+ * away with no error anywhere, and the layout was simply back to its old shape
+ * on the next visit. Leaving the tab is the same thing, so `visibilitychange`
+ * flushes too.
+ *
+ * **The mutations must not read the node list out of a closure.** `nodes` is
+ * state, so it is stale between a commit and the render that follows it, and two
+ * gestures inside one frame — the second half of a double click, a drop landing
+ * on the same tick as a size change — would build the second list from the list
+ * as it was before the first. `latest` is updated synchronously by `commit`, so
+ * every mutation composes on what was actually last committed.
  */
 const WRITE_DELAY_MS = 600;
 
@@ -32,53 +49,74 @@ function newId() {
 export function useDashboardLayout() {
   const { nodes: stored, setNodes } = useDashboardSettings();
   const [nodes, setLocal] = useState(stored);
+  /** What the last mutation produced, available before React has re-rendered. */
+  const latest = useRef(stored);
   const pending = useRef(null);
   const timer = useRef(null);
+  const write = useRef(setNodes);
+  write.current = setNodes;
 
   // The stored list is the source of truth right up until the first local edit,
   // and again once the last write has landed.
   useEffect(() => {
     if (pending.current) return;
+    latest.current = stored;
     setLocal(stored);
   }, [stored]);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  /** Sends whatever is outstanding now, rather than when the timer says. */
+  const flush = useCallback(() => {
+    if (!pending.current) return;
+    clearTimeout(timer.current);
+    const outstanding = pending.current;
+    // Cleared before the request, not after: a failed write must not leave the
+    // local list permanently pinned over whatever the server holds.
+    pending.current = null;
+    Promise.resolve(write.current(outstanding)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Both directions of leaving: unmounting the page, and hiding the tab.
+    // `visibilitychange` is the one the browser guarantees on a close, where a
+    // late `unload` is not run at all.
+    const onHide = () => document.visibilityState === 'hidden' && flush();
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      flush();
+    };
+  }, [flush]);
 
   const commit = useCallback(
     (next) => {
+      latest.current = next;
       setLocal(next);
       pending.current = next;
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        const write = pending.current;
-        // Cleared before the request, not after: a failed write must not leave
-        // the local list permanently pinned over whatever the server holds.
-        pending.current = null;
-        Promise.resolve(setNodes(write)).catch(() => {});
-      }, WRITE_DELAY_MS);
+      timer.current = setTimeout(flush, WRITE_DELAY_MS);
     },
-    [setNodes],
+    [flush],
   );
+
+  const list = useCallback(() => latest.current ?? [], []);
 
   /** Replaces one node, leaving every other identical — so React only re-renders
       the card that changed rather than every chart on the page. */
   const patch = useCallback(
-    (id, fields) => {
-      commit((nodes ?? []).map((n) => (n.id === id ? { ...n, ...fields } : n)));
-    },
-    [nodes, commit],
+    (id, fields) => commit(list().map((n) => (n.id === id ? { ...n, ...fields } : n))),
+    [list, commit],
   );
 
   const add = useCallback(() => {
     const widget = WIDGETS[0];
     const node = { id: newId(), widget: widget.id, view: widget.defaultView, size: widget.defaultSize };
-    commit([...(nodes ?? []), node]);
+    commit([...list(), node]);
     return node.id;
-  }, [nodes, commit]);
+  }, [list, commit]);
 
   const remove = useCallback(
-    (id) => commit((nodes ?? []).filter((n) => n.id !== id)),
-    [nodes, commit],
+    (id) => commit(list().filter((n) => n.id !== id)),
+    [list, commit],
   );
 
   /**
@@ -91,10 +129,10 @@ export function useDashboardLayout() {
     (id, widgetId) => {
       const widget = widgetById(widgetId);
       if (!widget) return;
-      const current = (nodes ?? []).find((n) => n.id === id);
+      const current = list().find((n) => n.id === id);
       patch(id, { widget: widget.id, view: resolveView(widget, current?.view) });
     },
-    [nodes, patch],
+    [list, patch],
   );
 
   const setView = useCallback((id, view) => patch(id, { view }), [patch]);
@@ -114,30 +152,30 @@ export function useDashboardLayout() {
    */
   const move = useCallback(
     (id, to) => {
-      const list = nodes ?? [];
-      const from = list.findIndex((n) => n.id === id);
+      const current = list();
+      const from = current.findIndex((n) => n.id === id);
       if (from < 0) return;
-      const rest = list.filter((n) => n.id !== id);
+      const rest = current.filter((n) => n.id !== id);
       const target = Math.max(0, Math.min(rest.length, to > from ? to - 1 : to));
-      rest.splice(target, 0, list[from]);
+      rest.splice(target, 0, current[from]);
       commit(rest);
     },
-    [nodes, commit],
+    [list, commit],
   );
 
   /** The keyboard path. Drag-and-drop alone would put reordering out of reach of
       anyone not using a mouse, which is not a trade this project makes. */
   const nudge = useCallback(
     (id, delta) => {
-      const list = nodes ?? [];
-      const from = list.findIndex((n) => n.id === id);
+      const current = list();
+      const from = current.findIndex((n) => n.id === id);
       const to = from + delta;
-      if (from < 0 || to < 0 || to >= list.length) return;
-      const next = list.slice();
+      if (from < 0 || to < 0 || to >= current.length) return;
+      const next = current.slice();
       [next[from], next[to]] = [next[to], next[from]];
       commit(next);
     },
-    [nodes, commit],
+    [list, commit],
   );
 
   return { nodes, add, remove, setWidget, setView, setSize, move, nudge };

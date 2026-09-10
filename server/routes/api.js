@@ -1658,7 +1658,7 @@ router.get('/analytics', async (req, res) => {
 });
 
 /*
- * The two aggregates the experimental charts need.
+ * The two aggregates the Money flow and Spending calendar cards need.
  *
  * Separate routes rather than two more fields on `/analytics`, deliberately.
  * That response is in the snapshot baseline, and every read-only endpoint being

@@ -34,11 +34,11 @@
 
     {
       "file": "api/analytics_flow.json",
-      "why": "New endpoint. GET /api/analytics/flow, the income → account → category aggregate behind the experimental Sankey. Deliberately its own route rather than two more fields on /analytics: that response is in this baseline, and keeping it byte-identical is what makes this whole comparison a signal. Nothing asks for this endpoint unless the flag is on."
+      "why": "New endpoint. GET /api/analytics/flow, the income → account → category aggregate behind the Money flow card. Deliberately its own route rather than two more fields on /analytics: that response is in this baseline, and keeping it byte-identical is what makes this whole comparison a signal. Nothing asks for this endpoint unless a dashboard node is drawing it."
     },
     {
       "file": "api/analytics_daily.json",
-      "why": "New endpoint. GET /api/analytics/daily, one row per day with spending, behind the experimental calendar heatmap. Same reasoning as the flow route above."
+      "why": "New endpoint. GET /api/analytics/daily, one row per day with spending, behind the Spending calendar card. Same reasoning as the flow route above."
     },
     {
       "file": "api/currency_rates.json",

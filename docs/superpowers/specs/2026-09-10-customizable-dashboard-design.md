@@ -1,7 +1,7 @@
 # Customizable dashboard
 
 **Date:** 2026-09-10
-**Status:** design approved, not yet implemented
+**Status:** built and merged, 2026-09-10. See “Where the build departed from this” at the foot.
 
 ## The problem
 
@@ -458,3 +458,70 @@ the categories `Intl.PluralRules` actually selects. This is the largest
 mechanical chunk of the work and it is unavoidable given the rename.
 
 `pt.js` stays pre-AO90.
+
+---
+
+## Where the build departed from this
+
+Four decisions changed once the thing was on screen. They are recorded here
+rather than edited into the text above, so the spec stays a record of what was
+agreed and this stays a record of what survived contact.
+
+**The view switch is hidden while a card is being edited.** §6 had the pencil
+sitting beside the view toggle and the cluster swapping around it. In practice a
+size-1 card then carried twelve buttons in one header, which wrapped to a second
+line and — because `.chart-head` was `space-between` — left the card's own title
+stranded in the middle of the page. The cluster now *replaces* the view switch,
+which is what §6 said about every other control and should have said about this
+one. `.chart-head` holds its controls right with an auto margin instead, so a
+wrap no longer moves the title.
+
+**The period-on-period figure measures spending, not the net.** §9 put a change
+against the previous period on the summary tiles without saying which number it
+was a change *in*. Computed on the net it read "1,839.1% against the period
+before" on real data, because the net crosses zero routinely — one month of
+tuition against one of salary — and a percentage change across zero is
+arithmetic rather than information. It sits on the Spending tile now, where the
+quantity is always positive and always comparable.
+
+**The direct labels are one layer, not a `LabelList` per band.** §9 asked for
+labels at the right edge of each band and did not say how. A `LabelList` only
+knows about its own series, so four thin bands at the top of the stack printed
+four names on top of each other. They are drawn through recharts' `Customized`,
+which hands over the real axis scales — so the stack is re-walked once, every
+label's position is known at the same time, and the column can be spread apart
+where it is crowded.
+
+**The calendar keeps its own height.** §5 derives every card's height from its
+size. A calendar cannot spend extra room: a day is a fixed 12px square and a
+long range scrolls sideways rather than growing, so the size-2 height left a
+hundred and sixty pixels of empty ground under the squares. It is the only card
+that overrides the size-derived height, and it is the only one whose content has
+a natural size.
+
+## What was found while building it, and fixed
+
+Three bugs, all older than this work, all in code the dashboard leans on.
+
+- **`Value` with `symbol="none"` coloured anyway.** It dropped the `+`/`−` and
+  kept the hue and the weight, so a column of expenses came out green because
+  the amounts happened to be positive. "This number has no direction" now means
+  all three encodings, not two of them.
+- **`Popover` threw on every resize.** Its scroll handler is reused as the
+  resize listener, and a resize event's target is `window` — which
+  `Node.contains()` refuses outright rather than returning false. The panel
+  never closed on a resize and an uncaught TypeError went to the console each
+  time.
+- **The debounced layout write was cancelled on unmount rather than flushed.**
+  Dragging a card and clicking another page inside the 600ms window threw the
+  move away with no error anywhere. It flushes on unmount and on
+  `visibilitychange` now. The mutations also read the node list from a ref
+  updated synchronously by `commit`, so two gestures inside one frame compose
+  instead of the second overwriting the first.
+
+A fourth was found by a test written for the occasion:
+`web/src/lib/i18nKeys.test.js` checks that every literal `t('key')` in the source
+resolves. `i18n.test.js` holds the fourteen catalogues to each other and cannot
+see a key that no catalogue has — `t()` returns the key itself, so the failure is
+a raw dotted name on screen that survives every other check. It immediately found
+`widget.calendar.title` on the spending calendar's SVG label.
