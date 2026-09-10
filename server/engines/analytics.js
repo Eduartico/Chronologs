@@ -497,7 +497,18 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
 
   const accountOf = (tx) => tx.account || tx.accountId || unknownAccount;
   const categoryOf = (tx) => categorizedMap[tx.id] || tx.category || 'uncategorized';
-  const sourceOf = (tx) => tx.merchant || tx.description || 'unknown';
+  // Categorical, not per-payer — deliberately the same shape as `categoryOf`
+  // above. ActivoBank's merchant extraction (modules/activobank/normalize.js)
+  // has four patterns, all written for outgoing purchase-style wording
+  // (COMPRA/PAG SERV/TRANSF/LEV ATM); a credit that matches none of them gets
+  // its raw bank memo echoed back as "merchant" unchanged. So `tx.merchant` on
+  // the income side was never actually a merchant — it was the same noisy
+  // description twice, which is what turned this column into a wall of
+  // near-unique, overlapping labels. The salary rule already puts
+  // "TRANSFERENCIA - VENCIMENTO" under the `income` category; routing the
+  // diagram through that instead collapses every wording of the same kind of
+  // money into one clean node, the way the expense side already does.
+  const sourceOf = (tx) => categorizedMap[tx.id] || tx.category || 'uncategorized';
 
   const income = new Map();
   const expense = new Map();
@@ -537,15 +548,21 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
   const inflows = new Map();
   const outflows = new Map();
 
-  for (const [source, byAccount] of sources) {
-    for (const [account, value] of byAccount) {
+  // Biggest first, in both the outer grouping and each one's own inner map.
+  // `nodeAt` assigns an index on first encounter, and recharts' Sankey lays
+  // nodes out in that order within a column — so a diagram built from
+  // whatever order the transactions happened to arrive in stacks its nodes in
+  // arrival order too, which is what turned this into ribbons crossing at
+  // random rather than fanning out roughly by size.
+  for (const [source, byAccount] of bySizeDesc(sources)) {
+    for (const [account, value] of bySizeDesc(byAccount)) {
       links.push({ source: nodeAt(source, 'source'), target: nodeAt(account, 'account'), value });
       inflows.set(account, (inflows.get(account) || 0) + value);
     }
   }
 
-  for (const [account, byCategory] of categories) {
-    for (const [category, value] of byCategory) {
+  for (const [account, byCategory] of bySizeDesc(categories)) {
+    for (const [category, value] of bySizeDesc(byCategory)) {
       links.push({ source: nodeAt(account, 'account'), target: nodeAt(category, 'category'), value });
       outflows.set(account, (outflows.get(account) || 0) + value);
     }
@@ -609,6 +626,15 @@ function capInner(map, max, otherLabel) {
 }
 
 const sumMap = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+
+/** A map's entries, largest total first. The value at each entry can be a
+    plain number or another map one level down (a Sankey's grouping is always
+    two levels — source→account, account→category) — `total` handles both, so
+    the same helper sorts an outer grouping and any of its inner ones. */
+function bySizeDesc(map) {
+  const total = (value) => (value instanceof Map ? sumMap(value) : value);
+  return [...map.entries()].sort((a, b) => total(b[1]) - total(a[1]));
+}
 const round2 = (n) => Math.round(n * 100) / 100;
 
 /**

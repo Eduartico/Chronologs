@@ -18,6 +18,16 @@ process.env.CHRONOLOGS_DATA_DIR = DATA_DIR;
 
 const { buildProjections } = await import('./rebuild.js');
 
+/** Overwrites the temp installation's category registry — needed only by the
+    tests that check `excludeFromSpending`, which `buildProjections` reads via
+    `loadCategories()`. Every other test in this file runs with none, which
+    `loadCategories()` treats as an empty registry, not as "use the shipped
+    defaults" — that fallback belongs to `ensureDefaultCategories()`, called
+    once at server boot, not here. */
+function writeCategories(categories) {
+  writeFileSync(join(DATA_DIR, 'state', 'categories.json'), JSON.stringify(categories), 'utf-8');
+}
+
 async function projectionsOf(events) {
   writeFileSync(
     join(DATA_DIR, 'ledger', 'events.ndjson'),
@@ -131,4 +141,76 @@ test('voiding one copy voids the movement, not just that copy', async () => {
 
   assert.equal(p.transactions.length, 0);
   assert.equal(p.voidedTransactions.length, 1);
+});
+
+/*
+ * `excludeFromSpending` on a category. The flag is declared on the shipped
+ * `internal_transfer` category and, before this, was never read by anything —
+ * `spendingTransactions` only ever checked `.internal`, which the account
+ * analysis sets exclusively by *pairing* both legs of a self-transfer. A
+ * transaction categorised "internal transfer" by a rule or by hand, with
+ * nothing to pair it against, carried the right category and the wrong
+ * boolean, and every dashboard aggregate counted it as real money moving.
+ */
+test('a category flagged excludeFromSpending is kept out of spending even without a paired leg', async () => {
+  writeCategories([
+    { id: 'internal_transfer', name: 'internal transfer', excludeFromSpending: true },
+  ]);
+  const solo = txEvent('tx-solo', { amount: -400 });
+  const p = await projectionsOf([
+    solo,
+    {
+      id: 'event-cat-internal',
+      timestamp: '2026-01-02T00:00:00.000Z',
+      type: 'category_assignment',
+      source: 'manual',
+      hash: 'hash-cat-internal',
+      payload: { event_id: solo.id, category: 'internal transfer', confidence: 1 },
+      linked_entities: [],
+    },
+  ]);
+
+  const tx = p.transactions.find((t) => t.id === 'tx-solo');
+  assert.equal(tx.internal, undefined, 'nothing paired it, so the account analysis never touches it');
+  assert.equal(tx.category, 'internal transfer');
+  assert.equal(
+    p.spendingTransactions.some((t) => t.id === 'tx-solo'),
+    false,
+    'the category alone is enough to keep it out of every spending total',
+  );
+});
+
+test('a category with no excludeFromSpending flag counts as spending, category assignment or not', async () => {
+  writeCategories([{ id: 'transport', name: 'transport' }]);
+  const solo = txEvent('tx-solo', { amount: -400 });
+  const p = await projectionsOf([
+    solo,
+    {
+      id: 'event-cat-transport',
+      timestamp: '2026-01-02T00:00:00.000Z',
+      type: 'category_assignment',
+      source: 'manual',
+      hash: 'hash-cat-transport',
+      payload: { event_id: solo.id, category: 'transport', confidence: 1 },
+      linked_entities: [],
+    },
+  ]);
+
+  assert.equal(
+    p.spendingTransactions.some((t) => t.id === 'tx-solo'),
+    true,
+    'an ordinary category must not be silently excluded along with the flagged one',
+  );
+});
+
+test('an empty category registry excludes nothing', async () => {
+  // The common case every other test in this file already relies on without
+  // saying so: most of them never call writeCategories() at all, which
+  // `loadCategories()` treats the same as an explicitly empty array. Made
+  // explicit here rather than left implicit, since a shared temp directory
+  // means "never called writeCategories" is not the same guarantee as "no
+  // categories.json exists yet" once other tests in the file have run.
+  writeCategories([]);
+  const p = await projectionsOf([txEvent('tx-plain', { amount: -10 })]);
+  assert.equal(p.spendingTransactions.some((t) => t.id === 'tx-plain'), true);
 });

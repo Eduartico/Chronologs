@@ -243,9 +243,20 @@ export async function buildProjections() {
     if (tx.systemCategorized) categoryMap[tx.id] = tx.category;
   }
 
+  // Categories can declare themselves out of spending entirely —
+  // `internal_transfer` is the one shipped example, for a transaction that was
+  // categorised (by hand, or by a rule) as money moved between the owner's own
+  // accounts without ever being *paired* by the account analysis above. A
+  // paired leg is already caught by `.internal`; this catches the row a rule
+  // recognised as a self-move that the pairing heuristic didn't, or a hand
+  // recategorisation after the fact.
+  const categories = loadCategories();
+  const excludedCategories = new Set(categories.filter((c) => c.excludeFromSpending).map((c) => c.name));
+  const excludedFromSpending = (t) => excludedCategories.has(categoryMap[t.id] || t.category);
+
   // What every spending figure should be computed over. Internal movements are
   // not income and not expense; they are the same euros changing pocket.
-  const spendingTransactions = transactions.filter((t) => !t.internal);
+  const spendingTransactions = transactions.filter((t) => !t.internal && !excludedFromSpending(t));
 
   // Investment transactions are projected separately from bank transactions on
   // purpose: they need no categorizing, and mixing them in would bury the

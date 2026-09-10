@@ -51,7 +51,15 @@ export default function Value({
   // hue and the weight, which meant a column of expenses came out green because
   // the amounts happened to be positive. Colour was saying something the data
   // does not.
-  const dir = symbol === 'none' ? 'flat' : signed;
+  //
+  // `'none'` is deliberately its own value, not a reuse of `'flat'`. Those are
+  // two different facts: `flat` means a real delta that happened to land at
+  // zero, which earns the muted, thin treatment CSS gives it elsewhere. `none`
+  // means this number was never a delta at all — reusing `flat` for it made
+  // every `symbol="none"` amount (a plain Income or Spending total, among
+  // others) render thin and grey instead of the ordinary bold ink its
+  // container already asked for.
+  const dir = symbol === 'none' ? 'none' : signed;
 
   const glyph =
     symbol === 'none' || raw === 'flat' ? ''
@@ -77,7 +85,7 @@ export default function Value({
     >
       {glyph && <span className="value-sym" aria-hidden="true">{glyph}</span>}
       <span className="value-num">{text}</span>
-      {dir !== 'flat' && <span className="sr-only"> {t(`value.${dir}`)}</span>}
+      {(dir === 'up' || dir === 'down') && <span className="sr-only"> {t(`value.${dir}`)}</span>}
     </span>
   );
 }

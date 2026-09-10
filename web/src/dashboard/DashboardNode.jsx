@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import Icon from '../components/Icon.jsx';
 import IconButton from '../components/ui/IconButton.jsx';
@@ -45,8 +45,17 @@ const COMPONENTS = {
  * The cluster is keyed by state so React remounts it rather than diffing
  * pencil→check prop by prop. A remount is what makes the CSS entrance animation
  * play on every swap; a diffed prop change does not retrigger an animation.
+ *
+ * Edit mode also gives up on its own. Nothing else on the site leaves a mode
+ * switched on indefinitely waiting for a click that may never come, and a card
+ * is no different: five seconds with no click on any of its edit controls and
+ * it closes itself, the same `onDone` the explicit "Done" button already
+ * calls. Purely click-driven — no mouse tracking, no click-outside handler —
+ * because that is exactly what was asked for, and the widget picker's own
+ * outside-click handling already exists and does not need duplicating.
  */
 const DISARM_MS = 1000;
+const EDIT_IDLE_MS = 5000;
 
 export default function DashboardNode({
   node,
@@ -68,17 +77,37 @@ export default function DashboardNode({
   const disarm = useRef(null);
   const pickerAnchor = useRef(null);
   const [picking, setPicking] = useState(false);
+  const idleTimer = useRef(null);
+  // `onDone` is a fresh closure every render (DashboardGrid defines it inline),
+  // but the idle timer is only ever (re)started when `editing` flips — reading
+  // through a ref rather than closing over the prop directly is what keeps the
+  // timeout calling whichever `onDone` is actually current without having to
+  // restart the countdown on every unrelated re-render.
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+
+  const bump = useCallback(() => {
+    clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => doneRef.current(), EDIT_IDLE_MS);
+  }, []);
+
+  useEffect(() => {
+    if (editing) bump();
+    return () => clearTimeout(idleTimer.current);
+  }, [editing, bump]);
 
   const Widget = COMPONENTS[node.widget.id];
   if (!Widget) return null;
 
   const arm = () => {
+    bump();
     clearTimeout(disarm.current);
     setArmed(true);
     disarm.current = setTimeout(() => setArmed(false), DISARM_MS);
   };
 
   const close = () => {
+    clearTimeout(idleTimer.current);
     clearTimeout(disarm.current);
     setArmed(false);
     setPicking(false);
@@ -92,7 +121,10 @@ export default function DashboardNode({
           icon={node.widget.icon}
           label={t('dashboard.edit.pickWidget')}
           disabled={armed}
-          onClick={() => setPicking((v) => !v)}
+          onClick={() => {
+            bump();
+            setPicking((v) => !v);
+          }}
         />
       </span>
       {SIZES.map((size) => (
@@ -102,7 +134,10 @@ export default function DashboardNode({
           label={t(`dashboard.size.${size.value}`)}
           className={node.size === size.value ? 'is-on' : ''}
           disabled={armed}
-          onClick={() => onSetSize(size.value)}
+          onClick={() => {
+            bump();
+            onSetSize(size.value);
+          }}
         />
       ))}
       {/* The keyboard path for reordering. Dragging alone would put the whole
@@ -111,16 +146,30 @@ export default function DashboardNode({
         icon="chevronLeft"
         label={t('dashboard.edit.moveBack')}
         disabled={armed || index === 0}
-        onClick={() => onNudge(-1)}
+        onClick={() => {
+          bump();
+          onNudge(-1);
+        }}
       />
       <IconButton
         icon="chevronRight"
         label={t('dashboard.edit.moveForward')}
         disabled={armed || index === count - 1}
-        onClick={() => onNudge(1)}
+        onClick={() => {
+          bump();
+          onNudge(1);
+        }}
       />
       {armed ? (
-        <IconButton icon="check" label={t('dashboard.edit.confirmRemove')} tone="armed" onClick={onRemove} />
+        <IconButton
+          icon="check"
+          label={t('dashboard.edit.confirmRemove')}
+          tone="armed"
+          onClick={() => {
+            clearTimeout(idleTimer.current);
+            onRemove();
+          }}
+        />
       ) : (
         <IconButton icon="trash" label={t('dashboard.edit.remove')} tone="danger" onClick={arm} />
       )}
@@ -171,6 +220,7 @@ export default function DashboardNode({
               className={`widget-tile${widget.id === node.widget.id ? ' is-on' : ''}`}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
+                bump();
                 onSetWidget(widget.id);
                 setPicking(false);
               }}

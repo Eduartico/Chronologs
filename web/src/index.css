@@ -2244,6 +2244,15 @@ th.sortable.num .th-inner {
   color: var(--text-muted);
   font-weight: 450;
 }
+/* `symbol="none"` — an amount that was never a gain or a loss, so it carries
+   none of the three directional encodings. Not the same fact as `flat` above
+   (a real delta that landed at zero), which is why it is not that selector:
+   this one inherits whatever weight and colour its container already set,
+   rather than forcing the muted/thin look a genuine flat delta gets. */
+.value[data-dir='none'] {
+  color: inherit;
+  font-weight: inherit;
+}
 
 /* The pre-existing amount classes, kept pointing at the same tokens so anything
    not yet migrated to <Value> still follows the accessibility setting. */
@@ -2289,7 +2298,11 @@ th.sortable.num .th-inner {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4);
-  align-items: start;
+  /* Stretch (grid's own default) rather than a fixed alignment: two size-1
+     cards side by side should match height even when one has a footnote and
+     the other doesn't — a size-4 card is always full width (span 2), so it
+     never shares a row with anything to stretch against. */
+  align-items: stretch;
 }
 .dash-cell {
   min-width: 0;

@@ -31,7 +31,6 @@
       "path": "$['pricempire/*']",
       "why": "Gone from the capture, and they were noise. Documents are now re-read by the module instance that stored them; Pricempire declares no bank-document parser, so its portfolio exports are skipped. The baseline entries were those CSVs fed to the ActivoBank statement parsers, which read zero transactions out of a hundred rows each and reported one unparsed line — a measurement of nothing."
     },
-
     {
       "file": "api/analytics_flow.json",
       "why": "New endpoint. GET /api/analytics/flow, the income → account → category aggregate behind the Money flow card. Deliberately its own route rather than two more fields on /analytics: that response is in this baseline, and keeping it byte-identical is what makes this whole comparison a signal. Nothing asks for this endpoint unless a dashboard node is drawing it."
@@ -64,7 +63,16 @@
       "path": "$.body.summary",
       "why": "Shape change: each entry is now {key, params} instead of a finished sentence. It was the last hardcoded Portuguese string the server put on screen — 'X% do que gastaste foi em Y' — which read Portuguese in all fourteen languages. Nothing in the interface renders this field today, so the visible effect is nil; the point is that it can now be rendered in the reader's language when something does."
     },
-
+    {
+      "file": "api/categories.json",
+      "why": "Deliberate, personal-data fix. Eduardo had hand-made an \"in-account moviment\" category (state/categories.json, not a shipped default) for term-deposit constitute/reinforce/liquidate rows (CONSTIT/REFORCO/LIQ DEP PRAZO) — self-moves the account-pairing heuristic never recognises, because none of that wording matches a transfer pattern. Nothing ever excluded it from spending, so €8,453 across 34 transactions counted as real income and expense on every dashboard chart. The `excludeFromSpending` flag existed on the shipped `internal_transfer` category already; this session wired it up (see the next entry) and then set it on Eduardo's own category too, in `user-data/`, matching CLAUDE.md's rule that a personal-data problem is fixed in the data, not in the defaults.",
+      "path": "$.body"
+    },
+    {
+      "file": "api/analytics.json",
+      "path": "$.body.range.matched",
+      "why": "2822 → 2788, and the same 34-row drop flows into `monthlyCashflow`, `categoryBreakdown`, `categoryTrend` and `cumulative` for June–August 2026. `spendingTransactions` (server/projections/rebuild.js) now excludes any transaction whose category is flagged `excludeFromSpending` in the category registry, not only one whose `internal` boolean was set by the account-pairing heuristic. This tool reports only the first differing path per file, alphabetically, so `allocation` (an unrelated, pre-existing market-data drift, already accepted above) is what actually prints; this entry exists so the real, deeper diff those 34 rows cause is not mistaken for something this tool silently missed. Confirmed directly against a freshly booted server: `range.matched` was 2822 before this session's `in-account moviment` flag and 2788 after."
+    },
     {
       "//": [
         "Below this line: not caused by any code change. The baseline was captured",

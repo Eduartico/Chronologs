@@ -69,7 +69,10 @@ test('a row with no account gets a named node rather than being dropped', () => 
 test('the tails fold into one bucket rather than a hairline each', () => {
   const many = [];
   for (let i = 0; i < 20; i += 1) {
-    many.push(tx(`in${i}`, '2026-03-01', 1000 - i * 10, { merchant: `Payer ${i}`, account: 'Current' }));
+    // Twenty distinct *categories* on the income side, not twenty distinct
+    // merchants — a source node's identity is the category now (see below),
+    // so that is the axis this test has to vary to exercise the cap.
+    many.push(tx(`in${i}`, '2026-03-01', 1000 - i * 10, { category: `src${i}`, account: 'Current' }));
     many.push(tx(`out${i}`, '2026-03-02', -(500 - i * 10), { merchant: 'x', account: 'Current', category: `cat${i}` }));
   }
   const flow = computeFlow(many, {}, { maxSources: 5, maxCategories: 4 });
@@ -78,6 +81,53 @@ test('the tails fold into one bucket rather than a hairline each', () => {
   assert.ok(flow.nodes.some((n) => n.kind === 'source' && n.name === 'other'));
   // Folding must not lose money.
   assert.equal(flow.totals.income, many.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0));
+});
+
+/*
+ * A source node's identity, and the order nodes come out in.
+ *
+ * These two moved in together: ActivoBank's merchant extraction cleans up
+ * outgoing purchases (COMPRA/PAG SERV/LEV ATM) and, for anything else, echoes
+ * the raw bank memo straight back — which for incoming transfers is every one
+ * of them. "TRANSFERENCIA - VENCIMENTO" and "DEV.TRF.IMED CY689..." are not
+ * two merchants, they are two spellings of "money arrived" with no useful
+ * merchant in either. A source node is the category now, the same way an
+ * expense node already was.
+ */
+test('two differently worded credits under the same category share one source node', () => {
+  const flow = computeFlow(
+    [
+      tx('a', '2026-05-01', 1800, { merchant: 'TRANSFERENCIA - VENCIMENTO', account: 'Current' }),
+      tx('b', '2026-05-02', 40, { merchant: 'DEV.TRF.IMED CY6890200001', account: 'Current' }),
+    ],
+    { a: 'income', b: 'income' },
+  );
+  const sources = flow.nodes.filter((n) => n.kind === 'source');
+  assert.equal(sources.length, 1, 'both credits resolve to the same category, so they are one node, not two');
+  assert.equal(sources[0].name, 'income');
+  assert.equal(flow.links.find((l) => l.target === flow.nodes.findIndex((n) => n.kind === 'account')).value, 1840);
+});
+
+test('a credit with no assigned category still gets a clean node rather than its raw memo', () => {
+  const flow = computeFlow([tx('a', '2026-05-01', 500, { merchant: 'TRF. P/O REEMBOLSOS IRS ABCDEF', account: 'Current' })]);
+  assert.ok(
+    flow.nodes.some((n) => n.kind === 'source' && n.name === 'uncategorized'),
+    'an uncategorised credit is one clean bucket, not its own noisy bank memo',
+  );
+});
+
+test('nodes come out largest first within each column', () => {
+  const flow = computeFlow(
+    [
+      tx('small', '2026-06-01', 50, { category: 'small', account: 'Current' }),
+      tx('big', '2026-06-02', 950, { category: 'big', account: 'Current' }),
+      tx('mid', '2026-06-03', 300, { category: 'mid', account: 'Current' }),
+    ],
+    {},
+    { maxSources: 10 },
+  );
+  const order = flow.nodes.filter((n) => n.kind === 'source').map((n) => n.name);
+  assert.deepEqual(order, ['big', 'mid', 'small'], 'the diagram should fan out biggest-to-smallest, not in arrival order');
 });
 
 test('an empty range is a valid empty diagram, not a crash', () => {
