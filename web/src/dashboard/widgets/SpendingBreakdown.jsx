@@ -122,6 +122,7 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
 
 
   const xAxis = useMemo(() => fitAxis(withShare.map((row) => row.value)), [withShare]);
+  const narrow = (card?.height ?? 280) < 220;
 
   const parents = useCategoryParents(view === 'sunburst');
   const rings = useMemo(() => buildRings(shown, parents), [shown, parents]);
@@ -172,10 +173,10 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
       {view === 'bar' ? (
         /* Shares are easier to rank as bars and easier to judge as a circle, so
            the reader picks. Largest at the top, which is what "ranked" means. */
-        <BarChart data={withShare} layout="vertical" margin={{ top: 4, right: 64, left: 0, bottom: 0 }}>
+        <BarChart data={withShare} layout="vertical" margin={{ top: 4, right: narrow ? 8 : 64, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
           <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} {...xAxis} />
-          <YAxis type="category" dataKey="name" width={110} {...cartesianDefaults.axis} />
+          <YAxis type="category" dataKey="name" width={narrow ? 80 : 110} {...cartesianDefaults.axis} />
           <Tooltip
             content={<ChartTooltip formatValue={eur} total={total} />}
             cursor={{ fill: 'rgba(139,148,158,0.08)' }}
@@ -187,13 +188,15 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
             {/* The share, printed at the end of the bar. Length already carries
                 the amount; the number nobody can read off an axis is the
                 percentage. */}
-            <LabelList
-              dataKey="share"
-              position="right"
-              formatter={percent}
-              fill={INK.secondary}
-              fontSize={11}
-            />
+            {!narrow && (
+              <LabelList
+                dataKey="share"
+                position="right"
+                formatter={percent}
+                fill={INK.secondary}
+                fontSize={11}
+              />
+            )}
           </Bar>
         </BarChart>
       ) : view === 'treemap' ? (
@@ -247,8 +250,8 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
             data={withShare}
             cx="50%"
             cy="50%"
-            innerRadius="42%"
-            outerRadius="72%"
+            innerRadius={narrow ? '34%' : '42%'}
+            outerRadius={narrow ? '58%' : '72%'}
             dataKey="value"
             paddingAngle={2}
             stroke={INK.surface}
@@ -256,8 +259,13 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
             isAnimationActive={false}
             /* The slice says its own share. An angle is comparable but not
                readable, and the reader wanting "8%" should not have to open a
-               tooltip or switch to the table for it. */
-            label={({ share, name }) => (share >= 4 ? `${name} ${percent(share)}` : null)}
+               tooltip or switch to the table for it.
+               A narrow card has nowhere to put the name — the label runs off the
+               top of the chart area and gets clipped — so there it is the share
+               alone and the legend carries the names. */
+            label={({ share, name }) =>
+              share >= (narrow ? 8 : 4) ? (narrow ? percent(share) : `${name} ${percent(share)}`) : null
+            }
             labelLine={false}
           >
             {withShare.map((b, i) => (

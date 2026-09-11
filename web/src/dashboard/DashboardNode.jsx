@@ -14,6 +14,9 @@ import TopMerchants from './widgets/TopMerchants.jsx';
 import SavingsRate from './widgets/SavingsRate.jsx';
 import MoneyFlow from './widgets/MoneyFlow.jsx';
 import SpendingCalendar from './widgets/SpendingCalendar.jsx';
+import Movers from './widgets/Movers.jsx';
+import Committed from './widgets/Committed.jsx';
+import Projection from './widgets/Projection.jsx';
 
 /** The one place a widget id becomes a component. The catalogue names what
     exists; this says what draws it. */
@@ -26,6 +29,9 @@ const COMPONENTS = {
   savings: SavingsRate,
   flow: MoneyFlow,
   calendar: SpendingCalendar,
+  movers: Movers,
+  committed: Committed,
+  projection: Projection,
 };
 
 /**
@@ -77,6 +83,8 @@ export default function DashboardNode({
   const disarm = useRef(null);
   const pickerAnchor = useRef(null);
   const [picking, setPicking] = useState(false);
+  const sizeAnchor = useRef(null);
+  const [sizing, setSizing] = useState(false);
   const idleTimer = useRef(null);
   // `onDone` is a fresh closure every render (DashboardGrid defines it inline),
   // but the idle timer is only ever (re)started when `editing` flips — reading
@@ -111,6 +119,7 @@ export default function DashboardNode({
     clearTimeout(disarm.current);
     setArmed(false);
     setPicking(false);
+    setSizing(false);
     onDone();
   };
 
@@ -127,19 +136,23 @@ export default function DashboardNode({
           }}
         />
       </span>
-      {SIZES.map((size) => (
+      {/* One button, not one per width. Six of them inline would put eleven
+          controls in a header that has to survive being a quarter of a row wide,
+          and the cluster would wrap onto a second line and shove the title
+          sideways — the thing the header's own layout comment exists to stop.
+          The current width is the button's glyph, so the control still says what
+          it is set to without being asked. */}
+      <span ref={sizeAnchor} style={{ display: 'inline-flex' }}>
         <IconButton
-          key={size.value}
-          icon={size.icon}
-          label={t(`dashboard.size.${size.value}`)}
-          className={node.size === size.value ? 'is-on' : ''}
+          icon={SIZES.find((s) => s.value === node.size)?.icon || 'sizeWide'}
+          label={t('dashboard.edit.pickSize')}
           disabled={armed}
           onClick={() => {
             bump();
-            onSetSize(size.value);
+            setSizing((v) => !v);
           }}
         />
-      ))}
+      </span>
       {/* The keyboard path for reordering. Dragging alone would put the whole
           feature out of reach of anyone not using a mouse. */}
       <IconButton
@@ -227,6 +240,35 @@ export default function DashboardNode({
             >
               <Icon name={widget.icon} size={18} />
               <span>{t(`widget.${widget.id}.name`)}</span>
+            </button>
+          ))}
+        </div>
+      </Popover>
+
+      {/* Rows, not tiles: a width is a single ordered choice from narrow to wide,
+          and a list is the shape that reads as an order. */}
+      <Popover
+        anchorRef={sizeAnchor}
+        open={sizing && editing}
+        onClose={() => setSizing(false)}
+        width={200}
+        className="widget-picker"
+      >
+        <div className="size-picker">
+          {SIZES.map((size) => (
+            <button
+              key={size.value}
+              type="button"
+              className={`size-option${size.value === node.size ? ' is-on' : ''}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                bump();
+                onSetSize(size.value);
+                setSizing(false);
+              }}
+            >
+              <Icon name={size.icon} size={18} />
+              <span>{t(`dashboard.size.${size.value}`)}</span>
             </button>
           ))}
         </div>

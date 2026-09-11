@@ -89,9 +89,13 @@ const PATHS = {
   // the card header, which is the only part of a card that is a drag source —
   // making the whole card draggable would fight every legend click inside it.
   grip: 'M9 5h.01M9 9h.01M9 13h.01M9 17h.01M9 21h.01M15 5h.01M15 9h.01M15 13h.01M15 17h.01M15 21h.01',
-  // The three card sizes, drawn as the shape each one occupies in a two-column
-  // grid — the glyph is the label, the way the chart-type icons already are.
+  // The card widths, drawn as the share of a row each one occupies — the filled
+  // block is the card and the rules beside it are the rest of the row. The glyph
+  // is the label, the way the chart-type icons already are.
+  sizeQuarter: 'M3 5h4v14H3zM10 5h11M10 12h11M10 19h11',
+  sizeThird: 'M3 5h5v14H3zM11 5h10M11 12h10M11 19h10',
   sizeHalf: 'M3 5h8v14H3zM14 5h7M14 12h7M14 19h7',
+  sizeTwoThirds: 'M3 5h12v14H3zM18 5h3M18 12h3M18 19h3',
   sizeWide: 'M3 5h18v14H3z',
   sizeLarge: 'M3 3h18v18H3zM3 12h18',
   // The two Settings tabs added with the theme engine.

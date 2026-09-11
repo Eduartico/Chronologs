@@ -2310,12 +2310,14 @@ th.sortable.num .th-inner {
  */
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Twelve, because it divides by two, three and four — a half, a third and a
+     quarter all land on it exactly. Two columns could only ever express half and
+     whole, which is why a row of four small figures was not something a reader
+     could arrange. */
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: var(--sp-4);
-  /* Stretch (grid's own default) rather than a fixed alignment: two size-1
-     cards side by side should match height even when one has a footnote and
-     the other doesn't — a size-4 card is always full width (span 2), so it
-     never shares a row with anything to stretch against. */
+  /* Stretch (grid's own default) rather than a fixed alignment: cards sharing a
+     row should match height even when one has a footnote and the other doesn't. */
   align-items: stretch;
 }
 .dash-cell {
@@ -2326,12 +2328,34 @@ th.sortable.num .th-inner {
   flex: 1;
   min-width: 0;
 }
-.dash-size-2 {
-  grid-column: span 2;
+.dash-size-quarter {
+  grid-column: span 3;
 }
-.dash-size-4 {
-  grid-column: span 2;
+.dash-size-third {
+  grid-column: span 4;
+}
+.dash-size-half {
+  grid-column: span 6;
+}
+.dash-size-twoThirds {
+  grid-column: span 8;
+}
+.dash-size-full {
+  grid-column: span 12;
+}
+.dash-size-tall {
+  grid-column: span 12;
   grid-row: span 2;
+}
+
+/* A quarter of a laptop window is about 300px, which a chart can just about
+   live in. A quarter of a tablet is not, so the narrow widths pair up before
+   everything collapses. */
+@media (max-width: 1100px) {
+  .dash-size-quarter,
+  .dash-size-third {
+    grid-column: span 6;
+  }
 }
 
 /* A card at half width on a phone is unreadable, and one two rows tall is a
@@ -2340,8 +2364,7 @@ th.sortable.num .th-inner {
   .dash-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .dash-size-2,
-  .dash-size-4 {
+  .dash-cell {
     grid-column: auto;
     grid-row: auto;
   }
@@ -2446,7 +2469,7 @@ th.sortable.num .th-inner {
    the row, so it reads as "a card could go here" rather than as a toolbar
    button that happens to sit at the bottom of the page. */
 .dash-add {
-  grid-column: span 2;
+  grid-column: span 12;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2501,6 +2524,50 @@ th.sortable.num .th-inner {
   color: var(--text);
 }
 .widget-tile.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A quarter-width header cannot hold a title, a subtitle, a view switch and a
+   pencil on one line, so it wraps — and `margin-left: auto` then strands the
+   controls against the right edge of a second row with the title far away on the
+   first. On the narrow widths they sit under the title instead, where they read
+   as belonging to it. */
+.dash-size-quarter .chart-head,
+.dash-size-third .chart-head {
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
+}
+.dash-size-quarter .chart-head-controls,
+.dash-size-third .chart-head-controls {
+  margin-left: 0;
+}
+
+/* Widths are an ordered choice, narrow to wide, so they are a list where the
+   widgets are a grid — the order is the information. */
+.size-picker {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-1);
+}
+.size-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-align: start;
+  cursor: pointer;
+}
+.size-option:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.size-option.is-on {
   border-color: var(--accent);
   color: var(--accent);
 }

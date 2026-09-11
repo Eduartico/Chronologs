@@ -38,6 +38,8 @@ export default function TopMerchants({ card, view, data, loading }) {
   );
 
   const xAxis = useMemo(() => fitAxis(rows.map((r) => r.total)), [rows]);
+  // A 140px name column inside a quarter-width card leaves no chart behind it.
+  const narrow = (card?.height ?? 280) < 220;
 
   return (
     <ChartCard
@@ -58,22 +60,27 @@ export default function TopMerchants({ card, view, data, loading }) {
         ],
       }}
     >
-      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 56, left: 0, bottom: 0 }}>
+      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: narrow ? 8 : 56, left: 0, bottom: 0 }}>
         <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
         <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} {...xAxis} />
         <YAxis
           type="category"
           dataKey="merchant"
-          width={140}
+          width={narrow ? 90 : 140}
           {...cartesianDefaults.axis}
-          tickFormatter={(v) => (v.length > 20 ? v.slice(0, 20) + '…' : v)}
+          tickFormatter={(v) => {
+            const max = narrow ? 12 : 20;
+            return v.length > max ? `${v.slice(0, max)}…` : v;
+          }}
         />
         <Tooltip
           content={<ChartTooltip formatValue={eur} />}
           cursor={{ fill: 'rgba(139,148,158,0.08)' }}
         />
         <Bar dataKey="total" name={t('dashboard.spent')} fill={SERIES[0]} radius={[0, 4, 4, 0]}>
-          <LabelList dataKey="share" position="right" formatter={percent} fill={INK.secondary} fontSize={11} />
+          {!narrow && (
+            <LabelList dataKey="share" position="right" formatter={percent} fill={INK.secondary} fontSize={11} />
+          )}
         </Bar>
       </BarChart>
     </ChartCard>

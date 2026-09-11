@@ -109,12 +109,12 @@ export function useDashboardLayout() {
 
   const add = useCallback(() => {
     const widget = WIDGETS[0];
-    // Size 2, not `widget.defaultSize` — that field is the catalogue's own
+    // A full row, not `widget.defaultSize` — that field is the catalogue's own
     // fallback for a *stored* node with an invalid size (see `resolveNode`),
     // an unrelated question from "what size should a brand-new card open at."
     // A fresh card starts as a full row: the add button itself is drawn full
     // width, and a half-width card is a smaller target to then resize.
-    const node = { id: newId(), widget: widget.id, view: widget.defaultView, size: 2 };
+    const node = { id: newId(), widget: widget.id, view: widget.defaultView, size: 'full' };
     commit([...list(), node]);
     return node.id;
   }, [list, commit]);

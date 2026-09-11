@@ -55,21 +55,49 @@ export const VIEW_ICONS = {
   chart: 'chartLine',
 };
 
-/** The three sizes a card can take in a two-column grid. Height is derived from
-    the size rather than stored alongside it, so a node cannot exist at a size
-    its height contradicts. */
+/**
+ * The widths a card can take, and how tall its chart is drawn at each.
+ *
+ * The grid used to be two columns, so a card was half a row, a whole row, or a
+ * whole row twice over — three widths, and no way to put four small figures in a
+ * line the way the headline tiles are. It is now twelve columns, which divides
+ * by two, three and four, so a quarter, a third, a half and two thirds all land
+ * on it exactly.
+ *
+ * Named rather than numbered. The sizes used to be 1, 2 and 4, meaning "half",
+ * "full" and "full, twice as tall" — a numbering that only made sense read as
+ * *height in rows*, which is the one thing it did not describe. Adding a third
+ * and a quarter to that scheme would have meant fractions or invented integers.
+ * `LEGACY_SIZES` keeps a layout written under the old numbering working, because
+ * a settings file someone already has is not something to break for tidiness.
+ *
+ * Height is derived from the width rather than stored beside it, so a node
+ * cannot exist at a size its height contradicts.
+ */
 export const SIZES = [
-  { value: 1, icon: 'sizeHalf' },
-  { value: 2, icon: 'sizeWide' },
-  { value: 4, icon: 'sizeLarge' },
+  { value: 'quarter', columns: 3, icon: 'sizeQuarter' },
+  { value: 'third', columns: 4, icon: 'sizeThird' },
+  { value: 'half', columns: 6, icon: 'sizeHalf' },
+  { value: 'twoThirds', columns: 8, icon: 'sizeTwoThirds' },
+  { value: 'full', columns: 12, icon: 'sizeWide' },
+  { value: 'tall', columns: 12, rows: 2, icon: 'sizeLarge' },
 ];
 
 export const SIZE_VALUES = SIZES.map((s) => s.value);
 
-/** How tall the chart inside a card is drawn, per size. A size-4 card is two
-    grid rows tall and has to fill them; a size-1 card sits beside a sibling and
-    must not out-grow it. */
-export const CHART_HEIGHT = { 1: 280, 2: 300, 4: 620 };
+/** What the numbers in an existing layout meant. */
+export const LEGACY_SIZES = { 1: 'half', 2: 'full', 4: 'tall' };
+
+/** A narrow card cannot carry a 300px chart and still leave room for its own
+    title, and a `tall` card is two grid rows and has to fill them. */
+export const CHART_HEIGHT = {
+  quarter: 150,
+  third: 170,
+  half: 280,
+  twoThirds: 280,
+  full: 300,
+  tall: 620,
+};
 
 export const WIDGETS = [
   {
@@ -77,56 +105,87 @@ export const WIDGETS = [
     icon: 'chartLine',
     views: ['line', 'bar', 'table'],
     defaultView: 'line',
-    defaultSize: 1,
+    defaultSize: 'half',
   },
   {
     id: 'balance',
     icon: 'chartArea',
     views: ['area', 'line', 'waterfall', 'table'],
     defaultView: 'area',
-    defaultSize: 1,
+    defaultSize: 'half',
   },
   {
     id: 'trend',
     icon: 'chartStacked',
     views: ['stacked', 'share', 'stream', 'table'],
     defaultView: 'stacked',
-    defaultSize: 2,
+    defaultSize: 'full',
   },
   {
     id: 'breakdown',
     icon: 'chartPie',
     views: ['pie', 'bar', 'treemap', 'sunburst', 'table'],
     defaultView: 'pie',
-    defaultSize: 1,
+    defaultSize: 'half',
   },
   {
     id: 'merchants',
     icon: 'chartBar',
     views: ['bar', 'table'],
     defaultView: 'bar',
-    defaultSize: 1,
+    defaultSize: 'half',
   },
   {
     id: 'savings',
     icon: 'chartLine',
     views: ['line', 'table'],
     defaultView: 'line',
-    defaultSize: 2,
+    defaultSize: 'full',
   },
   {
     id: 'flow',
     icon: 'chartSankey',
     views: ['sankey', 'table'],
     defaultView: 'sankey',
-    defaultSize: 2,
+    defaultSize: 'full',
   },
   {
     id: 'calendar',
     icon: 'chartCalendar',
     views: ['heatmap', 'table'],
     defaultView: 'heatmap',
-    defaultSize: 2,
+    defaultSize: 'full',
+  },
+  /*
+   * The small cards.
+   *
+   * Every figure below was already computed and already on the wire — `shifts`,
+   * `insights.recurring`, `projection` — and none of it was drawn anywhere the
+   * reader plans. They open at a third of a row because that is the width they
+   * are for: a dashboard of eight full-width charts can only be read by
+   * scrolling, and half of what a reader wants at a glance is one number with
+   * one comparison beside it.
+   */
+  {
+    id: 'movers',
+    icon: 'insights',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  {
+    id: 'committed',
+    icon: 'subscriptions',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  {
+    id: 'projection',
+    icon: 'hourglass',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'third',
   },
 ];
 
@@ -156,6 +215,15 @@ export function resolveView(widget, view) {
 
 /** Everything the grid needs to draw one stored node, with every field checked.
     `null` means "skip this node", which is what an unknown widget gets. */
+/** A stored width, a width written under the old numbering, or the widget's own
+    default — in that order. An unknown one falls back rather than taking the
+    page down: a hand-edited settings file must not be able to do that. */
+export function resolveSize(size, fallback) {
+  if (SIZE_VALUES.includes(size)) return size;
+  const legacy = LEGACY_SIZES[size];
+  return legacy || fallback;
+}
+
 export function resolveNode(node) {
   const widget = widgetById(node?.widget);
   if (!widget) return null;
@@ -163,6 +231,6 @@ export function resolveNode(node) {
     id: node.id,
     widget,
     view: resolveView(widget, node.view),
-    size: SIZE_VALUES.includes(node.size) ? node.size : widget.defaultSize,
+    size: resolveSize(node?.size, widget.defaultSize),
   };
 }

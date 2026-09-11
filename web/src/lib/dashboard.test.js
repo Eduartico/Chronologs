@@ -132,7 +132,24 @@ test('an unknown view falls back to the widget’s default', () => {
 });
 
 test('an impossible size falls back to the widget’s default', () => {
-  const resolved = resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 3 });
+  const resolved = resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 'enormous' });
   assert.equal(resolved.size, widgetById('cashflow').defaultSize);
-  assert.equal(resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 4 }).size, 4);
+  assert.equal(resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 'tall' }).size, 'tall');
+});
+
+/* A layout written under the old numbering is a file someone already has. The
+   widths used to be 1, 2 and 4 — half, full, and full at double height — and a
+   reader who arranged their dashboard before this build must not open it to six
+   cards that have all reverted to their defaults. */
+test('a layout written under the old numbering still means what it meant', () => {
+  assert.equal(resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 1 }).size, 'half');
+  assert.equal(resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 2 }).size, 'full');
+  assert.equal(resolveNode({ id: 'x', widget: 'cashflow', view: 'line', size: 4 }).size, 'tall');
+});
+
+test('every width has a column span, a height and a label', () => {
+  for (const size of SIZES) {
+    assert.ok(size.columns >= 1 && size.columns <= 12, `${size.value} spans ${size.columns} of 12`);
+    assert.ok(Number.isFinite(CHART_HEIGHT[size.value]), `${size.value} has no chart height`);
+  }
 });

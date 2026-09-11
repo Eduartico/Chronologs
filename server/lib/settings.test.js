@@ -164,7 +164,13 @@ test('every shipped node is well formed and names a widget once each', async () 
     ids.add(node.id);
     assert.equal(typeof node.widget, 'string');
     assert.equal(typeof node.view, 'string');
-    assert.ok([1, 2, 4].includes(node.size), `node ${node.id} has size ${node.size}`);
+    // The names in web/src/dashboard/catalogue.js. The server never resolves a
+    // size, but it does ship six of them, and a shipped layout naming a width
+    // the client has to fall back from is a default that was never looked at.
+    assert.ok(
+      ['quarter', 'third', 'half', 'twoThirds', 'full', 'tall'].includes(node.size),
+      `node ${node.id} has size ${node.size}`,
+    );
   }
 });
 

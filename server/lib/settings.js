@@ -127,12 +127,12 @@ const DEFAULT_SETTINGS = {
   // a data fact, not a default.
   dashboard: {
     nodes: [
-      { id: 'cashflow', widget: 'cashflow', view: 'line', size: 1 },
-      { id: 'balance', widget: 'balance', view: 'area', size: 1 },
-      { id: 'trend', widget: 'trend', view: 'stacked', size: 2 },
-      { id: 'breakdown', widget: 'breakdown', view: 'pie', size: 1 },
-      { id: 'merchants', widget: 'merchants', view: 'bar', size: 1 },
-      { id: 'savings', widget: 'savings', view: 'line', size: 2 },
+      { id: 'cashflow', widget: 'cashflow', view: 'line', size: 'half' },
+      { id: 'balance', widget: 'balance', view: 'area', size: 'half' },
+      { id: 'trend', widget: 'trend', view: 'stacked', size: 'full' },
+      { id: 'breakdown', widget: 'breakdown', view: 'pie', size: 'half' },
+      { id: 'merchants', widget: 'merchants', view: 'bar', size: 'half' },
+      { id: 'savings', widget: 'savings', view: 'line', size: 'full' },
     ],
   },
 };
