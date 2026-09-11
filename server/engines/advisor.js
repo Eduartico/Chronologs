@@ -807,9 +807,12 @@ export function anomalyCandidates(transactions, travels = loadTravels()) {
     for (const tx of members) {
       if (tx.category === majority) continue;
 
-      const travel = travelIndex.get(tx.id);
-      // The travel exception, stated explicitly: a trip explains the odd one out.
-      if (travel && tx.category === 'travel') continue;
+      // The travel exception, stated explicitly: a trip explains the odd one
+      // out. Being *inside* a trip is the whole of the exception now — the
+      // category used to be half of it, back when claiming a transaction for a
+      // trip overwrote it, and reading it here would now exempt a line for
+      // carrying a word left over from that behaviour.
+      if (travelIndex.get(tx.id)) continue;
 
       const id = stableId('anomaly', tx.id);
       if (rejected.has(id)) continue;
@@ -829,18 +832,20 @@ export function anomalyCandidates(transactions, travels = loadTravels()) {
         groupSize: members.length,
         expected: majority,
         expectedShare: Math.round((majorityCount / members.length) * 100),
-        travel: travel ? { id: travel.id, name: travel.name } : null,
-        reasonKey: travel ? 'advisorReason.anomalyDuringTrip' : 'advisorReason.anomaly',
+        /* No `travel` field and no during-a-trip wording: a transaction inside a
+           trip is skipped above and can no longer reach this point, so a branch
+           for it here would be a branch that never runs. The exception used to
+           be conditional — inside a trip *and* categorized as travel — because
+           claiming a transaction for a trip overwrote its category; now the trip
+           alone is the whole of it. */
+        reasonKey: 'advisorReason.anomaly',
         reasonParams: {
           category: tx.category,
           majorityCount,
           total: members.length,
           majority,
-          trip: travel?.name,
         },
-        reason: travel
-          ? `Está em "${tx.category}" enquanto ${majorityCount} de ${members.length} deste comerciante estão em "${majority}" — mas cai na viagem "${travel.name}".`
-          : `Está em "${tx.category}" enquanto ${majorityCount} de ${members.length} deste comerciante estão em "${majority}".`,
+        reason: `Está em "${tx.category}" enquanto ${majorityCount} de ${members.length} deste comerciante estão em "${majority}".`,
       });
     }
   }

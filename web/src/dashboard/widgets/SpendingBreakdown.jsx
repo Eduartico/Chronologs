@@ -121,7 +121,7 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
   }, [ranked, all, filter.hidden, total]);
 
 
-  const xAxis = useMemo(() => fitAxis(withShare.map((row) => row.value)), [withShare]);
+  const xAxis = useMemo(() => fitAxis(withShare.map((row) => row.value), { pad: 0.12 }), [withShare]);
   const narrow = (card?.height ?? 280) < 220;
 
   const parents = useCategoryParents(view === 'sunburst');

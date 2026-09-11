@@ -28,7 +28,7 @@ export default function Committed({ card, data, loading }) {
 
   const all = data?.insights?.recurring || [];
   const rows = useMemo(() => all.slice(0, 10), [all]);
-  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.monthlyCost)), [rows]);
+  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.monthlyCost), { pad: 0.12 }), [rows]);
   const narrow = (card?.height ?? 280) < 220;
 
   return (

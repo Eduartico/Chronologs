@@ -80,25 +80,22 @@ const TRIP = [
   },
 ];
 
-test('spending on a date inside a trip is suggested as travel', () => {
+/*
+ * A trip says when and where, never what.
+ *
+ * This used to suggest `travel` at a confidence that outranked every rule and
+ * keyword, so the one fortnight with the most unfamiliar merchants in it was the
+ * one fortnight where the keywords were silenced — and the trip's own breakdown
+ * came back as a single bar reading "travel". The calendar is still the user's
+ * own answer about the dates; it is simply not evidence about the category.
+ */
+test('a trip no longer decides what the money bought', () => {
   const s = suggestForTransaction(tx('COMPRA 0412 ZING BURGER BUDAPEST HU', { date: '2025-02-20' }), ctx([], TRIP));
-  const travel = s.find((x) => x.source === 'travel');
-  assert.equal(travel.category, 'travel');
-  assert.match(travel.reason, /Leste Europeu/);
-});
-
-test('spending outside every trip window gets no travel suggestion', () => {
-  const s = suggestForTransaction(tx('COMPRA 0412 ZING BURGER BUDAPEST HU', { date: '2025-06-20' }), ctx([], TRIP));
   assert.equal(s.find((x) => x.source === 'travel'), undefined);
+  assert.equal(s.find((x) => x.category === 'travel'), undefined);
 });
 
-test('a rejected trip never suggests anything', () => {
-  const rejected = [{ ...TRIP[0], status: 'rejected' }];
-  const s = suggestForTransaction(tx('COMPRA 0412 LOJA', { date: '2025-02-20' }), ctx([], rejected));
-  assert.equal(s.find((x) => x.source === 'travel'), undefined);
-});
-
-test('a merchant you already filed by hand outranks the trip you were on', () => {
+test('what a merchant has always been is what it is on a trip too', () => {
   const history = [
     {
       id: 'h1',
@@ -111,14 +108,9 @@ test('a merchant you already filed by hand outranks the trip you were on', () =>
       overridden: true,
     },
   ];
-  const s = suggestForTransaction(
-    tx('COMPRA 0412 CONTINENTE PORTO', { date: '2025-02-20' }),
-    ctx(history, TRIP)
-  );
+  const s = suggestForTransaction(tx('COMPRA 0412 CONTINENTE PORTO', { date: '2025-02-20' }), ctx(history, TRIP));
   assert.equal(s[0].category, 'food');
   assert.equal(s[0].source, 'history');
-  // Travel is still offered, just not first — both are one click away.
-  assert.ok(s.some((x) => x.source === 'travel'));
 });
 
 test('templates classify transactions without any rule being accepted first', () => {

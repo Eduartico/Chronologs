@@ -129,13 +129,19 @@ test('anomalyCandidates flags the odd one out in a merchant group', () => {
   assert.equal(findings[0].expected, 'food');
 });
 
-// The travel exception, which is the whole reason the advisor knows about trips.
-test('a travel category during a detected trip is not flagged', () => {
+/*
+ * The travel exception, which is the whole reason the advisor knows about trips.
+ * Being inside the trip is now the entire test. It used to also require the
+ * transaction to be categorized `travel`, which was fair while claiming a
+ * transaction for a trip overwrote its category — that is no longer true, and an
+ * odd-one-out abroad is explained by being abroad whatever it is filed under.
+ */
+test('an odd one out during a detected trip is not flagged', () => {
   const transactions = [
     { ...tx('1', 'COMPRA 0412 SUPERMERCADO', 'food'), date: '2026-01-10' },
     { ...tx('2', 'COMPRA 0412 SUPERMERCADO', 'food'), date: '2026-01-11' },
     { ...tx('3', 'COMPRA 0412 SUPERMERCADO', 'food'), date: '2026-01-12' },
-    { ...tx('4', 'COMPRA 0412 SUPERMERCADO', 'travel'), date: '2026-04-25' },
+    { ...tx('4', 'COMPRA 0412 SUPERMERCADO', 'shopping'), date: '2026-04-25' },
   ];
   const travels = [
     { id: 't1', name: 'Valencia', startDate: '2026-04-20', endDate: '2026-04-30', forgivingDays: 2 },

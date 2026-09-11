@@ -323,9 +323,7 @@ export default function Travel() {
       const { proposals: found } = await api.detectTravels();
       setProposals(found);
       showToast(
-        found.length === 0
-          ? 'Nenhuma viagem nova detectada.'
-          : `${found.length} viagem(ns) proposta(s) — confirma as que reconheces.`
+        found.length === 0 ? t('travel.detectedNone') : t('travel.detectedSome', { count: found.length })
       );
     } catch (err) {
       showToast(errText(err));
@@ -411,8 +409,11 @@ export default function Travel() {
               transactions: prev.transactions.map((t) =>
                 t.id === tx.id
                   ? {
+                      // The tag, and only the tag. The category used to move with
+                      // it and that is exactly what made a trip unreadable: the
+                      // hotel stopped being housing the moment the trip claimed
+                      // it, and unclaiming it left nothing behind at all.
                       ...t,
-                      category: marked ? 'uncategorized' : 'travel',
                       tags: marked
                         ? (t.tags || []).filter((id) => id !== prev.travel.tagId)
                         : [...new Set([...(t.tags || []), prev.travel.tagId].filter(Boolean))],
@@ -496,9 +497,10 @@ export default function Travel() {
     setBusy(travel.id);
     try {
       const r = await api.applyTravel(travel.id, options);
-      showToast(
-        `${r.categorized} categorizadas e ${r.tagged} marcadas de ${r.matched} na janela da viagem.`
-      );
+      // No "categorized" count any more: claiming a window no longer touches a
+      // single category. The sentence was also the last hardcoded Portuguese
+      // string on this page.
+      showToast(t('travel.claimed', { tagged: r.tagged, matched: r.matched }));
       await load();
       if (openTravel?.travel?.id === travel.id) await openDetails(travel);
     } catch (err) {
@@ -559,14 +561,13 @@ export default function Travel() {
         <div>
           <h2>{t('nav.travel')}</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
-            {travels.length} viagem(ns) registada(s) · abre uma viagem e marca à mão o que foi
-            gasto nela — a janela de datas só propõe candidatos, não decide sozinha
+            {t('travel.pageHelp', { count: travels.length })}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn-ghost" onClick={loadAnomalies} disabled={busy === 'anomalies'}>{t('travel.checkTagging')}</button>
           <button className="btn-ghost" onClick={detect} disabled={busy === 'detect'}>
-            {busy === 'detect' ? 'A analisar…' : 'Detectar viagens'}
+            {busy === 'detect' ? t('travel.detecting') : t('travel.detect')}
           </button>
           {/* Kept, as asked — but it no longer opens a separate form. It puts
               the caret in the table's own add row, which is where a new trip is
@@ -653,9 +654,14 @@ export default function Travel() {
             <button className="btn-ghost btn-sm" onClick={() => setAnomalies(null)}>{t('common.close')}</button>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
-            <strong>{anomalies.missingTotal}</strong> transacções caem dentro de uma viagem mas não
-            estão marcadas como tal, e <strong>{anomalies.strayTotal}</strong> estão marcadas como
-            viagem fora de qualquer janela.
+            {/* `t`, not `tx`: this component already binds `tx` as the name of a
+                transaction in three places, and shadowing the translator with
+                it is the mistake `web/src/lib/i18nScope.test.js` exists to
+                catch. The two counts read fine without bold. */}
+            {t('travel.taggingSummary', {
+              missing: anomalies.missingTotal,
+              stray: anomalies.strayTotal,
+            })}
           </p>
           {anomalies.missing.slice(0, 8).map((m) => (
             <div key={m.transaction.id} className="dup-row">
@@ -856,7 +862,7 @@ export default function Travel() {
                               <IconButton
                                 icon="tag"
                                 label={t('travel.tagWindow')}
-                                onClick={() => applyTravel(tr, { category: 'travel', onlyUncategorized: true })}
+                                onClick={() => applyTravel(tr)}
                               />
                             </>
                           )
@@ -887,11 +893,9 @@ export default function Travel() {
 
       <ConfirmDialog
         open={!!confirmDelete}
-        title={confirmDelete ? `Apagar a viagem "${confirmDelete.name}"?` : ''}
+        title={confirmDelete ? t('travel.confirmDelete', { name: confirmDelete.name }) : ''}
         impact={
-          confirmDelete
-            ? `${confirmDelete.transactionCount} transacções na janela deixam de estar ligadas a uma viagem e a tag da viagem é removida. O histórico das transacções mantém-se.`
-            : ''
+          confirmDelete ? t('travel.deleteImpact', { count: confirmDelete.transactionCount }) : ''
         }
         busy={busy === confirmDelete?.id}
         onCancel={() => setConfirmDelete(null)}
@@ -907,8 +911,13 @@ export default function Travel() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>{openTravel.travel.name}</h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-              {openTravel.transactions.length} transacções entre{' '}
-              {openTravel.travel.window?.from} e {openTravel.travel.window?.to}
+              {/* Dates through `formatDate`, never inline: this read
+                  "2026-08-22" on a page where every other date is dd/mm/aaaa. */}
+              {t('travel.modalRange', {
+                count: openTravel.transactions.length,
+                from: formatDate(openTravel.travel.window?.from),
+                to: formatDate(openTravel.travel.window?.to),
+              })}
             </p>
             {/*
               Each row is decided on its own. "Marcar tudo na janela" is still
@@ -918,7 +927,11 @@ export default function Travel() {
             */}
             <div style={{ maxHeight: 380, overflowY: 'auto' }}>
               {openTravel.transactions.map((tx) => {
-                const marked = tx.category === 'travel';
+                // Claimed by *this* trip, read off the tag. It used to be
+                // `tx.category === 'travel'`, which could not tell one trip from
+                // another and could not survive a transaction keeping its real
+                // category.
+                const marked = (tx.tags || []).includes(openTravel.travel.tagId);
                 return (
                   <div key={tx.id} className={`dup-row${marked ? ' row-marked' : ''}`}>
                     <span style={{ minWidth: 84 }}>{formatDate(tx.date)}</span>
@@ -929,9 +942,9 @@ export default function Travel() {
                       className={marked ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
                       disabled={busy === tx.id}
                       onClick={() => toggleTravelTag(tx, marked)}
-                      title={marked ? 'Deixar de contar como viagem' : 'Contar como viagem'}
+                      title={marked ? t('travel.unclaimHint') : t('travel.claimHint')}
                     >
-                      {marked ? 'Retirar' : 'Marcar'}
+                      {marked ? t('travel.unclaim') : t('travel.claim')}
                     </button>
                   </div>
                 );

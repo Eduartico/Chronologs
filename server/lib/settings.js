@@ -84,6 +84,20 @@ const DEFAULT_SETTINGS = {
   //    here duplicates that default, which is the one place it is allowed to
   //    live.
   internal: { selfNames: [], vaultAliases: {}, windowDays: 3, profile: null },
+  /*
+   * How the aggregates read, as opposed to what the ledger says.
+   *
+   * `travelOverlay` folds everything a trip has claimed into one `travel`
+   * category on the dashboard. It is on by default because the alternative is
+   * worse for the question a dashboard is asked: a fortnight abroad puts a
+   * month's worth of restaurants into one week, and a year of food read without
+   * the fold looks like a change of habit that never happened.
+   *
+   * Nothing is written to the ledger either way — the transactions keep the
+   * categories they were given, and the Travel page and the per-trip card always
+   * show them. Turning this off is a reading choice, and a reversible one.
+   */
+  analytics: { travelOverlay: true },
   // How the app looks and reads.
   //
   // `theme` names an entry in web/src/styles/themes.js; the light/dark, sidebar
@@ -161,6 +175,7 @@ export function loadSettings() {
     quotes: { ...DEFAULT_SETTINGS.quotes, ...(stored.quotes || {}) },
     currency: { ...structuredClone(DEFAULT_SETTINGS.currency), ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
+    analytics: { ...DEFAULT_SETTINGS.analytics, ...(stored.analytics || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
     dashboard: { ...structuredClone(DEFAULT_SETTINGS.dashboard), ...(stored.dashboard || {}) },
     modules: { ...(stored.modules || {}) },

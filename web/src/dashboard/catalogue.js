@@ -187,6 +187,13 @@ export const WIDGETS = [
     defaultView: 'bar',
     defaultSize: 'third',
   },
+  {
+    id: 'trips',
+    icon: 'travel',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'full',
+  },
 ];
 
 export const WIDGET_IDS = WIDGETS.map((w) => w.id);

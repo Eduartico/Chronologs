@@ -17,6 +17,7 @@ import SpendingCalendar from './widgets/SpendingCalendar.jsx';
 import Movers from './widgets/Movers.jsx';
 import Committed from './widgets/Committed.jsx';
 import Projection from './widgets/Projection.jsx';
+import Trips from './widgets/Trips.jsx';
 
 /** The one place a widget id becomes a component. The catalogue names what
     exists; this says what draws it. */
@@ -32,6 +33,7 @@ const COMPONENTS = {
   movers: Movers,
   committed: Committed,
   projection: Projection,
+  trips: Trips,
 };
 
 /**

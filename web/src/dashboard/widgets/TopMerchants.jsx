@@ -37,7 +37,7 @@ export default function TopMerchants({ card, view, data, loading }) {
     [data, totalSpend],
   );
 
-  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.total)), [rows]);
+  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.total), { pad: 0.12 }), [rows]);
   // A 140px name column inside a quarter-width card leaves no chart behind it.
   const narrow = (card?.height ?? 280) < 220;
 

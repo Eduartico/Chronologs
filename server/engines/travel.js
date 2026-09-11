@@ -26,6 +26,10 @@ const TRAVELS_FILE = 'travels.json';
 // Where the user lives. Purchases here are never travel.
 const HOME_COUNTRY = 'PT';
 
+/* What a trip's spending reads as while the overlay is on. The name of a
+   category in the registry, not an id — `rebuild.js` folds names. */
+export const TRAVEL_CATEGORY = 'travel';
+
 // Days either side of a trip that still count as travel spending: the flight
 // booked the day before, the airport parking paid on return.
 export const DEFAULT_FORGIVING_DAYS = 2;
@@ -241,12 +245,29 @@ export function syncTravelTag(travel) {
 }
 
 /**
- * Attaches or detaches a trip on one transaction: subcategory and category
- * together, because they are one decision.
+ * Attaches or detaches a trip on one transaction — the trip, and nothing else.
  *
- * Detaching sends the category back to `uncategorized` rather than guessing what
- * it was before — the rent that fell inside a trip window is not travel, but the
- * app has no business deciding it is housing either.
+ * This used to move the category too, to `travel` on the way in and to
+ * `uncategorized` on the way out, on the grounds that they were one decision. It
+ * cost more than it was worth. A fortnight in Madrid came back as one number:
+ * you could see that the trip cost €2,000 and never that €1,000 of it was
+ * hotels, €600 food and €400 transport, because the categories those lines would
+ * have carried were overwritten by the word "travel" the moment they were
+ * claimed. Worse, un-marking destroyed what was there — the rent that happened
+ * to fall inside a trip window went to `uncategorized` and stayed there.
+ *
+ * A trip is not a kind of spending. It is *when* and *where* the spending
+ * happened, which is orthogonal to what it bought: a restaurant bill is food in
+ * Lisbon and food in Madrid, and only one of those is also a trip. The tag axis
+ * already existed and already accumulated — a transaction has always been able
+ * to carry several — so the trip lives there and the category stays the
+ * category.
+ *
+ * What made the old behaviour attractive is real and is kept: a holiday
+ * genuinely does distort a food line, and a reader looking at a year does not
+ * want August's restaurants to read as a change in habit. That is what
+ * `travelOverlay` below is for — a presentation choice at the point of reading,
+ * not a fact written into the ledger.
  */
 export function markTransactionAsTravel(travel, tx, on) {
   const tagId = ensureTravelTag(travel);
@@ -546,12 +567,16 @@ export function buildTravelIndex(transactions, travels = loadTravels()) {
  * `stray`: labelled as travel while at home, which is usually a rule firing too
  * broadly.
  */
-export function travelAnomalies(transactions, travels = loadTravels(), { travelCategory = 'travel' } = {}) {
+export function travelAnomalies(transactions, travels = loadTravels()) {
   const index = buildTravelIndex(transactions, travels);
-  const tagIds = new Set(travels.map((t) => t.tagId).filter(Boolean));
+  const tagIds = travelTagIds(travels);
 
-  const isLabelled = (tx) =>
-    tx.category === travelCategory || (tx.tags || []).some((id) => tagIds.has(id));
+  // The trip tag, and only the trip tag. Reading the category as well was
+  // correct while the two moved together; now that a trip transaction keeps its
+  // real category, `tx.category === 'travel'` says nothing about whether a trip
+  // claims it, and counting it would report every old travel-categorized line as
+  // correctly labelled when nothing has been tagged at all.
+  const isLabelled = (tx) => (tx.tags || []).some((id) => tagIds.has(id));
 
   const missing = [];
   const stray = [];
@@ -566,4 +591,103 @@ export function travelAnomalies(transactions, travels = loadTravels(), { travelC
   }
 
   return { missing, stray };
+}
+
+/**
+ * Every tag id that belongs to a trip someone has confirmed.
+ *
+ * A rejected proposal keeps no claim on anything, and a trip that has never been
+ * opened has no tag yet — neither is an error, so both are simply absent.
+ */
+export function travelTagIds(travels = loadTravels()) {
+  return new Set(
+    travels.filter((t) => t.status !== 'rejected').map((t) => t.tagId).filter(Boolean),
+  );
+}
+
+/**
+ * A category map in which everything a trip claims reads as travel.
+ *
+ * This is the whole of the travel overlay, and it is deliberately one line of
+ * plumbing rather than a branch in every aggregate. `computeCategoryBreakdown`,
+ * `computeCategoryTrend`, `computeCategoryShifts`, `computeFlow` and
+ * `computeDailySpend` all resolve a category the same way —
+ * `categoryMap[tx.id] || tx.category` — so handing them a map with the trips
+ * already folded in gives every one of them the overlay, consistently, with no
+ * fifth copy of the rule to drift.
+ *
+ * The ledger is untouched. Turn the setting off and the same transactions read
+ * as hotels and restaurants again, because that is what they have said all
+ * along.
+ */
+export function travelOverlay(transactions, categoryMap = {}, travels = loadTravels()) {
+  const tagIds = travelTagIds(travels);
+  if (!tagIds.size) return categoryMap;
+
+  const overlaid = { ...categoryMap };
+  for (const tx of transactions) {
+    if ((tx.tags || []).some((id) => tagIds.has(id))) overlaid[tx.id] = TRAVEL_CATEGORY;
+  }
+  return overlaid;
+}
+
+/**
+ * What each trip cost, and what it was spent on.
+ *
+ * The per-trip breakdown uses the *real* categories — never the overlay. A card
+ * that told you a trip cost €2,000 and that 100% of it was "travel" would be the
+ * exact loss of information this refactor exists to undo.
+ */
+export function tripSpending(transactions, categoryMap = {}, travels = loadTravels()) {
+  const tagged = new Map();
+  for (const travel of travels) {
+    if (travel.status === 'rejected' || !travel.tagId) continue;
+    tagged.set(travel.tagId, travel);
+  }
+  if (!tagged.size) return [];
+
+  const totals = new Map();
+  for (const tx of transactions) {
+    const amount = Number(tx.amount) || 0;
+    // Spending only. A refund inside a trip reduces its cost; money arriving for
+    // an unrelated reason during the same fortnight is not part of it.
+    if (amount >= 0) continue;
+    for (const tagId of tx.tags || []) {
+      const travel = tagged.get(tagId);
+      if (!travel) continue;
+      const entry = totals.get(travel.id) || {
+        id: travel.id,
+        name: travel.name,
+        country: travel.country,
+        startDate: travel.startDate,
+        endDate: travel.endDate,
+        total: 0,
+        count: 0,
+        categories: new Map(),
+      };
+      const category = categoryMap[tx.id] || tx.category || 'uncategorized';
+      entry.total += Math.abs(amount);
+      entry.count += 1;
+      entry.categories.set(category, (entry.categories.get(category) || 0) + Math.abs(amount));
+      totals.set(travel.id, entry);
+    }
+  }
+
+  return [...totals.values()]
+    .map((entry) => ({
+      ...entry,
+      total: Math.round(entry.total * 100) / 100,
+      days: tripDays(entry.startDate, entry.endDate),
+      categories: [...entry.categories.entries()]
+        .map(([category, value]) => ({ category, value: Math.round(value * 100) / 100 }))
+        .sort((a, b) => b.value - a.value),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function tripDays(startDate, endDate) {
+  const from = Date.parse(startDate);
+  const to = Date.parse(endDate);
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+  return Math.max(1, Math.round((to - from) / 86400000) + 1);
 }

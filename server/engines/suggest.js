@@ -95,11 +95,21 @@ export function suggestForTransaction(tx, ctx) {
     }
   }
 
-  // If the calendar says you were away, money spent that day was probably spent
-  // travelling. The trip is the user's own answer about those dates, which is
-  // why this outranks a rule or a keyword guess.
-  const trip = tripFor(tx, ctx);
-  if (trip) add(trip.category || 'travel', CONFIDENCE.travel, 'travel', `durante "${trip.name}"`);
+  /*
+   * A trip no longer suggests a category, and deliberately does not.
+   *
+   * It used to suggest `travel` at a confidence high enough to outrank a rule or
+   * a keyword, on the reasoning that the calendar was the user's own answer
+   * about those dates. The calendar *is* their answer — about the dates. It says
+   * nothing about what the money bought, and letting it win meant the one period
+   * where the keywords had the most to offer, a fortnight of unfamiliar foreign
+   * merchants, was the one period where they were silenced. Every hotel, taxi
+   * and restaurant abroad came back as "travel" and the trip's own breakdown
+   * became a single bar.
+   *
+   * The trip is still recorded, as a tag, by the Travel page. Here it is simply
+   * not evidence about the category.
+   */
 
   const llm = ctx.llmByKey.get(key);
   if (llm) add(llm.category, llm.confidence ?? 0.8, 'llm', 'sugestão do modelo local');

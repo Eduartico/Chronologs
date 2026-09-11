@@ -27,7 +27,7 @@ export default function Movers({ card, data, loading }) {
   const theme = useChartTheme();
 
   const rows = useMemo(() => (data?.shifts || []).slice().sort((a, b) => b.delta - a.delta), [data]);
-  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.delta)), [rows]);
+  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.delta), { pad: 0.12 }), [rows]);
   /* A category axis 110px wide inside a card 300px wide leaves the bars no room
      to be a chart. The card's own height is the only thing here that knows how
      narrow it is, and the two move together — the narrow widths are the short

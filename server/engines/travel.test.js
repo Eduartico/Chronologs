@@ -7,6 +7,8 @@ import {
   transactionsInTravel,
   travelAnomalies,
   buildTravelIndex,
+  travelOverlay,
+  tripSpending,
 } from './travel.js';
 
 const tx = (date, description, amount = -10, extra = {}) => ({
@@ -153,20 +155,91 @@ test('transactionsInTravel includes spending inside the margin', () => {
   assert.equal(inside.length, 2);
 });
 
+/*
+ * Labelling is the trip's tag, and nothing else. It used to be the tag *or* the
+ * `travel` category, which made sense while marking a transaction wrote both;
+ * now that a trip transaction keeps its real category, reading the category
+ * would report a line as labelled because of a word left over from the old
+ * behaviour, on a trip that has tagged nothing at all.
+ */
 test('travelAnomalies separates unlabelled trip spending from stray travel labels', () => {
   const travels = [
-    { id: 't1', name: 'Valencia', startDate: '2026-04-20', endDate: '2026-04-30', forgivingDays: 2 },
+    { id: 't1', name: 'Valencia', startDate: '2026-04-20', endDate: '2026-04-30', forgivingDays: 2, tagId: 'tag-1' },
   ];
   const transactions = [
     tx('2026-04-25', 'COMPRA 0412 GIFT SHOP VALENCIA ES', -20, { category: 'shopping', status: 'categorized' }),
-    tx('2026-04-26', 'COMPRA 0412 TAXI VALENCIA ES', -8, { category: 'travel', status: 'categorized' }),
-    tx('2026-08-01', 'COMPRA 0412 CONTINENTE', -30, { category: 'travel', status: 'categorized' }),
+    tx('2026-04-26', 'COMPRA 0412 TAXI VALENCIA ES', -8, { category: 'transport', status: 'categorized', tags: ['tag-1'] }),
+    tx('2026-08-01', 'COMPRA 0412 CONTINENTE', -30, { category: 'food', status: 'categorized', tags: ['tag-1'] }),
   ];
   const { missing, stray } = travelAnomalies(transactions, travels);
   assert.equal(missing.length, 1);
   assert.equal(missing[0].transaction.description, 'COMPRA 0412 GIFT SHOP VALENCIA ES');
   assert.equal(stray.length, 1);
   assert.equal(stray[0].transaction.date, '2026-08-01');
+});
+
+test('a transaction the trip claims keeps the category it already had', () => {
+  const travels = [
+    { id: 't1', name: 'Madrid', startDate: '2026-04-20', endDate: '2026-04-30', tagId: 'tag-1' },
+  ];
+  const transactions = [
+    tx('2026-04-21', 'HOTEL MADRID ES', -400, { category: 'housing', tags: ['tag-1'] }),
+    tx('2026-04-22', 'RESTAURANTE MADRID ES', -60, { category: 'food', tags: ['tag-1'] }),
+    tx('2026-06-01', 'CONTINENTE', -30, { category: 'food' }),
+  ];
+
+  // Off: the ledger says what it says.
+  const plain = travelOverlay(transactions, {}, []);
+  assert.equal(plain[transactions[0].id], undefined);
+
+  // On: the trip's lines read as travel, and nothing else moves.
+  const overlaid = travelOverlay(transactions, {}, travels);
+  assert.equal(overlaid[transactions[0].id], 'travel');
+  assert.equal(overlaid[transactions[1].id], 'travel');
+  assert.equal(overlaid[transactions[2].id], undefined);
+});
+
+test('a trip reports what it was spent on, never as one lump of travel', () => {
+  const travels = [
+    { id: 't1', name: 'Madrid', country: 'ES', startDate: '2026-04-20', endDate: '2026-04-24', tagId: 'tag-1' },
+  ];
+  const transactions = [
+    tx('2026-04-21', 'HOTEL MADRID ES', -400, { category: 'housing', tags: ['tag-1'] }),
+    tx('2026-04-22', 'RESTAURANTE MADRID ES', -60, { category: 'food', tags: ['tag-1'] }),
+    tx('2026-04-22', 'METRO MADRID ES', -12, { category: 'transport', tags: ['tag-1'] }),
+    tx('2026-04-23', 'REEMBOLSO', 25, { category: 'shopping', tags: ['tag-1'] }),
+    tx('2026-06-01', 'CONTINENTE', -30, { category: 'food' }),
+  ];
+  const [trip] = tripSpending(transactions, {}, travels);
+  assert.equal(trip.name, 'Madrid');
+  assert.equal(trip.total, 472);
+  assert.equal(trip.count, 3);
+  assert.equal(trip.days, 5);
+  assert.deepEqual(
+    trip.categories.map((c) => c.category),
+    ['housing', 'food', 'transport'],
+  );
+  assert.equal(trip.categories[0].value, 400);
+});
+
+test('the per-trip breakdown is not the overlay applied to itself', () => {
+  const travels = [
+    { id: 't1', name: 'Madrid', startDate: '2026-04-20', endDate: '2026-04-24', tagId: 'tag-1' },
+  ];
+  const transactions = [
+    tx('2026-04-21', 'HOTEL MADRID ES', -400, { category: 'housing', tags: ['tag-1'] }),
+    tx('2026-04-22', 'RESTAURANTE MADRID ES', -60, { category: 'food', tags: ['tag-1'] }),
+  ];
+  // Even handed the overlaid map, the card must show the real split — otherwise
+  // a trip costs €460 and is 100% "travel", which is the information loss this
+  // whole change exists to undo.
+  const overlaid = travelOverlay(transactions, {}, travels);
+  const [trip] = tripSpending(transactions, {}, travels);
+  assert.equal(overlaid[transactions[0].id], 'travel');
+  assert.notDeepEqual(
+    trip.categories.map((c) => c.category),
+    ['travel'],
+  );
 });
 
 test('buildTravelIndex maps transactions to their trip', () => {

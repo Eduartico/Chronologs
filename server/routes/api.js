@@ -110,6 +110,8 @@ import {
   syncTravelTag,
   removeTravelTag,
   markTransactionAsTravel,
+  travelOverlay,
+  tripSpending,
 } from '../engines/travel.js';
 import {
   findDuplicateCandidates,
@@ -1109,6 +1111,20 @@ router.get('/transactions/pending', async (req, res) => {
   }
 });
 
+/**
+ * The category map every dashboard aggregate reads, trips folded in or not.
+ *
+ * `settings.analytics.travelOverlay` is the only switch, and it changes nothing
+ * on disk: the transactions keep the categories they were given, the Travel page
+ * and the per-trip card always show them, and turning the overlay off brings
+ * them straight back.
+ */
+function analyticsCategoryMap(projections) {
+  const settings = loadSettings();
+  if (settings.analytics?.travelOverlay === false) return projections.categoryMap;
+  return travelOverlay(projections.transactions, projections.categoryMap);
+}
+
 // ---------- TRAVEL ----------
 
 router.get('/travels', async (req, res) => {
@@ -1205,9 +1221,12 @@ router.get('/travels/:id/transactions', async (req, res) => {
 /**
  * One transaction in or out of a trip.
  *
- * Category and subcategory move together because they are the same decision:
- * "this was part of the trip". Taking it out sends the category back to
- * `uncategorized` rather than guessing what it was before the trip claimed it.
+ * The trip only. This used to write the category too — `travel` on the way in,
+ * `uncategorized` on the way out — which is why a fortnight abroad came back as
+ * one undifferentiated number and why un-marking a mis-claimed rent payment left
+ * it with no category at all. A trip is when and where money was spent; the
+ * category is what it bought. Both fit on one transaction because tags have
+ * always accumulated.
  */
 router.post('/travels/:id/transactions/:txId', async (req, res) => {
   try {
@@ -1220,7 +1239,6 @@ router.post('/travels/:id/transactions/:txId', async (req, res) => {
     if (!tx) return fail(res, 404, 'api.error.transactionNotFound');
 
     const { tagId, changed } = markTransactionAsTravel(travel, tx, on);
-    await applyCategorizationBulk([tx.id], on ? travel.category || 'travel' : 'uncategorized', 'manual');
     if (changed) invalidateProjections();
 
     res.json({ success: true, tagId, marked: on });
@@ -1230,18 +1248,22 @@ router.post('/travels/:id/transactions/:txId', async (req, res) => {
 });
 
 /**
- * Labels everything inside a trip's window in one go — the shortcut for a trip
- * where nearly everything really was travel. It is deliberately opt-in and
- * defaults to only touching what is still unclassified; the row-by-row route
- * above is the normal way in. Manual overrides are respected by
- * applyCategorizationBulk, so a decision made by hand is never undone here.
+ * Claims everything inside a trip's window in one go — the shortcut for a trip
+ * where nearly everything really did belong to it.
+ *
+ * It claims and never categorizes. `onlyUncategorized` used to mean "only touch
+ * what has no category yet", which was the guard that stopped a bulk apply from
+ * flattening decisions already made; with the category left alone there is
+ * nothing to flatten, so the default is now the whole window. A line the trip
+ * should not have claimed is one click to unclaim, and it keeps its category
+ * either way.
  */
 router.post('/travels/:id/apply', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
     if (!travel) return fail(res, 404, 'api.error.travelNotFound');
 
-    const { category = travel.category || 'travel', onlyUncategorized = true } = req.body || {};
+    const { onlyUncategorized = false } = req.body || {};
     // The trip may never have been opened, in which case its subcategory does
     // not exist yet. Ask for it rather than reading a field that can be null.
     const tagId = req.body?.tagId ?? syncTravelTag(travel).tagId;
@@ -1250,13 +1272,8 @@ router.post('/travels/:id/apply', async (req, res) => {
     let targets = transactionsInTravel(travel, projections.transactions);
     if (onlyUncategorized) targets = targets.filter((t) => t.status === 'pending');
 
-    const ids = targets.map((t) => t.id);
-    const result = { matched: ids.length, categorized: 0, tagged: 0 };
+    const result = { matched: targets.length, categorized: 0, tagged: 0 };
 
-    if (category && ids.length > 0) {
-      const applied = await applyCategorizationBulk(ids, category, 'travel');
-      result.categorized = applied.applied;
-    }
     if (tagId) {
       for (const tx of targets) {
         if (!(tx.tags || []).includes(tagId)) {
@@ -1264,9 +1281,35 @@ router.post('/travels/:id/apply', async (req, res) => {
           result.tagged++;
         }
       }
+      if (result.tagged) invalidateProjections();
     }
 
     res.json(result);
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/**
+ * What each trip cost, broken down by what it was actually spent on.
+ *
+ * Its own route rather than another field on `/analytics`: that response is in
+ * the snapshot baseline, and it is also the one place that must *not* see the
+ * real categories once the overlay is on. This is the other half of the trade —
+ * the dashboard reads a holiday as travel so a year of food is still legible,
+ * and this says the holiday was €1,000 of hotels, €600 of food and €400 of
+ * transport.
+ */
+router.get('/travels/spending', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const projections = await getProjections();
+    const transactions = filterTransactions(projections.spendingTransactions, {
+      from,
+      to,
+      categoryMap: projections.categoryMap,
+    });
+    res.json({ trips: tripSpending(transactions, projections.categoryMap) });
   } catch (err) {
     failFrom(res, err);
   }
@@ -1601,7 +1644,14 @@ router.get('/analytics', async (req, res) => {
     const categories = req.query.categories ? String(req.query.categories).split(',') : null;
 
     const projections = await getProjections();
-    const categorizedMap = projections.categoryMap;
+    /* The overlay, applied once here and nowhere else.
+     *
+     * Every aggregate below resolves a category the same way — the map first,
+     * the transaction's own second — so folding the trips into the map is the
+     * whole of the feature. There is no branch in `computeCategoryBreakdown`, no
+     * second one in `computeCategoryTrend`, and therefore no fifth copy of the
+     * rule to drift out of agreement with the other four. */
+    const categorizedMap = analyticsCategoryMap(projections);
     const all = projections.spendingTransactions;
     const transactions = filterTransactions(all, {
       from,
@@ -1671,12 +1721,13 @@ router.get('/analytics/flow', async (req, res) => {
   try {
     const { from, to } = req.query;
     const projections = await getProjections();
+    const categoryMap = analyticsCategoryMap(projections);
     const transactions = filterTransactions(projections.spendingTransactions, {
       from,
       to,
-      categoryMap: projections.categoryMap,
+      categoryMap,
     });
-    res.json(computeFlow(transactions, projections.categoryMap));
+    res.json(computeFlow(transactions, categoryMap));
   } catch (err) {
     failFrom(res, err);
   }
@@ -1686,12 +1737,13 @@ router.get('/analytics/daily', async (req, res) => {
   try {
     const { from, to } = req.query;
     const projections = await getProjections();
+    const categoryMap = analyticsCategoryMap(projections);
     const transactions = filterTransactions(projections.spendingTransactions, {
       from,
       to,
-      categoryMap: projections.categoryMap,
+      categoryMap,
     });
-    res.json({ days: computeDailySpend(transactions, projections.categoryMap), from: from || null, to: to || null });
+    res.json({ days: computeDailySpend(transactions, categoryMap), from: from || null, to: to || null });
   } catch (err) {
     failFrom(res, err);
   }

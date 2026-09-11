@@ -276,6 +276,19 @@ export default function Settings() {
         />
       </div>
 
+      <div className="card" hidden={tab !== 'general'} style={{ maxWidth: 760 }}>
+        <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="travel" size={16} />{t('nav.travel')}</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 12px' }}>
+          {t('settings.travelOverlayHelp')}
+        </p>
+        <Switch
+          checked={settings.analytics?.travelOverlay !== false}
+          onChange={(travelOverlay) => save({ analytics: { ...settings.analytics, travelOverlay } })}
+          label={t('settings.travelOverlay')}
+        />
+      </div>
+
       <CurrencyCard hidden={tab !== 'general'} onToast={showToast} />
 
       {toast && <div className="toast">{toast}</div>}

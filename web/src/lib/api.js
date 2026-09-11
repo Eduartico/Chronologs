@@ -164,6 +164,7 @@ export const api = {
   markTravelTransaction: (id, txId, on) =>
     post(`/travels/${id}/transactions/${txId}`, { on }),
   applyTravel: (id, options) => post(`/travels/${id}/apply`, options || {}),
+  getTripSpending: (params) => get('/travels/spending', params),
   getTravelAnomalies: () => get('/travels/anomalies'),
 
   // The two aggregates behind the flow and calendar cards. Separate endpoints so
