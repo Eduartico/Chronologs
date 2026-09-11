@@ -84,6 +84,52 @@
       ],
       "file": "«data drift»",
       "why": "api/assets.json, api/investments*.json, api/securities.json and api/analytics*.json allocation values move with the market — the CS2 position is 475.35 → 461.05 as of this writing, because the quote fetcher keeps running. api/events.json $.body.bytes grew with the ledger, which is 2912 movements in the baseline and 2989 now: statements have been ingested since, so api/transactions.json, api/accounts*.json, documents.json and everything derived from them differ by exactly that. api/settings.json $.body.appearance.locale went pt → en and $.body.appearance.textures false → true because the switches were flipped in Settings. Thirty-four of fifty-eight files differ on this count alone, and the same thirty-four differ with the dashboard work reverted — which is how it was checked. Re-taking the baseline would clear them and hide whatever drifted alongside."
+    },
+    {
+      "file": "api/analytics.json",
+      "path": "$.body.categoryTrend",
+      "why": "The tail bucket is now the sentinel 'other' rather than the literal 'Outros'. The dashboard folded a second time into its own translated \"Other\", so the legend carried two fold buckets and one of them was Portuguese whatever language the interface was set to. The engine emits a key and the card names it."
+    },
+    {
+      "file": "api/analytics.json",
+      "path": "$.body.categoryBreakdown",
+      "why": "Trips now read as `travel` while settings.analytics.travelOverlay is on (the default). Claiming a transaction for a trip no longer overwrites its category, so the fold that used to be written into the ledger is applied at read time instead — the same figures, arrived at without destroying what the transaction actually was. Turning the setting off restores the un-folded breakdown."
+    },
+    {
+      "file": "api/analytics.json",
+      "path": "$.body.shifts",
+      "why": "Same overlay as categoryBreakdown above."
+    },
+    {
+      "file": "api/analytics.json",
+      "path": "$.body.insights",
+      "why": "Same overlay as categoryBreakdown above: insights are computed from the breakdown."
+    },
+    {
+      "file": "api/advisor.json",
+      "why": "Anomaly findings no longer carry a `travel` field or the during-a-trip wording. A transaction inside a trip is now skipped outright, so the branch that produced them cannot be reached: the exemption used to require inside-a-trip AND categorized `travel`, which only made sense while claiming a transaction for a trip overwrote its category."
+    },
+    {
+      "file": "api/travels*",
+      "why": "Trips are a tag and no longer a category. Marking a transaction for a trip writes only the tag event, `POST /travels/:id/apply` no longer categorizes at all, and `travelAnomalies` reads the tag rather than `tx.category === 'travel'` — so the missing/stray counts move. The movements themselves keep the categories they already had."
+    },
+    {
+      "file": "api/networth.json",
+      "why": "New endpoint. GET /api/networth, accounts plus holdings by class. Its own route rather than a field on /accounts, which is in this baseline and is a different question anyway — half of what this returns is not in a bank."
+    },
+    {
+      "file": "api/travels_spending.json",
+      "why": "New endpoint. GET /travels/spending, what each trip cost broken down by real category. The one endpoint that deliberately ignores the travel overlay: a card reporting that a trip cost EUR 2,000 and that 100% of it was travel would be the information loss the refactor exists to undo."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.analytics",
+      "why": "New key. `travelOverlay`, on by default: whether the dashboard reads trip spending as one travel category. A reading choice, nothing on disk."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.netWorth",
+      "why": "New key. Which classes of holding count toward net worth, per class. Absent means counted."
     }
   ]
 }

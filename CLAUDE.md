@@ -73,7 +73,8 @@ template with passing tests, and `npm run new:module <id>` copies it.
 | Rule advisor (collapse/shadowed/pattern/anomaly findings) | `server/engines/advisor.js` — see `docs/rules-model.md` |
 | Internal transfers / PoupeUp vaults | `server/engines/accounts.js` — one editable profile per bank instance, see `chronologs-institution-agnostic` |
 | Categorization application (writes ledger events) | `server/engines/categorization.js` |
-| Travel detection | `server/engines/travel.js` |
+| Travel detection, trip tagging, the overlay | `server/engines/travel.js` |
+| Net worth (accounts + holdings, per-class opt-out) | `server/engines/netWorth.js` |
 | Duplicate detection | `server/engines/duplicates.js` |
 | Correlations (bank ↔ marketplace matching) | `server/engines/correlation.js` |
 | Analytics / dashboard aggregates | `server/engines/analytics.js` |
@@ -191,9 +192,13 @@ so an arrangement survives a restart, a cache clear and another browser.
   same numbers in a table.
 - `view` belongs to the **node**, which is the whole of "remember how I like to
   look at this". There is no second preference store.
-- `size` is 1 (half a row), 2 (a full row) or 4 (a full row, twice as tall).
-  Height derives from it in `catalogue.js`; storing one would let a node exist
-  at a size its height contradicts.
+- `size` is a **named width** on a **twelve-column grid** — `quarter`, `third`,
+  `half`, `twoThirds`, `full`, `tall`. Twelve because it divides by two, three
+  and four. The old numbering (1/2/4) is mapped by `LEGACY_SIZES`, so a layout
+  written before this still means what it meant. Height derives from the width
+  in `catalogue.js`; storing one would let a node exist at a size its height
+  contradicts. A card knows it is narrow by its own `card.height` — under 220px
+  it drops bar-end labels and shortens its category axis.
 - An unknown widget id is skipped and an unknown view falls back to the
   widget's default. A hand-edited settings file must not take the page down.
 
@@ -225,10 +230,53 @@ under `dashboard/widgets/`.
 The two aggregates the flow and calendar cards need — `computeFlow` and
 `computeDailySpend` in `engines/analytics.js` — are served from their own routes
 rather than added to `/analytics`, so that response stays byte-identical for
-the snapshot baseline.
+the snapshot baseline. `/travels/spending` and `/networth` are there for the
+same reason.
+
+**Axes fit their data.** `web/src/lib/axis.js` (`fitDomain`/`fitAxis`, re-exported
+from `chartTheme.js`) picks the tick step first and then the fewest whole steps
+that contain the values — Recharts' own domain anchors on zero and rounds the top
+up, which drew a −3K..5.3K series on an axis reaching 9K. Outliers are never
+clipped to a percentile: a bar cut short to fit lies about its own value.
+
+**One `percent()`**, in `money.js`. It existed five times over with five ideas of
+how many decimals a share deserves, and all of them would print `0.000001%`.
 
 `server/lib/settings.js` ships a six-card default. Eduardo's twelve-card layout
 lives in `user-data/`, which is the distinction defaults exist for.
+
+## Travel is a dimension, not a category
+
+A trip is *when and where* money was spent; the category is *what it bought*.
+Claiming a transaction for a trip writes **only the trip's tag** — it used to
+write `travel` over the category as well, which is why a fortnight abroad came
+back as one number and why un-claiming left a transaction with no category at
+all.
+
+- `settings.analytics.travelOverlay` (on by default) folds everything a trip has
+  claimed into one `travel` category **for the dashboard only**. It works by
+  handing the aggregates a category map with the trips already folded in
+  (`travelOverlay` in `engines/travel.js`), so all five grouping sites get it
+  with no branch of their own. Nothing is written to the ledger either way.
+- `/travels/spending` (`tripSpending`) is the one endpoint that ignores the
+  overlay: it is what the Trips card draws, and a card saying a trip was 100%
+  "travel" would be the loss the refactor undoes.
+- Nothing may infer the trip from `tx.category === 'travel'` any more — not the
+  anomaly check, not `suggest.js`, not the advisor. Transactions claimed under
+  the old behaviour still carry that word and it now means nothing.
+
+## Net worth
+
+`server/engines/netWorth.js` adds up what there is, as opposed to what moved.
+The dashboard's Balance tile is still *flow* (income − expense for the period);
+net worth is a separate figure on the Accounts tab and its own card.
+
+- **Vaults are never a component** — a vault is a subdivision of an account, so
+  the account's printed balance already contains it. There is a test.
+- **The server never converts.** Components carry their own currency;
+  `web/src/lib/netWorth.js` converts through `money.js` and re-totals.
+- Market value, no fee or liquidity haircut. Which classes count is
+  `settings.netWorth.include`, per class; **absent means counted**.
 
 ## Money
 
