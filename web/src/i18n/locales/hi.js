@@ -874,4 +874,13 @@ export default {
   'travel.taggingSummary': '{missing} लेनदेन यात्रा के भीतर आते हैं पर जुड़े नहीं हैं, और {stray} हर विंडो के बाहर जुड़े हैं।',
   'travel.deleteImpact': 'विंडो के {count} लेनदेन अब यात्रा से जुड़े नहीं रहेंगे और यात्रा का टैग हट जाएगा। लेनदेन बने रहेंगे।',
   'travel.modalRange': '{from} और {to} के बीच {count} लेनदेन',
+  'networth.title': 'कुल संपत्ति',
+  'networth.desc': 'खाते और होल्डिंग, उनके वर्तमान मूल्य पर',
+  'networth.counted': 'गिना गया',
+  'networth.cash': 'खाते',
+  'networth.securities': 'फंड और ETF',
+  'networth.cs2': 'CS2 स्किन',
+  'widget.networth.name': 'कुल संपत्ति',
+  'widget.networth.desc': 'क्या हुआ नहीं, क्या है',
+  'widget.networth.footnote': 'कुल {amount}',
 };

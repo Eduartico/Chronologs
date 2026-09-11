@@ -2528,6 +2528,50 @@ th.sortable.num .th-inner {
   color: var(--accent);
 }
 
+/*
+ * Net worth: one figure, and the parts it is made of.
+ *
+ * The parts are a list rather than a second chart. Three rows of "what it is,
+ * what it is worth, is it counted" is the whole content, and a chart of three
+ * values would be decoration standing where an explanation belongs.
+ */
+.networth-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
+}
+.networth-part {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border);
+}
+.networth-part > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.networth-part-name {
+  font-size: var(--fs-sm);
+}
+.networth-part-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.networth-part-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A class the reader has switched off is dimmed, not hidden: the decision stays
+   visible, and so does the reason the total is what it is. */
+.networth-part.is-out .networth-part-name,
+.networth-part.is-out .networth-part-value {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
 /* A quarter-width header cannot hold a title, a subtitle, a view switch and a
    pencil on one line, so it wraps — and `margin-left: auto` then strands the
    controls against the right edge of a second row with the title far away on the

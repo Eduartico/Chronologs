@@ -142,6 +142,7 @@ import { getProjections, invalidateProjections } from '../projections/cache.js';
 import { replayEvents } from '../ledger/eventStore.js';
 import { listNotifications, markRead, markAllRead } from '../lib/notify.js';
 import { loadSettings, saveSettings } from '../lib/settings.js';
+import { computeNetWorth } from '../engines/netWorth.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1793,6 +1794,23 @@ router.get('/accounts', async (req, res) => {
       needsAttribution: projections.vaultsNeedAttribution,
       reconciliation: projections.vaultReconciliation,
     });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/**
+ * Everything the ledger knows is held, by kind.
+ *
+ * Its own route rather than a field on `/accounts`: that response is in the
+ * snapshot baseline, and this is a different question anyway — `/accounts` is
+ * about the bank, and half of what this returns is not in one.
+ */
+router.get('/networth', async (req, res) => {
+  try {
+    const projections = await getProjections();
+    const settings = loadSettings();
+    res.json(computeNetWorth(projections, settings, settings.currency?.base || 'EUR'));
   } catch (err) {
     failFrom(res, err);
   }

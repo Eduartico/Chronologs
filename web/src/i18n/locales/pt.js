@@ -872,4 +872,13 @@ export default {
   'travel.taggingSummary': '{missing} transacções caem dentro de uma viagem mas não estão marcadas, e {stray} estão marcadas fora de qualquer janela.',
   'travel.deleteImpact': '{count} transacções na janela deixam de estar ligadas a uma viagem e a tag da viagem é removida. O histórico das transacções mantém-se.',
   'travel.modalRange': '{count} transacções entre {from} e {to}',
+  'networth.title': 'Património',
+  'networth.desc': 'Contas e activos, ao que valem agora',
+  'networth.counted': 'Contado',
+  'networth.cash': 'Contas',
+  'networth.securities': 'Fundos e ETFs',
+  'networth.cs2': 'Skins de CS2',
+  'widget.networth.name': 'Património',
+  'widget.networth.desc': 'O que há, em vez do que se moveu',
+  'widget.networth.footnote': '{amount} no total',
 };

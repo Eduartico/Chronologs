@@ -904,4 +904,13 @@ export default {
   'travel.taggingSummary': '{missing} operacji wypada w obrębie podróży, ale nie jest do niej przypisanych, a {stray} jest przypisanych poza każdym oknem.',
   'travel.deleteImpact': '{count} operacji w oknie przestaje być powiązanych z podróżą, a jej etykieta zostaje usunięta. Same operacje pozostają.',
   'travel.modalRange': '{count} operacji między {from} a {to}',
+  'networth.title': 'Majątek',
+  'networth.desc': 'Konta i aktywa, według obecnej wartości',
+  'networth.counted': 'Liczone',
+  'networth.cash': 'Konta',
+  'networth.securities': 'Fundusze i ETF-y',
+  'networth.cs2': 'Skiny CS2',
+  'widget.networth.name': 'Majątek',
+  'widget.networth.desc': 'To, co jest, zamiast tego, co się poruszyło',
+  'widget.networth.footnote': 'Łącznie {amount}',
 };

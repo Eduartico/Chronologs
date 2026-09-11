@@ -869,4 +869,13 @@ export default {
   'travel.taggingSummary': '{missing} Buchungen fallen in eine Reise, ohne ihr zugeordnet zu sein, und {stray} sind außerhalb jedes Zeitraums zugeordnet.',
   'travel.deleteImpact': '{count} Buchungen im Zeitraum sind dann keiner Reise mehr zugeordnet und ihr Tag wird entfernt. Die Buchungen selbst bleiben.',
   'travel.modalRange': '{count} Buchungen zwischen {from} und {to}',
+  'networth.title': 'Vermögen',
+  'networth.desc': 'Konten und Bestände zum heutigen Wert',
+  'networth.counted': 'Gezählt',
+  'networth.cash': 'Konten',
+  'networth.securities': 'Fonds und ETFs',
+  'networth.cs2': 'CS2-Skins',
+  'widget.networth.name': 'Vermögen',
+  'widget.networth.desc': 'Was da ist, statt was sich bewegt hat',
+  'widget.networth.footnote': '{amount} insgesamt',
 };

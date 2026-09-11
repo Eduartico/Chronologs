@@ -864,4 +864,13 @@ export default {
   'travel.taggingSummary': '{missing}건이 여행 기간 안에 있지만 포함되지 않았고, {stray}건은 기간 밖에서 포함되어 있습니다.',
   'travel.deleteImpact': '기간 내 {count}건이 여행과의 연결이 끊기고 여행 태그가 삭제됩니다. 거래 자체는 남습니다.',
   'travel.modalRange': '{from}부터 {to}까지 {count}건',
+  'networth.title': '순자산',
+  'networth.desc': '계좌와 보유 자산의 현재 가치',
+  'networth.counted': '합산',
+  'networth.cash': '계좌',
+  'networth.securities': '펀드 및 ETF',
+  'networth.cs2': 'CS2 스킨',
+  'widget.networth.name': '순자산',
+  'widget.networth.desc': '움직인 것이 아니라 가진 것',
+  'widget.networth.footnote': '총 {amount}',
 };

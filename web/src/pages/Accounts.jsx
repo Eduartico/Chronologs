@@ -7,6 +7,7 @@ import Icon from '../components/Icon.jsx';
 import SortHeader from '../components/ui/SortHeader.jsx';
 import { useSortableRows } from '../lib/useSortableRows.js';
 import TransferChord from '../components/charts/TransferChord.jsx';
+import NetWorthSummary from '../components/NetWorthSummary.jsx';
 
 /**
  * Where the money sits, and what the app had to work out to know that.
@@ -110,6 +111,11 @@ export default function Accounts() {
         <button className="btn-ghost btn-sm" onClick={load}>
           <Icon name="refresh" size={15} />{t('common.refresh')}</button>
       </div>
+
+      {/* What there is, before what it is divided into. The page opened on two
+          bank balances and called that the answer, while a third of the money
+          was an index fund on another screen. */}
+      <NetWorthSummary />
 
       <div className="grid-2">
         {accounts.map((account) => (

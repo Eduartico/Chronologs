@@ -904,4 +904,13 @@ export default {
   'travel.taggingSummary': '{missing} операций попадают в поездку, но не отнесены к ней, а {stray} отнесены вне любого окна.',
   'travel.deleteImpact': '{count} операций в окне перестанут быть связанными с поездкой, её метка будет удалена. Сами операции останутся.',
   'travel.modalRange': '{count} операций между {from} и {to}',
+  'networth.title': 'Состояние',
+  'networth.desc': 'Счета и активы по текущей стоимости',
+  'networth.counted': 'Учитывается',
+  'networth.cash': 'Счета',
+  'networth.securities': 'Фонды и ETF',
+  'networth.cs2': 'Скины CS2',
+  'widget.networth.name': 'Состояние',
+  'widget.networth.desc': 'То, что есть, а не то, что двигалось',
+  'widget.networth.footnote': 'Всего {amount}',
 };

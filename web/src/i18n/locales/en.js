@@ -895,4 +895,13 @@ export default {
   'travel.taggingSummary': '{missing} movements fall inside a trip but are not claimed by it, and {stray} are claimed outside every window.',
   'travel.deleteImpact': '{count} movements in the window stop being linked to a trip and the trip’s tag is removed. The movements themselves stay.',
   'travel.modalRange': '{count} movements between {from} and {to}',
+  'networth.title': 'Net worth',
+  'networth.desc': 'Accounts and holdings, at what they are worth now',
+  'networth.counted': 'Counted',
+  'networth.cash': 'Accounts',
+  'networth.securities': 'Funds and ETFs',
+  'networth.cs2': 'CS2 skins',
+  'widget.networth.name': 'Net worth',
+  'widget.networth.desc': 'What there is, rather than what moved',
+  'widget.networth.footnote': '{amount} in total',
 };

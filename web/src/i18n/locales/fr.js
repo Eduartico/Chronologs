@@ -868,4 +868,13 @@ export default {
   'travel.taggingSummary': '{missing} mouvements tombent dans un voyage sans y être rattachés, et {stray} y sont rattachés hors de toute fenêtre.',
   'travel.deleteImpact': '{count} mouvements de la fenêtre cessent d’être liés à un voyage et son étiquette est supprimée. Les mouvements restent.',
   'travel.modalRange': '{count} mouvements entre {from} et {to}',
+  'networth.title': 'Patrimoine',
+  'networth.desc': 'Comptes et avoirs, à leur valeur actuelle',
+  'networth.counted': 'Compté',
+  'networth.cash': 'Comptes',
+  'networth.securities': 'Fonds et ETF',
+  'networth.cs2': 'Skins CS2',
+  'widget.networth.name': 'Patrimoine',
+  'widget.networth.desc': 'Ce qu’il y a, plutôt que ce qui a bougé',
+  'widget.networth.footnote': '{amount} au total',
 };

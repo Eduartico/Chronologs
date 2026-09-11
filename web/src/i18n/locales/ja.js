@@ -864,4 +864,13 @@ export default {
   'travel.taggingSummary': '{missing} 件が旅行期間内にありながら含まれておらず、{stray} 件が期間外で含まれています。',
   'travel.deleteImpact': '期間内の {count} 件は旅行とのひもづけが外れ、旅行のタグも削除されます。取引自体は残ります。',
   'travel.modalRange': '{from} から {to} までの {count} 件',
+  'networth.title': '純資産',
+  'networth.desc': '口座と保有資産の現在価値',
+  'networth.counted': '計上する',
+  'networth.cash': '口座',
+  'networth.securities': 'ファンド・ETF',
+  'networth.cs2': 'CS2スキン',
+  'widget.networth.name': '純資産',
+  'widget.networth.desc': '動いた額ではなく、あるもの',
+  'widget.networth.footnote': '合計 {amount}',
 };

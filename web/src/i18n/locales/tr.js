@@ -873,4 +873,13 @@ export default {
   'travel.taggingSummary': '{missing} hareket bir gezinin içine düşüyor ama ona bağlanmamış, {stray} tanesi ise her pencerenin dışında bağlanmış.',
   'travel.deleteImpact': 'Penceredeki {count} hareket artık bir geziye bağlı olmayacak ve gezinin etiketi kaldırılacak. Hareketler kalır.',
   'travel.modalRange': '{from} ile {to} arasında {count} hareket',
+  'networth.title': 'Net varlık',
+  'networth.desc': 'Hesaplar ve varlıklar, bugünkü değerleriyle',
+  'networth.counted': 'Sayılıyor',
+  'networth.cash': 'Hesaplar',
+  'networth.securities': 'Fonlar ve ETF’ler',
+  'networth.cs2': 'CS2 skinleri',
+  'widget.networth.name': 'Net varlık',
+  'widget.networth.desc': 'Ne hareket etti değil, ne var',
+  'widget.networth.footnote': 'Toplam {amount}',
 };

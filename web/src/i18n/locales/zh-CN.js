@@ -863,4 +863,13 @@ export default {
   'travel.taggingSummary': '{missing} 笔落在行程期间但未被认领，{stray} 笔在所有区间之外被认领。',
   'travel.deleteImpact': '区间内的 {count} 笔将不再与行程关联，行程标签也会被删除。交易本身保留。',
   'travel.modalRange': '{from} 至 {to} 之间的 {count} 笔',
+  'networth.title': '净资产',
+  'networth.desc': '账户与持仓，按当前价值计',
+  'networth.counted': '计入',
+  'networth.cash': '账户',
+  'networth.securities': '基金与 ETF',
+  'networth.cs2': 'CS2 饰品',
+  'widget.networth.name': '净资产',
+  'widget.networth.desc': '有什么，而不是动了什么',
+  'widget.networth.footnote': '共计 {amount}',
 };

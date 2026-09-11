@@ -138,6 +138,7 @@ export const api = {
     post('/transactions/tags/bulk', { transactionIds, tagId, remove }),
 
   // Duplicates
+  getNetWorth: () => get('/networth'),
   getAccounts: () => get('/accounts'),
   getInternalMovements: (vault) =>
     get(`/accounts/movements${vault ? `?vault=${encodeURIComponent(vault)}` : ''}`),

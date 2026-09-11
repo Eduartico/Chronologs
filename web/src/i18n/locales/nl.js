@@ -870,4 +870,13 @@ export default {
   'travel.taggingSummary': '{missing} boekingen vallen binnen een reis zonder eraan toegewezen te zijn, en {stray} zijn toegewezen buiten elk venster.',
   'travel.deleteImpact': '{count} boekingen in het venster zijn niet langer aan een reis gekoppeld en het label wordt verwijderd. De boekingen zelf blijven.',
   'travel.modalRange': '{count} boekingen tussen {from} en {to}',
+  'networth.title': 'Vermogen',
+  'networth.desc': 'Rekeningen en bezittingen, tegen hun huidige waarde',
+  'networth.counted': 'Meegeteld',
+  'networth.cash': 'Rekeningen',
+  'networth.securities': 'Fondsen en ETF’s',
+  'networth.cs2': 'CS2-skins',
+  'widget.networth.name': 'Vermogen',
+  'widget.networth.desc': 'Wat er is, in plaats van wat er bewoog',
+  'widget.networth.footnote': '{amount} in totaal',
 };

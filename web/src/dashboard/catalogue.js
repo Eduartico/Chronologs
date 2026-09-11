@@ -194,6 +194,13 @@ export const WIDGETS = [
     defaultView: 'bar',
     defaultSize: 'full',
   },
+  {
+    id: 'networth',
+    icon: 'wallet',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
 ];
 
 export const WIDGET_IDS = WIDGETS.map((w) => w.id);

@@ -98,6 +98,16 @@ const DEFAULT_SETTINGS = {
    * show them. Turning this off is a reading choice, and a reversible one.
    */
   analytics: { travelOverlay: true },
+  /*
+   * Which kinds of holding count as money you have.
+   *
+   * `include` is keyed by the component ids `engines/netWorth.js` produces —
+   * `cash`, `securities`, and one per asset class the ledger actually holds
+   * (`cs2_skin` today). Absent means counted: a holding nobody has ruled on is
+   * still money, and a class that appears after this file was written should not
+   * silently vanish from the total.
+   */
+  netWorth: { include: {} },
   // How the app looks and reads.
   //
   // `theme` names an entry in web/src/styles/themes.js; the light/dark, sidebar
@@ -176,6 +186,7 @@ export function loadSettings() {
     currency: { ...structuredClone(DEFAULT_SETTINGS.currency), ...(stored.currency || {}) },
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     analytics: { ...DEFAULT_SETTINGS.analytics, ...(stored.analytics || {}) },
+    netWorth: { ...structuredClone(DEFAULT_SETTINGS.netWorth), ...(stored.netWorth || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
     dashboard: { ...structuredClone(DEFAULT_SETTINGS.dashboard), ...(stored.dashboard || {}) },
     modules: { ...(stored.modules || {}) },
