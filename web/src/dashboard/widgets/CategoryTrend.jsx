@@ -6,9 +6,15 @@ import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
 import { useChartTheme } from '../../components/charts/ChartThemeProvider.jsx';
 import { useSeriesToggle } from '../../components/charts/useSeriesToggle.jsx';
 import { seriesFill } from '../../components/charts/ChartPatterns.jsx';
-import { colorScale, capSeries, axisMoney, axisMonth, cartesianDefaults } from '../../components/charts/chartTheme.js';
-import { eur } from '../../lib/money.js';
-import { nf } from '../../lib/locale.js';
+import {
+  colorScale,
+  capSeries,
+  axisMoney,
+  axisMonth,
+  cartesianDefaults,
+  fitAxis,
+} from '../../components/charts/chartTheme.js';
+import { eur, percent } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
 
 /** A band thinner than this has no room for its own name, and a label that
@@ -47,6 +53,11 @@ const LABEL_PITCH = 14;
  * axis at all. Drawing one would invite reading values off it that the offset
  * makes meaningless; the table carries the exact figures.
  */
+/* The key the engine folds its own tail under (`OTHER_BUCKET` in
+   server/engines/analytics.js). A sentinel rather than a word, so the name the
+   reader sees is chosen here, in the language they are reading. */
+const OTHER_BUCKET = 'other';
+
 export default function CategoryTrend({ card, view, data, loading, nodeId }) {
   const { t } = useT();
   const theme = useChartTheme();
@@ -54,22 +65,31 @@ export default function CategoryTrend({ card, view, data, loading, nodeId }) {
   const trend = data?.categoryTrend || { categories: [], rows: [] };
 
   const { categories, rows, shareRows } = useMemo(() => {
-    const all = trend.categories || [];
-    const source = trend.rows || [];
+    const otherName = t('chart.other');
+    /* The engine folds its own tail, under a sentinel key, and this card folds
+       again to fit the palette. Both folds have to land in the same band: they
+       used to land in two, so the legend read "Other" *and* "Outros" — one of
+       them in Portuguese whatever language the interface was in. */
+    const all = (trend.categories || []).map((name) => (name === OTHER_BUCKET ? otherName : name));
+    const source = (trend.rows || []).map((row) => {
+      if (!(OTHER_BUCKET in row)) return row;
+      const { [OTHER_BUCKET]: fromServer, ...rest } = row;
+      return { ...rest, [otherName]: (rest[otherName] || 0) + fromServer };
+    });
 
-    const totals = all.map((name) => ({
+    const named = all.filter((name) => name !== otherName);
+    const totals = named.map((name) => ({
       name,
       value: source.reduce((sum, row) => sum + (row[name] || 0), 0),
     }));
     const kept = capSeries(totals, { key: 'name', value: 'value', max: 8 });
     const keptNames = kept.filter((k) => !k.isOther).map((k) => k.name);
-    const hasOther = kept.some((k) => k.isOther);
-    const otherName = t('chart.other');
+    const hasOther = kept.some((k) => k.isOther) || all.includes(otherName);
 
     const folded = source.map((row) => {
       const next = { period: row.period };
-      let other = 0;
-      for (const name of all) {
+      let other = row[otherName] || 0;
+      for (const name of named) {
         if (keptNames.includes(name)) next[name] = row[name] || 0;
         else other += row[name] || 0;
       }
@@ -104,7 +124,18 @@ export default function CategoryTrend({ card, view, data, loading, nodeId }) {
   const stream = view === 'stream';
   const plotted = share ? shareRows : rows;
 
-  const percent = (v) => `${nf({ maximumFractionDigits: 1 }).format(v)}%`;
+  /* The stacked view is sized on the stack, not on its tallest single band —
+     the bands sit on top of each other, so the axis has to reach their sum. */
+  const yAxis = useMemo(
+    () =>
+      fitAxis(
+        rows.map((row) =>
+          categories.reduce((sum, name) => (filter.hidden.has(name) ? sum : sum + (row[name] || 0)), 0),
+        ),
+      ),
+    [rows, categories, filter.hidden],
+  );
+
 
 
   return (
@@ -153,9 +184,15 @@ export default function CategoryTrend({ card, view, data, loading, nodeId }) {
             off it meaningless. */}
         {!stream && (
           <YAxis
-            tickFormatter={share ? (v) => `${v}%` : axisMoney}
+            /* `${v}%` on a recharts-generated tick is how a hundred percent gets
+               printed as "100.00000000000001%": the tick values come out of
+               floating-point arithmetic and the template hands them straight to
+               the reader. Fixed ticks and a formatter that rounds. */
+            tickFormatter={share ? (v) => percent(v, { digits: 0 }) : axisMoney}
             domain={share ? [0, 100] : undefined}
+            ticks={share ? [0, 25, 50, 75, 100] : undefined}
             {...cartesianDefaults.axis}
+            {...(share ? {} : yAxis)}
             width={54}
           />
         )}

@@ -23,6 +23,7 @@ import {
   axisMonth,
   dashOf,
   cartesianDefaults,
+  fitAxis,
 } from '../../components/charts/chartTheme.js';
 import { eur } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
@@ -66,6 +67,21 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
   // Keyed by node, not by widget: two cashflow cards on one dashboard are two
   // cards, and hiding a series on one must not hide it on the other.
   const filter = useSeriesToggle(`dashboard.${nodeId}.hidden`, [names.income, names.expense, names.net]);
+
+  /* The axis is sized on what is actually drawn. Recharts' own domain rounds the
+     top up to a whole number of steps measured from zero, which turned a range of
+     −3K to 5.3K into an axis reaching 9K and drew every bar at two thirds height.
+     Hidden series are left out too: an axis still reserving room for a series the
+     reader switched off is the same empty band in a different disguise. */
+  const yAxis = useMemo(() => {
+    const visible = [];
+    for (const row of rows) {
+      for (const key of ['income', 'expense', 'net']) {
+        if (!filter.hidden.has(names[key])) visible.push(row[key]);
+      }
+    }
+    return fitAxis(visible);
+  }, [rows, filter.hidden, names]);
 
   /* Hover isolation is information, not decoration: dimming everything but the
      series under the pointer answers "which one is this" where the eye already
@@ -116,7 +132,7 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
         <ComposedChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} {...yAxis} width={54} />
           <Tooltip
             content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />}
             cursor={{ fill: 'rgba(139,148,158,0.08)' }}
@@ -138,7 +154,7 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
         <LineChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} {...yAxis} width={54} />
           <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
           <Legend {...filter.legendProps} />
           <ReferenceLine y={0} stroke={INK.axis} />

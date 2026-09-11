@@ -53,15 +53,43 @@ export function colorScale(keys = [], theme = chartTheme()) {
  * Caps a breakdown at the palette size, folding the tail into "Other" so no series
  * ever gets a generated hue — a generated hue is exactly what the validator cannot
  * check, and therefore exactly what will collide for a colourblind reader.
+ *
+ * A rank cut-off alone was too blunt. Folding everything from rank eight down put
+ * 22% of a year's spending into one grey wedge — investments at 8% and
+ * subscriptions at 3% are not a long tail, they are two answers the reader came
+ * for — while a genuine tail of forty two-euro categories deserves the fold and
+ * gets it. So the rank is a ceiling and `minShare` is the test: a row big enough
+ * to matter keeps its place until the palette runs out, and the smallest rows go
+ * first when it does.
+ *
+ * The fold names its members. A view that can show everything — a bar chart, a
+ * table — has no reason to hide them just because a pie next to it cannot.
  */
-export function capSeries(rows, { key = 'name', value = 'value', max = MAX_SERIES } = {}) {
+export function capSeries(rows, { key = 'name', value = 'value', max = MAX_SERIES, minShare = 0 } = {}) {
   if (rows.length <= max) return rows;
   const sorted = [...rows].sort((a, b) => (b[value] || 0) - (a[value] || 0));
-  const head = sorted.slice(0, max - 1);
-  const tail = sorted.slice(max - 1);
+  const total = sorted.reduce((s, r) => s + (r[value] || 0), 0);
+
+  // How many of the leaders are worth a slice of their own: everything above the
+  // share floor, but never more than the ramp has colours for.
+  const floor = total * (minShare / 100);
+  let keep = minShare > 0 ? sorted.findIndex((r) => (r[value] || 0) < floor) : max - 1;
+  if (keep < 0) keep = sorted.length;
+  keep = Math.min(keep, max - 1);
+  // One row folded into "Other" on its own is not a fold, it is a rename.
+  if (keep >= sorted.length - 1) return sorted;
+
+  const head = sorted.slice(0, keep);
+  const tail = sorted.slice(keep);
   return [
     ...head,
-    { [key]: t('chart.other'), [value]: tail.reduce((s, r) => s + (r[value] || 0), 0), isOther: true },
+    {
+      [key]: t('chart.other'),
+      [value]: tail.reduce((s, r) => s + (r[value] || 0), 0),
+      isOther: true,
+      members: tail.map((r) => r[key]),
+      count: tail.length,
+    },
   ];
 }
 
@@ -214,3 +242,8 @@ export const STATUS = {
 };
 
 export { intlLocale };
+
+/* Axis fitting lives in `lib/axis.js` — plain arithmetic with no React in it, so
+   the node test runner can reach it. Re-exported here because every call site is
+   a chart and this is the module charts already import. */
+export { fitDomain, fitAxis } from '../../lib/axis.js';

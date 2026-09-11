@@ -822,4 +822,7 @@ export default {
   'dashboard.size.1': '半行',
   'dashboard.size.2': '整行',
   'dashboard.size.4': '整行，双倍高度',
+  'dashboard.edit.drag': '移动卡片',
+  'widget.savings.trend': '{count} 个周期平均',
+  'widget.flow.node.refund': '退款',
 };

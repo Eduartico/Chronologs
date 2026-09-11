@@ -823,4 +823,7 @@ export default {
   'dashboard.size.1': '半行',
   'dashboard.size.2': '1行',
   'dashboard.size.4': '1行・高さ2倍',
+  'dashboard.edit.drag': 'カードを移動',
+  'widget.savings.trend': '{count}期間の平均',
+  'widget.flow.node.refund': '返金',
 };

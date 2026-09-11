@@ -1,25 +1,76 @@
+import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 import ChartCard from '../../components/charts/ChartCard.jsx';
 import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
-import { SERIES, STATUS, INK, axisMonth, cartesianDefaults } from '../../components/charts/chartTheme.js';
-import { nf } from '../../lib/locale.js';
+import {
+  SERIES,
+  STATUS,
+  INK,
+  axisMonth,
+  cartesianDefaults,
+  dashOf,
+  fitAxis,
+} from '../../components/charts/chartTheme.js';
+import { percent } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
 
 /**
  * What share of each period's income was still there at the end of it.
  *
- * The axis is fixed to ±100%. One student month at −733% used to squash every
- * other month into a flat line along the top of the chart, so the line is
- * clamped and the number never is: a month drawn at the limit gets a hollow dot
- * and its true figure in the tooltip and the table.
+ * Two things make this readable, and both are about the same problem: a savings
+ * rate is a ratio, so one small-income month sends it somewhere no other month
+ * goes and the shape of the rest is lost.
+ *
+ * The first is the clamp. One student month at −733% used to squash every other
+ * month into a flat line along the top of the chart, so the *line* is limited
+ * and the *number* never is: a month drawn at the limit gets a hollow dot and
+ * its true figure in the tooltip and the table.
+ *
+ * The second is the trend. Even inside the limit the series sawtooths — a rent
+ * period against a bonus period — and a reader asking "am I saving more than I
+ * was" cannot answer it from the spikes. The dashed line is the average of the
+ * last few periods, which is the question the card is actually asked. The raw
+ * series stays; it is the trend that is derived, not the other way round.
  */
+const TREND_WINDOW = 3;
+
 export default function SavingsRate({ card, data, loading }) {
   const { t } = useT();
 
-  const rows = data?.savingsRate || [];
+  const rows = useMemo(() => {
+    const source = data?.savingsRate || [];
+    const window = [];
+    return source.map((row) => {
+      if (row.rate != null) {
+        window.push(row.rate);
+        if (window.length > TREND_WINDOW) window.shift();
+      }
+      return {
+        ...row,
+        // Trailing, not centred: a centred average would need periods that have
+        // not happened yet to draw the most recent point.
+        trend: window.length ? window.reduce((a, b) => a + b, 0) / window.length : null,
+      };
+    });
+  }, [data]);
+
   const clampedMonths = rows.filter((r) => r.clamped).length;
-  const percent = (v) => (v == null ? '—' : `${nf({ maximumFractionDigits: 1 }).format(v)}%`);
+
+  /* Fitted to what is drawn, then held inside the clamp. A year that never
+     leaves −20%..60% was being drawn on a ±100% axis, so the interesting band
+     occupied two fifths of the card and the rest was empty gridlines. */
+  const yAxis = useMemo(() => {
+    const fit = fitAxis(
+      rows.flatMap((r) => [r.rate, r.trend]).filter((v) => v != null),
+      { maxTicks: 6 },
+    );
+    if (!fit.domain) return {};
+    return {
+      domain: [Math.max(-100, fit.domain[0]), Math.min(100, fit.domain[1])],
+      ticks: fit.ticks.filter((v) => v >= -100 && v <= 100),
+    };
+  }, [rows]);
 
   return (
     <ChartCard
@@ -45,6 +96,12 @@ export default function SavingsRate({ card, data, loading }) {
             // drawn — the chart is what is limited, the data never is.
             format: (v, row) => percent(row?.clamped ? row.trueRate : v),
           },
+          {
+            key: 'trend',
+            label: t('widget.savings.trend', { count: TREND_WINDOW }),
+            align: 'right',
+            format: (v) => percent(v),
+          },
         ],
       }}
     >
@@ -52,9 +109,8 @@ export default function SavingsRate({ card, data, loading }) {
         <CartesianGrid {...cartesianDefaults.grid} />
         <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
         <YAxis
-          domain={[-100, 100]}
-          ticks={[-100, -50, 0, 50, 100]}
-          tickFormatter={(v) => `${v}%`}
+          {...yAxis}
+          tickFormatter={(v) => percent(v, { digits: 0 })}
           {...cartesianDefaults.axis}
           width={44}
         />
@@ -62,7 +118,9 @@ export default function SavingsRate({ card, data, loading }) {
           content={
             <ChartTooltip
               formatLabel={axisMonth}
-              formatValue={(v, entry) => (entry?.payload?.clamped ? `${entry.payload.trueRate}%` : `${v}%`)}
+              formatValue={(v, entry) =>
+                percent(entry?.payload?.clamped && entry?.dataKey === 'rate' ? entry.payload.trueRate : v)
+              }
             />
           }
         />
@@ -91,6 +149,19 @@ export default function SavingsRate({ card, data, loading }) {
             )
           }
           activeDot={{ r: 5 }}
+          connectNulls
+        />
+        {/* Dashed and thinner, so the derived line never reads as a second
+            measurement — it is the same numbers, calmed down. */}
+        <Line
+          type="monotone"
+          dataKey="trend"
+          name={t('widget.savings.trend', { count: TREND_WINDOW })}
+          stroke={SERIES[0]}
+          strokeWidth={1.5}
+          strokeDasharray={dashOf(1)}
+          dot={false}
+          activeDot={{ r: 4 }}
           connectNulls
         />
       </LineChart>

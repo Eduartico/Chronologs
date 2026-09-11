@@ -827,4 +827,7 @@ export default {
   'dashboard.size.1': 'Mezza riga',
   'dashboard.size.2': 'Riga intera',
   'dashboard.size.4': 'Riga intera, altezza doppia',
+  'dashboard.edit.drag': 'Sposta la scheda',
+  'widget.savings.trend': 'Media su {count} periodi',
+  'widget.flow.node.refund': 'Rimborsi',
 };

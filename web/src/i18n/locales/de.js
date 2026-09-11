@@ -828,4 +828,7 @@ export default {
   'dashboard.size.1': 'Halbe Reihe',
   'dashboard.size.2': 'Ganze Reihe',
   'dashboard.size.4': 'Ganze Reihe, doppelte Höhe',
+  'dashboard.edit.drag': 'Karte verschieben',
+  'widget.savings.trend': 'Durchschnitt über {count} Perioden',
+  'widget.flow.node.refund': 'Erstattungen',
 };

@@ -833,4 +833,7 @@ export default {
   'dashboard.size.1': 'आधी पंक्ति',
   'dashboard.size.2': 'पूरी पंक्ति',
   'dashboard.size.4': 'पूरी पंक्ति, दोगुनी ऊँचाई',
+  'dashboard.edit.drag': 'कार्ड ले जाएँ',
+  'widget.savings.trend': '{count} अवधियों का औसत',
+  'widget.flow.node.refund': 'रिफ़ंड',
 };

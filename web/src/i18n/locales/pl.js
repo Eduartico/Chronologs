@@ -863,4 +863,7 @@ export default {
   'dashboard.size.1': 'Pół wiersza',
   'dashboard.size.2': 'Cały wiersz',
   'dashboard.size.4': 'Cały wiersz, podwójna wysokość',
+  'dashboard.edit.drag': 'Przenieś kartę',
+  'widget.savings.trend': 'Średnia z {count} okresów',
+  'widget.flow.node.refund': 'Zwroty',
 };

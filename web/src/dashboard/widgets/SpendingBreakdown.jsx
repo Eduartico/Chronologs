@@ -19,11 +19,17 @@ import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
 import { useChartTheme } from '../../components/charts/ChartThemeProvider.jsx';
 import { useSeriesToggle } from '../../components/charts/useSeriesToggle.jsx';
 import { seriesFill } from '../../components/charts/ChartPatterns.jsx';
-import { colorScale, capSeries, axisMoney, cartesianDefaults, INK } from '../../components/charts/chartTheme.js';
+import {
+  colorScale,
+  capSeries,
+  axisMoney,
+  cartesianDefaults,
+  fitAxis,
+  INK,
+} from '../../components/charts/chartTheme.js';
 import { inkOn } from '../../lib/contrastInk.js';
 import { api } from '../../lib/api.js';
-import { eur } from '../../lib/money.js';
-import { nf } from '../../lib/locale.js';
+import { eur, percent } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -70,12 +76,25 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
     [breakdown],
   );
 
-  // The pie and the bar cap at eight; past that the ramp repeats itself and two
-  // categories share a colour. The treemap and the sunburst do not — showing
-  // every category at a comparable size is the entire argument for them.
-  const capped = useMemo(() => capSeries(ranked, { max: 8 }), [ranked]);
-  const uncapped = view === 'treemap' || view === 'sunburst';
-  const all = uncapped ? ranked : capped;
+  /* Only the pie folds hard.
+   *
+   * It used to be the pie *and* the bar, both at rank eight, and the result was a
+   * grey "Other" wedge holding 22% of a year — a quarter of the spending the card
+   * exists to explain, unreachable in the only two views most readers open.
+   * Investments at 8% and subscriptions at 3% were in there.
+   *
+   * A pie genuinely cannot take more than about eight slices, so it keeps a cap —
+   * but a share floor now decides what goes in the fold, not rank alone. The bar
+   * is ranked and labelled down its own axis, so a repeated hue is not an
+   * ambiguity there; it only needs a ceiling loose enough to stop the rows
+   * becoming hairlines. The treemap and the sunburst show everything, which is
+   * the entire argument for having them.
+   */
+  const all = useMemo(() => {
+    if (view === 'pie') return capSeries(ranked, { max: 8, minShare: 2 });
+    if (view === 'bar') return capSeries(ranked, { max: 16, minShare: 1 });
+    return ranked;
+  }, [ranked, view]);
 
   const colours = useMemo(() => colorScale(all.map((b) => b.name), theme), [all, theme]);
   // A pie has no per-series `hide` prop — the slice has to be gone from the data
@@ -89,7 +108,20 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
     [shown, total],
   );
 
-  const percent = (v) => `${nf({ maximumFractionDigits: 1 }).format(v)}%`;
+  /* The table is the one view that is never folded. A reader who wants to know
+     what is inside "Other" should not have to change the chart type to find out,
+     and the accessible fallback has no reason to be a worse answer than the
+     picture it stands in for. Hiding the fold hides its members with it —
+     the total the shares are taken against has to keep matching the chart. */
+  const tableRows = useMemo(() => {
+    const folded = new Set(all.flatMap((row) => (filter.hidden.has(row.name) ? row.members || [row.name] : [])));
+    return ranked
+      .filter((row) => !folded.has(row.name))
+      .map((row) => ({ ...row, share: total ? (row.value / total) * 100 : 0 }));
+  }, [ranked, all, filter.hidden, total]);
+
+
+  const xAxis = useMemo(() => fitAxis(withShare.map((row) => row.value)), [withShare]);
 
   const parents = useCategoryParents(view === 'sunburst');
   const rings = useMemo(() => buildRings(shown, parents), [shown, parents]);
@@ -111,7 +143,7 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
           ],
         }
       : {
-          rows: withShare,
+          rows: tableRows,
           colorBy: 'name',
           colorOf: (name) => colours(name),
           columns: [
@@ -142,7 +174,7 @@ export default function SpendingBreakdown({ card, view, data, loading, nodeId })
            the reader picks. Largest at the top, which is what "ranked" means. */
         <BarChart data={withShare} layout="vertical" margin={{ top: 4, right: 64, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
-          <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} />
+          <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} {...xAxis} />
           <YAxis type="category" dataKey="name" width={110} {...cartesianDefaults.axis} />
           <Tooltip
             content={<ChartTooltip formatValue={eur} total={total} />}

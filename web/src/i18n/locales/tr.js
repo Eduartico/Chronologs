@@ -832,4 +832,7 @@ export default {
   'dashboard.size.1': 'Yarım satır',
   'dashboard.size.2': 'Tam satır',
   'dashboard.size.4': 'Tam satır, çift yükseklik',
+  'dashboard.edit.drag': 'Kartı taşı',
+  'widget.savings.trend': '{count} dönem ortalaması',
+  'widget.flow.node.refund': 'İadeler',
 };

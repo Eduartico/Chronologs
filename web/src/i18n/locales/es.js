@@ -829,4 +829,7 @@ export default {
   'dashboard.size.1': 'Media fila',
   'dashboard.size.2': 'Fila completa',
   'dashboard.size.4': 'Fila completa, doble altura',
+  'dashboard.edit.drag': 'Mover tarjeta',
+  'widget.savings.trend': 'Media de {count} períodos',
+  'widget.flow.node.refund': 'Reembolsos',
 };

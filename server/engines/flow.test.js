@@ -168,3 +168,79 @@ test('a day names its largest single line', () => {
   assert.equal(days[0].count, 3);
   assert.equal(days[0].top, 'rent', 'so a hovered cell can say what made it dark');
 });
+
+/*
+ * The income column used to be filled with categories that are plainly not
+ * sources of money — "income from shopping", "income from education" — because
+ * every credit was filed under whatever category its transaction carried. A
+ * returned jacket is not a source of income; it is spending that came back.
+ */
+test('a refund is not drawn as a source of income', () => {
+  const ledger = [
+    tx('a', '2026-02-01', 3000, { account: 'Current', category: 'salary' }),
+    tx('b', '2026-02-02', -400, { account: 'Current', category: 'shopping' }),
+    tx('c', '2026-02-03', 90, { account: 'Current', category: 'shopping' }),
+  ];
+  const flow = computeFlow(ledger);
+  const sources = flow.nodes.filter((n) => n.kind === 'source').map((n) => n.name);
+  assert.ok(sources.includes('salary'), 'the category that earns more than it spends is a source');
+  assert.ok(!sources.includes('shopping'), 'a category that spends more than it earns is not');
+  assert.ok(sources.includes('refund'), 'the credit still has to arrive from somewhere');
+});
+
+test('a category whose credits outweigh its debits keeps its own node', () => {
+  const ledger = [
+    tx('a', '2026-02-01', 3000, { account: 'Current', category: 'salary' }),
+    tx('b', '2026-02-02', 500, { account: 'Current', category: 'investments' }),
+    tx('c', '2026-02-03', -100, { account: 'Current', category: 'investments' }),
+  ];
+  const sources = computeFlow(ledger)
+    .nodes.filter((n) => n.kind === 'source')
+    .map((n) => n.name);
+  assert.deepEqual(sources.sort(), ['investments', 'salary']);
+});
+
+/*
+ * The other half of the same complaint: an account holding four euros was drawn
+ * as a column of its own beside one holding forty thousand, with a band too thin
+ * to see and a label the reader could do nothing with.
+ */
+test('flows too small to read are folded rather than drawn as hairlines', () => {
+  const ledger = [
+    tx('a', '2026-03-01', 40000, { account: 'Current', category: 'salary' }),
+    tx('b', '2026-03-02', -30000, { account: 'Current', category: 'housing' }),
+    tx('c', '2026-03-03', 4, { account: 'Dormant', category: 'salary' }),
+    tx('d', '2026-03-04', -3, { account: 'Dormant', category: 'utilities' }),
+    tx('e', '2026-03-05', -2, { account: 'Petty', category: 'food' }),
+  ];
+  const flow = computeFlow(ledger);
+  const accounts = flow.nodes.filter((n) => n.kind === 'account').map((n) => n.name);
+  assert.ok(accounts.includes('Current'));
+  assert.ok(!accounts.includes('Dormant'), 'four euros against forty thousand is noise');
+  assert.ok(accounts.includes('other'), 'folded, not dropped');
+});
+
+test('folding leaves the totals alone', () => {
+  const ledger = [
+    tx('a', '2026-03-01', 40000, { account: 'Current', category: 'salary' }),
+    tx('b', '2026-03-02', -30000, { account: 'Current', category: 'housing' }),
+    tx('c', '2026-03-03', 4, { account: 'Dormant', category: 'salary' }),
+    tx('d', '2026-03-04', -3, { account: 'Dormant', category: 'utilities' }),
+    tx('e', '2026-03-05', -2, { account: 'Petty', category: 'food' }),
+  ];
+  const flow = computeFlow(ledger);
+  assert.equal(flow.totals.income, 40004);
+  assert.equal(flow.totals.expense, 30005);
+});
+
+test('a single small flow keeps its name rather than becoming a bucket of one', () => {
+  const ledger = [
+    tx('a', '2026-03-01', 40000, { account: 'Current', category: 'salary' }),
+    tx('b', '2026-03-02', -30000, { account: 'Current', category: 'housing' }),
+    tx('c', '2026-03-03', -5, { account: 'Petty', category: 'food' }),
+  ];
+  const accounts = computeFlow(ledger)
+    .nodes.filter((n) => n.kind === 'account')
+    .map((n) => n.name);
+  assert.ok(accounts.includes('Petty'), 'renaming one account to "other" explains nothing');
+});

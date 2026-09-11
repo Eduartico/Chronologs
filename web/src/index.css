@@ -465,6 +465,20 @@ textarea::placeholder {
   color: var(--text-muted);
   margin-top: var(--sp-1);
 }
+/*
+ * Headline tiles carry their meaning in their label; the hue agrees with it and
+ * never replaces it, which is why this is allowed to be colour where a number
+ * inside a chart would not be. Income and spending are money moving in and out,
+ * so they follow --pnl-up/--pnl-down and swap with the colourblind-safe finance
+ * setting like every other amount. `.value[data-dir='none']` inherits, so the
+ * colour set here is what reaches the number.
+ */
+.stat[data-tone='up'] .stat-value {
+  color: var(--pnl-up);
+}
+.stat[data-tone='down'] .stat-value {
+  color: var(--pnl-down);
+}
 
 .filter-bar {
   display: flex;
@@ -2360,21 +2374,43 @@ th.sortable.num .th-inner {
   margin-left: auto;
 }
 .dash-node > .chart-head {
-  cursor: grab;
+  /* Not a drag source any more — the grip is. Text in here is selectable. */
+  cursor: default;
 }
-.dash-node > .chart-head:active {
-  cursor: grabbing;
-}
+/*
+ * The grip is the drag source, and the only one.
+ *
+ * It used to be ten dots at 14px, invisible until hover, on a header that was
+ * itself draggable — so the affordance was a hint about something that was true
+ * everywhere else too, and selecting the card's title was impossible. Now it is
+ * a real target: always visible, large enough to hit, and the rest of the header
+ * is ordinary text you can select and copy.
+ */
 .dash-grip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  inline-size: 26px;
+  block-size: 26px;
+  margin-inline-start: -4px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  opacity: 0;
-  transition: opacity var(--t-fast) var(--ease);
+  opacity: 0.55;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
 }
-.dash-node:hover .dash-grip,
+.dash-grip:hover,
 .dash-node:focus-within .dash-grip {
-  opacity: 0.7;
+  opacity: 1;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.dash-grip:active {
+  cursor: grabbing;
 }
 .dash-cell.is-dragging {
   opacity: 0.4;

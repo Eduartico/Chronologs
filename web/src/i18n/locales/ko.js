@@ -823,4 +823,7 @@ export default {
   'dashboard.size.1': '반 줄',
   'dashboard.size.2': '한 줄',
   'dashboard.size.4': '한 줄, 두 배 높이',
+  'dashboard.edit.drag': '카드 이동',
+  'widget.savings.trend': '{count}기간 평균',
+  'widget.flow.node.refund': '환불',
 };

@@ -829,4 +829,7 @@ export default {
   'dashboard.size.1': 'Halve rij',
   'dashboard.size.2': 'Hele rij',
   'dashboard.size.4': 'Hele rij, dubbele hoogte',
+  'dashboard.edit.drag': 'Kaart verplaatsen',
+  'widget.savings.trend': 'Gemiddelde over {count} perioden',
+  'widget.flow.node.refund': 'Terugbetalingen',
 };

@@ -827,4 +827,7 @@ export default {
   'dashboard.size.1': 'Une demi-ligne',
   'dashboard.size.2': 'Une ligne entière',
   'dashboard.size.4': 'Ligne entière, double hauteur',
+  'dashboard.edit.drag': 'Déplacer la carte',
+  'widget.savings.trend': 'Moyenne sur {count} périodes',
+  'widget.flow.node.refund': 'Remboursements',
 };

@@ -88,12 +88,23 @@ export default function ChartCard({
 
   return (
     <div className={`card chart-container ${className}`.trim()}>
-      <div className="chart-head" {...headerProps}>
-        {/* The handle is only drawn where the header is actually a drag source,
-            so a card that cannot be moved does not advertise that it can. */}
+      <div className="chart-head">
+        {/* The handle is only drawn where the card is actually a drag source, so
+            a card that cannot be moved does not advertise that it can.
+
+            The drag listeners live on the handle and nowhere else. They used to
+            be on the whole header, which meant the title was a drag source: you
+            could not select it, could not copy it, and every attempt to put the
+            cursor in it picked the card up instead. A grip is a grip precisely
+            because it is the one part of the card that is not something else. */}
         {headerProps?.draggable && (
-          <span className="dash-grip" aria-hidden="true">
-            <Icon name="grip" size={14} />
+          <span
+            className="dash-grip"
+            title={t('dashboard.edit.drag')}
+            aria-label={t('dashboard.edit.drag')}
+            {...headerProps}
+          >
+            <Icon name="grip" size={18} />
           </span>
         )}
         <div className="chart-head-title">

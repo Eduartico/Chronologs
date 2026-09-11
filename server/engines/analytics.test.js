@@ -66,13 +66,15 @@ test('cashflow respects granularity', () => {
   assert.equal(quarterly[0].expense, 430);
 });
 
-test('category trend caps the series and folds the rest into Outros', () => {
+test('category trend caps the series and folds the rest into one bucket', () => {
   const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((c, i) =>
     tx(c, '2026-01-0' + ((i % 9) + 1), -(10 + i), 'cat' + i)
   );
   const trend = computeCategoryTrend(many, {}, 'month', 3);
   assert.equal(trend.categories.length, 4);
-  assert.equal(trend.categories[3], 'Outros');
+  // A sentinel, not a word: the card that draws it names it in the reader's
+  // language, so the engine must not ship a Portuguese label to a German screen.
+  assert.equal(trend.categories[3], 'other');
 });
 
 test('category trend only counts expenses', () => {

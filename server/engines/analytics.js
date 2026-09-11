@@ -94,6 +94,9 @@ export function computeMonthlyCashflow(transactions, granularity = 'month') {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
+/** The key every fold bucket is emitted under, named by whoever draws it. */
+export const OTHER_BUCKET = 'other';
+
 /**
  * Spending per category per period, shaped for a stacked area chart: one row
  * per period with a column per category. Categories are capped so the chart
@@ -120,14 +123,18 @@ export function computeCategoryTrend(transactions, categoryMap = {}, granularity
     const key = bucketKey(dateOf(tx), granularity);
     if (!key) continue;
     const cat = categoryMap[tx.id] || tx.category || 'uncategorized';
-    const slot = topSet.has(cat) ? cat : 'Outros';
+    // A sentinel, not a word. This used to be the literal 'Outros', which the
+    // dashboard then folded a second time into its own translated "Other" — so
+    // the legend carried two fold buckets, one of them in Portuguese regardless
+    // of the interface language. The client recognises this key and names it.
+    const slot = topSet.has(cat) ? cat : OTHER_BUCKET;
     const row = buckets.get(key) || { period: key };
     row[slot] = (row[slot] || 0) + Math.abs(amt);
     buckets.set(key, row);
   }
 
   return {
-    categories: hasOther ? [...top, 'Outros'] : top,
+    categories: hasOther ? [...top, OTHER_BUCKET] : top,
     rows: [...buckets.values()].sort((a, b) => a.period.localeCompare(b.period)),
   };
 }
@@ -479,8 +486,10 @@ export function computeInsights(transactions, categorizedMap, monthlyCashflow) {
  *
  * Three things are worth knowing about the result:
  *
- *  - **Income sources are merchants.** There is no payer entity in a bank
- *    statement; the name on a credit is the closest thing to one.
+ *  - **Income sources are categories, and only the ones that earn it.** There is
+ *    no payer entity in a bank statement. A credit is filed under the category
+ *    whose credits outweigh its debits over the period; everything else is a
+ *    refund and says so, rather than claiming money arrives from "shopping".
  *  - **`account` can be null.** The parser supplies it where the statement says
  *    it and `enrichAccounts` backfills the rest, but a row without one is
  *    ordinary. Those go to a named "unknown" node rather than being dropped — a
@@ -493,7 +502,19 @@ export function computeInsights(transactions, categorizedMap, monthlyCashflow) {
  *    a reader quite reasonably reads as a bug.
  */
 export function computeFlow(transactions, categorizedMap = {}, options = {}) {
-  const { maxSources = 8, maxCategories = 12, unknownAccount = 'unknown', otherLabel = 'other' } = options;
+  const {
+    maxSources = 8,
+    maxCategories = 12,
+    unknownAccount = 'unknown',
+    otherLabel = 'other',
+    refundLabel = 'refund',
+    // Half a percent of everything that moved. Below that a band is a hairline
+    // with a label attached — an account holding four euros was being drawn as
+    // a column of its own next to one holding forty thousand — and a reader
+    // cannot do anything with it except wonder what it is. Folded, not dropped:
+    // the totals still have to add up.
+    minShare = 0.005,
+  } = options;
 
   const accountOf = (tx) => tx.account || tx.accountId || unknownAccount;
   const categoryOf = (tx) => categorizedMap[tx.id] || tx.category || 'uncategorized';
@@ -508,7 +529,61 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
   // "TRANSFERENCIA - VENCIMENTO" under the `income` category; routing the
   // diagram through that instead collapses every wording of the same kind of
   // money into one clean node, the way the expense side already does.
-  const sourceOf = (tx) => categorizedMap[tx.id] || tx.category || 'uncategorized';
+  // First pass, which decides two things before a single node exists.
+  //
+  // **What counts as a source of income.** Routing credits through the category
+  // makes the expense side read well and the income side read like nonsense:
+  // "income from shopping", "income from education", "income from transfers".
+  // Those are refunds — a returned jacket, a cancelled course — and a refund is
+  // not where money comes from, it is spending that came back. A category is a
+  // real source when its credits outweigh its debits over the period, which
+  // needs no configuration and no list of which categories are "income-ish": the
+  // salary category earns its node, the shopping category cannot.
+  //
+  // **What is too small to draw.** Sizes have to be known before keys are
+  // assigned, because folding after the fact would leave a node behind with
+  // nothing flowing through it.
+  const credits = new Map();
+  const debits = new Map();
+  const accountTotals = new Map();
+  let scale = 0;
+
+  for (const tx of transactions) {
+    const amount = amountOf(tx);
+    if (!amount) continue;
+    const size = Math.abs(amount);
+    const category = categoryOf(tx);
+    const bucket = amount > 0 ? credits : debits;
+    bucket.set(category, (bucket.get(category) || 0) + size);
+    const account = String(accountOf(tx));
+    accountTotals.set(account, (accountTotals.get(account) || 0) + size);
+    scale += size;
+  }
+
+  const isSource = (category) => (credits.get(category) || 0) >= (debits.get(category) || 0);
+  const sourceOf = (tx) => {
+    const category = categoryOf(tx);
+    return isSource(category) ? category : refundLabel;
+  };
+
+  const sourceTotals = new Map();
+  for (const [category, value] of credits) {
+    const key = isSource(category) ? category : refundLabel;
+    sourceTotals.set(key, (sourceTotals.get(key) || 0) + value);
+  }
+
+  const floor = scale * minShare;
+  // A fold of one is a rename, so a name only goes into "other" when there is
+  // something else in there with it.
+  const folder = (totals) => {
+    const small = [...totals.entries()].filter(([, value]) => value < floor);
+    if (small.length < 2) return (name) => name;
+    const folded = new Set(small.map(([name]) => name));
+    return (name) => (folded.has(name) ? otherLabel : name);
+  };
+  const foldSource = folder(sourceTotals);
+  const foldCategory = folder(debits);
+  const foldAccount = folder(accountTotals);
 
   const income = new Map();
   const expense = new Map();
@@ -516,20 +591,22 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
   for (const tx of transactions) {
     const amount = amountOf(tx);
     if (!amount) continue;
-    const account = String(accountOf(tx));
+    const account = foldAccount(String(accountOf(tx)));
     if (amount > 0) {
-      const key = sourceOf(tx);
+      const key = foldSource(sourceOf(tx));
       const byAccount = income.get(key) || new Map();
       byAccount.set(account, (byAccount.get(account) || 0) + amount);
       income.set(key, byAccount);
     } else {
       const byCategory = expense.get(account) || new Map();
-      const category = categoryOf(tx);
+      const category = foldCategory(categoryOf(tx));
       byCategory.set(category, (byCategory.get(category) || 0) + Math.abs(amount));
       expense.set(account, byCategory);
     }
   }
 
+  // The rank caps stay as a ceiling. The share floor removes what is unreadable;
+  // these remove what the eight-colour ramp cannot keep apart.
   const sources = capOuter(income, maxSources, otherLabel);
   const categories = capInner(expense, maxCategories, otherLabel);
 

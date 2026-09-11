@@ -210,4 +210,25 @@ export function pct(value) {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
+/**
+ * A share, formatted the way the reader's locale writes numbers.
+ *
+ * This existed five times over as a one-line `const percent = …` inside five
+ * charts, each with its own idea of how many decimals a share deserves, and all
+ * of them willing to print `0.000001%` for a category worth four cents — a row
+ * the reader cannot act on, dressed up as a precise measurement. Anything that
+ * would round to nothing is reported as being under the smallest figure the
+ * format can show, which is both shorter and true.
+ */
+export function percent(value, { digits = 1, signed = false } = {}) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const smallest = 0.5 / 10 ** digits;
+  if (value !== 0 && Math.abs(value) < smallest) {
+    const shown = nf({ maximumFractionDigits: digits }).format(smallest);
+    return `${value < 0 ? '<-' : '<'}${shown}%`;
+  }
+  const body = nf({ maximumFractionDigits: digits }).format(value);
+  return `${signed && value > 0 ? '+' : ''}${body}%`;
+}
+
 export { PIVOT, isKnownCurrency };

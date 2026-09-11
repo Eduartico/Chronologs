@@ -854,4 +854,7 @@ export default {
   'dashboard.size.1': 'Half a row',
   'dashboard.size.2': 'A full row',
   'dashboard.size.4': 'Full row, double height',
+  'dashboard.edit.drag': 'Move card',
+  'widget.savings.trend': '{count}-period average',
+  'widget.flow.node.refund': 'Refunds',
 };

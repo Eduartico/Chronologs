@@ -863,4 +863,7 @@ export default {
   'dashboard.size.1': 'Половина строки',
   'dashboard.size.2': 'Целая строка',
   'dashboard.size.4': 'Целая строка, двойная высота',
+  'dashboard.edit.drag': 'Переместить карточку',
+  'widget.savings.trend': 'Среднее за {count} периодов',
+  'widget.flow.node.refund': 'Возвраты',
 };

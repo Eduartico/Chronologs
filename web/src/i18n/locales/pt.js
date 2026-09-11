@@ -831,4 +831,7 @@ export default {
   'dashboard.size.1': 'Meia linha',
   'dashboard.size.2': 'Linha inteira',
   'dashboard.size.4': 'Linha inteira, altura dupla',
+  'dashboard.edit.drag': 'Mover cartão',
+  'widget.savings.trend': 'Média de {count} períodos',
+  'widget.flow.node.refund': 'Reembolsos',
 };

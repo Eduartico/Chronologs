@@ -128,6 +128,9 @@ function nodeName(node, t) {
   if (!node) return '';
   if (node.kind === 'residual') return t(`widget.flow.node.${node.name}`);
   if (node.kind === 'account' && node.name === 'unknown') return t('widget.flow.node.unknownAccount');
+  // Money that came back rather than money that arrived. The engine decides
+  // which credits these are; all this has to do is not call it a category.
+  if (node.kind === 'source' && node.name === 'refund') return t('widget.flow.node.refund');
   if (node.name === 'other') return t('chart.other');
   return node.name;
 }

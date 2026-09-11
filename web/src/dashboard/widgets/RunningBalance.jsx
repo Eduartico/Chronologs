@@ -17,7 +17,15 @@ import {
 import ChartCard from '../../components/charts/ChartCard.jsx';
 import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
 import { useChartTheme } from '../../components/charts/ChartThemeProvider.jsx';
-import { SERIES, INK, axisMoney, tooltipMoney, axisMonth, cartesianDefaults } from '../../components/charts/chartTheme.js';
+import {
+  SERIES,
+  INK,
+  axisMoney,
+  tooltipMoney,
+  axisMonth,
+  cartesianDefaults,
+  fitAxis,
+} from '../../components/charts/chartTheme.js';
 import { eur } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
 
@@ -71,6 +79,20 @@ export default function RunningBalance({ card, view, data, loading, nodeId, peri
   const rows = waterfall ? steps : cumulative;
   const closing = steps.length ? steps[steps.length - 1].to : 0;
 
+  /* Sized on the levels the line actually reaches, not on a step rounded up from
+     zero — a balance topping out at 6K was being drawn on an axis reaching 8K.
+     The waterfall measures the same thing from both ends of each bar, since a
+     step that falls is drawn hanging from the level above it. */
+  const yAxis = useMemo(
+    () =>
+      fitAxis(
+        waterfall
+          ? steps.flatMap((row) => [row.base, row.base + row.magnitude])
+          : cumulative.map((row) => row.cumulative),
+      ),
+    [waterfall, steps, cumulative],
+  );
+
   return (
     <ChartCard
       {...card}
@@ -102,7 +124,7 @@ export default function RunningBalance({ card, view, data, loading, nodeId, peri
         <BarChart data={steps} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} {...yAxis} width={54} />
           <ReferenceLine y={0} stroke={theme.axis} />
           <Tooltip
             cursor={{ fill: theme.cursor }}
@@ -138,7 +160,7 @@ export default function RunningBalance({ card, view, data, loading, nodeId, peri
         <LineChart data={cumulative} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} {...yAxis} width={54} />
           <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
           <ReferenceLine y={0} stroke={INK.axis} />
           <Line
@@ -164,7 +186,7 @@ export default function RunningBalance({ card, view, data, loading, nodeId, peri
           </defs>
           <CartesianGrid {...cartesianDefaults.grid} />
           <XAxis dataKey="month" tickFormatter={axisMonth} {...cartesianDefaults.axis} minTickGap={20} />
-          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} width={54} />
+          <YAxis tickFormatter={axisMoney} {...cartesianDefaults.axis} {...yAxis} width={54} />
           <Tooltip content={<ChartTooltip formatLabel={axisMonth} formatValue={tooltipMoney} />} />
           <ReferenceLine y={0} stroke={INK.axis} />
           <Area

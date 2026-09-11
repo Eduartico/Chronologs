@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
-import { nf } from '../lib/locale.js';
 import { useT } from '../i18n/index.js';
 /*
  * Amounts here are euro-denominated in the ledger and are rendered in whatever
@@ -13,7 +12,7 @@ import { useT } from '../i18n/index.js';
  * display currency became a setting: every other number followed it and the
  * dashboard's did not.
  */
-import { eur } from '../lib/money.js';
+import { eur, percent } from '../lib/money.js';
 import { api } from '../lib/api.js';
 import { INK } from '../components/charts/chartTheme.js';
 import Value from '../components/ui/Value.jsx';
@@ -51,15 +50,21 @@ function rangeFor(preset) {
 /**
  * One headline figure.
  *
- * Colour is never the only channel. The number itself goes through `Value`,
- * which carries direction three independent ways — hue, an explicit sign, and
- * weight — plus a word for a screen reader. A large expense passes
- * `symbol="none"`: it is not a loss, and colouring it as one would say something
- * the data does not.
+ * Colour is never the only channel, and on these three tiles it is never the
+ * channel at all: the word under the number says "Income" or "Spending", and the
+ * hue only agrees with it. That is the distinction that matters. Colouring a
+ * *number inside a chart* green would be a claim about the number; colouring a
+ * tile whose own label already names it is redundancy, which is what the
+ * accessibility rule asks for rather than what it forbids — the tile is legible
+ * with the colour removed, by construction.
+ *
+ * So `tone` never touches `Value`. The number itself still goes through it and
+ * still carries direction three independent ways where direction is real — the
+ * net tile, the only one where above and below zero mean different things.
  */
-function Stat({ label, value, symbol = 'none', hint }) {
+function Stat({ label, value, symbol = 'none', tone, hint }) {
   return (
-    <div className="card stat">
+    <div className="card stat" data-tone={tone || undefined}>
       <div className="stat-value">
         <Value amount={value} symbol={symbol} />
       </div>
@@ -153,22 +158,37 @@ export default function Dashboard() {
     // "1,839.1% against the period before", which is true and says nothing.
     // Spending is always positive and always comparable.
     const half = Math.floor(cashflow.length / 2);
-    const prior = cashflow.slice(0, half).reduce((s, m) => s + m.expense, 0);
-    const recent = cashflow.slice(half).reduce((s, m) => s + m.expense, 0);
+    const shift = (pick) => {
+      const prior = cashflow.slice(0, half).reduce((s, m) => s + pick(m), 0);
+      const recent = cashflow.slice(half).reduce((s, m) => s + pick(m), 0);
+      // Only offered when there are two halves to compare and the earlier one is
+      // not zero — a percentage change from nothing is not a number.
+      return half && prior > 0 ? ((recent - prior) / prior) * 100 : null;
+    };
     return {
       income,
       expense,
       net: income - expense,
       savings: income > 0 ? ((income - expense) / income) * 100 : null,
+      // Both tiles get the same two figures. Spending had an average per period
+      // and a shift against the period before; income had neither, so the one
+      // question you could ask of half the pair — "is this a normal month?" —
+      // had an answer on one tile and not on the other sitting beside it.
+      avgIncome: cashflow.length ? income / cashflow.length : 0,
       avgExpense: cashflow.length ? expense / cashflow.length : 0,
-      // Only offered when there are two halves to compare and the earlier one is
-      // not zero — a percentage change from nothing is not a number.
-      spendShift: half && prior > 0 ? ((recent - prior) / prior) * 100 : null,
+      incomeShift: shift((m) => m.income),
+      spendShift: shift((m) => m.expense),
     };
   }, [cashflow]);
 
   const periodWord = t(`dashboard.periodWord.${granularity}`);
-  const percent = (v) => `${nf({ maximumFractionDigits: 1 }).format(v)}%`;
+  const hintFor = (average, shift) =>
+    [
+      t('dashboard.perPeriod', { amount: eur(average), period: periodWord }),
+      shift != null ? t('dashboard.shiftHint', { change: percent(shift, { signed: true }) }) : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
   if (error) {
     return (
@@ -230,16 +250,17 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
-        <Stat label={t('dashboard.income')} value={totals.income} />
+        <Stat
+          label={t('dashboard.income')}
+          value={totals.income}
+          tone="up"
+          hint={hintFor(totals.avgIncome, totals.incomeShift)}
+        />
         <Stat
           label={t('dashboard.expenses')}
           value={totals.expense}
-          hint={[
-            t('dashboard.perPeriod', { amount: eur(totals.avgExpense), period: periodWord }),
-            totals.spendShift != null ? t('dashboard.shiftHint', { change: percent(totals.spendShift) }) : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
+          tone="down"
+          hint={hintFor(totals.avgExpense, totals.spendShift)}
         />
         {/* The one tile where direction is real: a balance above zero is money
             kept and below it is money spent that was not earned, so this is the

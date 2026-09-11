@@ -3,9 +3,8 @@ import { BarChart, Bar, LabelList, XAxis, YAxis, CartesianGrid, Tooltip } from '
 
 import ChartCard from '../../components/charts/ChartCard.jsx';
 import ChartTooltip from '../../components/charts/ChartTooltip.jsx';
-import { SERIES, INK, axisMoney, cartesianDefaults } from '../../components/charts/chartTheme.js';
-import { eur } from '../../lib/money.js';
-import { nf } from '../../lib/locale.js';
+import { SERIES, INK, axisMoney, cartesianDefaults, fitAxis } from '../../components/charts/chartTheme.js';
+import { eur, percent } from '../../lib/money.js';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -38,7 +37,7 @@ export default function TopMerchants({ card, view, data, loading }) {
     [data, totalSpend],
   );
 
-  const percent = (v) => `${nf({ maximumFractionDigits: 1 }).format(v)}%`;
+  const xAxis = useMemo(() => fitAxis(rows.map((r) => r.total)), [rows]);
 
   return (
     <ChartCard
@@ -61,7 +60,7 @@ export default function TopMerchants({ card, view, data, loading }) {
     >
       <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 56, left: 0, bottom: 0 }}>
         <CartesianGrid {...cartesianDefaults.grid} horizontal={false} vertical />
-        <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} />
+        <XAxis type="number" tickFormatter={axisMoney} {...cartesianDefaults.axis} {...xAxis} />
         <YAxis
           type="category"
           dataKey="merchant"
