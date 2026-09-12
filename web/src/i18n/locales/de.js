@@ -878,4 +878,5 @@ export default {
   'widget.networth.name': 'Vermögen',
   'widget.networth.desc': 'Was da ist, statt was sich bewegt hat',
   'widget.networth.footnote': '{amount} insgesamt',
+  'networth.unconverted': '{names} nicht im Gesamtwert: für diese Währung gibt es keinen Kurs.',
 };

@@ -873,4 +873,5 @@ export default {
   'widget.networth.name': '純資産',
   'widget.networth.desc': '動いた額ではなく、あるもの',
   'widget.networth.footnote': '合計 {amount}',
+  'networth.unconverted': '{names} は合計に含まれていません。その通貨のレートがありません。',
 };

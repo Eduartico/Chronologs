@@ -194,7 +194,11 @@ export function createTravel(input = {}) {
     forgivingDays: input.forgivingDays ?? DEFAULT_FORGIVING_DAYS,
     status: input.status || 'confirmed',
     tagId: input.tagId || null,
-    category: input.category || 'travel',
+    /* No `category`. A trip used to carry the category it would stamp onto
+       everything it claimed, and nothing reads that any more — a trip is when
+       and where money was spent, not what it bought. Trips written before this
+       keep the field; it is inert, and rewriting twelve files to delete a dead
+       key is a worse trade than leaving it where it sits. */
     createdFrom: input.createdFrom || 'manual',
     created: new Date().toISOString(),
   };

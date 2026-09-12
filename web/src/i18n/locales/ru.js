@@ -913,4 +913,5 @@ export default {
   'widget.networth.name': 'Состояние',
   'widget.networth.desc': 'То, что есть, а не то, что двигалось',
   'widget.networth.footnote': 'Всего {amount}',
+  'networth.unconverted': '{names} не входит в итог: нет курса для этой валюты.',
 };

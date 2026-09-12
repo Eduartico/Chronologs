@@ -872,4 +872,5 @@ export default {
   'widget.networth.name': '净资产',
   'widget.networth.desc': '有什么，而不是动了什么',
   'widget.networth.footnote': '共计 {amount}',
+  'networth.unconverted': '{names} 未计入总额：该货币没有汇率。',
 };

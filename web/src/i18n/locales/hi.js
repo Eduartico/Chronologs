@@ -883,4 +883,5 @@ export default {
   'widget.networth.name': 'कुल संपत्ति',
   'widget.networth.desc': 'क्या हुआ नहीं, क्या है',
   'widget.networth.footnote': 'कुल {amount}',
+  'networth.unconverted': '{names} कुल में शामिल नहीं: इसकी मुद्रा के लिए विनिमय दर नहीं है।',
 };

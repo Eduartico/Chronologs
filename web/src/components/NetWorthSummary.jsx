@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import Icon from './Icon.jsx';
 import Switch from './ui/Switch.jsx';
-import { api } from '../lib/api.js';
+import { api, errText } from '../lib/api.js';
 import { componentLabel, readNetWorth } from '../lib/netWorth.js';
 import { money, nativeOf, baseCurrency } from '../lib/money.js';
 import { useT } from '../i18n/index.js';
@@ -26,6 +26,7 @@ export default function NetWorthSummary() {
   const [payload, setPayload] = useState(null);
   const [saving, setSaving] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [error, setError] = useState(null);
 
   const load = () =>
     api
@@ -37,7 +38,7 @@ export default function NetWorthSummary() {
     load();
   }, []);
 
-  const { components, total } = useMemo(() => readNetWorth(payload), [payload]);
+  const { components, total, unconvertible } = useMemo(() => readNetWorth(payload), [payload]);
 
   async function toggle(id, included) {
     setSaving(id);
@@ -47,6 +48,10 @@ export default function NetWorthSummary() {
         netWorth: { ...settings.netWorth, include: { ...settings.netWorth?.include, [id]: included } },
       });
       await load();
+    } catch (err) {
+      // A switch that silently does nothing is worse than one that says it
+      // failed, and an uncaught rejection here would do exactly that.
+      setError(errText(err));
     } finally {
       setSaving(null);
     }
@@ -63,7 +68,17 @@ export default function NetWorthSummary() {
       <div className="stat">
         <div className="stat-value">{money(total, { from: baseCurrency() })}</div>
         <div className="stat-label">{t('networth.desc')}</div>
+        {/* A total that is missing a holding says which one and why, rather than
+            quietly being smaller than the truth. */}
+        {unconvertible.length > 0 && (
+          <div className="networth-note">
+            {t('networth.unconverted', {
+              names: unconvertible.map((c) => componentLabel(c.id, t)).join(', '),
+            })}
+          </div>
+        )}
       </div>
+      {error && <div className="networth-note is-bad">{error}</div>}
       <div className="networth-parts">
         {components.map((component) => (
           <div key={component.id} className={`networth-part${component.included ? '' : ' is-out'}`}>
@@ -82,8 +97,12 @@ export default function NetWorthSummary() {
                 in the app says so, and it is the only thing that knows the rate.
                 `money(value, {from})` would have converted a second time and
                 printed the same figure twice. */}
+            {/* No rate, no conversion: the amount is shown in the currency it is
+                actually held in rather than in a euro figure it is not. */}
             <div className="networth-part-value" title={nativeOf(component.value, component.currency)}>
-              {money(component.converted, { from: baseCurrency() })}
+              {component.convertible
+                ? money(component.converted, { from: baseCurrency() })
+                : money(component.value, { from: component.currency })}
             </div>
             <Switch
               checked={component.included}

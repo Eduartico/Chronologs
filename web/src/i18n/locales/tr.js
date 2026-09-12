@@ -882,4 +882,5 @@ export default {
   'widget.networth.name': 'Net varlık',
   'widget.networth.desc': 'Ne hareket etti değil, ne var',
   'widget.networth.footnote': 'Toplam {amount}',
+  'networth.unconverted': '{names} toplama dahil değil: para birimi için kur yok.',
 };

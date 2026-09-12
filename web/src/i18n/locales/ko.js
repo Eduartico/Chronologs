@@ -873,4 +873,5 @@ export default {
   'widget.networth.name': '순자산',
   'widget.networth.desc': '움직인 것이 아니라 가진 것',
   'widget.networth.footnote': '총 {amount}',
+  'networth.unconverted': '{names}은(는) 합계에 포함되지 않았습니다: 해당 통화의 환율이 없습니다.',
 };

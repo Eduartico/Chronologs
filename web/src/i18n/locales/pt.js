@@ -881,4 +881,5 @@ export default {
   'widget.networth.name': 'Património',
   'widget.networth.desc': 'O que há, em vez do que se moveu',
   'widget.networth.footnote': '{amount} no total',
+  'networth.unconverted': '{names} fora do total: não há taxa de câmbio para a sua moeda.',
 };

@@ -2560,6 +2560,16 @@ th.sortable.num .th-inner {
   color: var(--text-muted);
   margin-top: 2px;
 }
+/* Why the total is smaller than the holdings add up to. Not an error state —
+   it is a fact about the rate table, and it is the reader's cue to fetch one. */
+.networth-note {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+}
+.networth-note.is-bad {
+  color: var(--bad);
+}
 .networth-part-value {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

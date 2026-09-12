@@ -904,4 +904,5 @@ export default {
   'widget.networth.name': 'Net worth',
   'widget.networth.desc': 'What there is, rather than what moved',
   'widget.networth.footnote': '{amount} in total',
+  'networth.unconverted': '{names} not in the total: no exchange rate for its currency.',
 };

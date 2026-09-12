@@ -913,4 +913,5 @@ export default {
   'widget.networth.name': 'Majątek',
   'widget.networth.desc': 'To, co jest, zamiast tego, co się poruszyło',
   'widget.networth.footnote': 'Łącznie {amount}',
+  'networth.unconverted': '{names} poza sumą: brak kursu wymiany dla tej waluty.',
 };

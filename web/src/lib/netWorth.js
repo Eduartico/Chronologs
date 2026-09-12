@@ -6,7 +6,7 @@
  * be assembled here, which is also where the display currency lives.
  */
 
-import { convert, baseCurrency } from './money.js';
+import { canConvert, convert, baseCurrency } from './money.js';
 
 /* The components the app ships with get a real name; anything the ledger grows
    later is shown under its own id rather than under a missing translation key.
@@ -26,18 +26,28 @@ export function componentLabel(id, t) {
 /**
  * Each component in the display currency, plus the total of the included ones.
  *
- * A component whose currency has no rate converts to itself rather than to a
- * guess — the same rule the rest of the app follows, and the reason the total
- * can be understated rather than wrong.
+ * A component whose currency has no rate is **left out of the total and says
+ * so**. `convert` returns such an amount untouched, which is correct when one
+ * figure is being displayed — it gets labelled in its own currency — and
+ * catastrophic in a sum, where 3,566 unrated dollars would land in a euro total
+ * as 3,566 euros. An understated total the reader is told about beats a
+ * plausible one that is wrong.
  */
 export function readNetWorth(data, { currency = baseCurrency() } = {}) {
-  const components = (data?.components || []).map((component) => ({
-    ...component,
-    converted: convert(component.value, component.currency, currency),
-  }));
+  const components = (data?.components || []).map((component) => {
+    const convertible = canConvert(component.currency, currency);
+    return {
+      ...component,
+      convertible,
+      converted: convertible ? convert(component.value, component.currency, currency) : null,
+    };
+  });
+  const counted = components.filter((c) => c.included && c.convertible);
   return {
     currency,
     components,
-    total: components.filter((c) => c.included).reduce((sum, c) => sum + c.converted, 0),
+    total: counted.reduce((sum, c) => sum + c.converted, 0),
+    /** Included, held, and not in the total because there is no rate for it. */
+    unconvertible: components.filter((c) => c.included && !c.convertible),
   };
 }

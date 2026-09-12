@@ -102,7 +102,8 @@ export default function Trips({ card, data, loading, range }) {
       subtitle={t('widget.trips.desc')}
       loading={loading || (trips === null && !failed)}
       empty={!rows.length}
-      emptyMessage={t('widget.trips.empty')}
+      // A request that failed is not "no trip has claimed anything yet".
+      emptyMessage={failed ? t('dashboard.loadFailed') : t('widget.trips.empty')}
       footnote={rows.length ? t('widget.trips.footnote', { count: rows.length, amount: eur(total) }) : undefined}
       table={{
         rows,
@@ -110,7 +111,9 @@ export default function Trips({ card, data, loading, range }) {
           { key: 'name', label: t('widget.trips.name') },
           { key: 'total', label: t('common.total'), align: 'right', format: eur },
           { key: 'days', label: t('widget.trips.days'), align: 'right' },
-          { key: 'perDay', label: t('widget.trips.perDay'), align: 'right', format: eur },
+          // `eur(null)` prints €0.00, which would read as "this trip cost
+          // nothing per day" when what it means is that its dates are unusable.
+          { key: 'perDay', label: t('widget.trips.perDay'), align: 'right', format: (v) => (v == null ? '—' : eur(v)) },
           { key: 'count', label: t('common.count'), align: 'right' },
         ],
       }}

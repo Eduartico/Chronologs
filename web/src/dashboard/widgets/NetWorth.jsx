@@ -49,11 +49,17 @@ export default function NetWorth({ card, data, loading }) {
     };
   }, []);
 
-  const { rows, total } = useMemo(() => {
+  const { rows, total, unconvertible } = useMemo(() => {
     const read = readNetWorth(payload);
     return {
       total: read.total,
+      unconvertible: read.unconvertible,
       rows: read.components
+        // A holding with no rate for its currency has no length on a euro axis.
+        // It is dropped from the chart and named in the subtitle instead —
+        // drawing it at its unconverted number would be a bar claiming to be
+        // euros that is not.
+        .filter((component) => component.convertible)
         .map((component) => ({
           id: component.id,
           name: componentLabel(component.id, t),
@@ -75,9 +81,18 @@ export default function NetWorth({ card, data, loading }) {
     <ChartCard
       {...card}
       title={t('widget.networth.name')}
-      subtitle={t('widget.networth.desc')}
+      subtitle={
+        unconvertible.length
+          ? t('networth.unconverted', {
+              names: unconvertible.map((c) => componentLabel(c.id, t)).join(', '),
+            })
+          : t('widget.networth.desc')
+      }
       loading={loading || (payload === null && !failed)}
       empty={!rows.length}
+      // A request that failed is not an empty ledger, and saying so would be a
+      // lie the reader cannot act on.
+      emptyMessage={failed ? t('dashboard.loadFailed') : undefined}
       footnote={rows.length ? t('widget.networth.footnote', { amount: money(total, { from: baseCurrency() }) }) : undefined}
       table={{
         rows,

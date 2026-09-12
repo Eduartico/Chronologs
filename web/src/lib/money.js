@@ -191,6 +191,23 @@ export function currentRate(code = 'USD') {
   return rateOf(code) ?? 0;
 }
 
+/**
+ * Whether an amount can honestly be moved from one currency to the other.
+ *
+ * `convert` returns the number untouched when it has no rate, which is the right
+ * answer for *displaying* one amount — it is then labelled in its own currency by
+ * `displayCurrency`, so nothing claims to be euros that is not. It is the wrong
+ * answer for a **sum**: added into a euro total, an unrated 3,566 dollars becomes
+ * 3,566 euros, and the result is wrong in the one way a money figure must never
+ * be, which is plausibly. Anything totalling across currencies has to ask first.
+ */
+export function canConvert(from, to = base) {
+  const src = String(from || base).toUpperCase();
+  const dst = String(to || base).toUpperCase();
+  if (src === dst) return true;
+  return rateOf(src) != null && rateOf(dst) != null;
+}
+
 export function eur(value) {
   return money(value, { from: PIVOT });
 }

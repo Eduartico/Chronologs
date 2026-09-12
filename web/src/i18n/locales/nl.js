@@ -879,4 +879,5 @@ export default {
   'widget.networth.name': 'Vermogen',
   'widget.networth.desc': 'Wat er is, in plaats van wat er bewoog',
   'widget.networth.footnote': '{amount} in totaal',
+  'networth.unconverted': '{names} niet in het totaal: geen wisselkoers voor die valuta.',
 };
