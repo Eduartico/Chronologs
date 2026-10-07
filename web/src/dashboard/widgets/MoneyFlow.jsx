@@ -86,7 +86,12 @@ export default function MoneyFlow({ card, range }) {
       emptyMessage={t('widget.flow.empty')}
       footnote={
         data
-          ? t('widget.flow.footnote', { income: eur(data.totals.income), expense: eur(data.totals.expense) })
+          ? [
+              t('widget.flow.footnote', { income: eur(data.totals.income), expense: eur(data.totals.expense) }),
+              data.totals.invested ? t('widget.cashflow.footnoteInvested', { amount: eur(data.totals.invested) }) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
           : undefined
       }
       table={{

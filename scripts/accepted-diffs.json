@@ -10,7 +10,10 @@
     "",
     "`path` is a JSON path into the captured file; everything under it is",
     "accepted too, so '$.body.modules' covers the whole subtree. Use bracket",
-    "notation for a key containing dots: \"$['report.csv']\"."
+    "notation for a key containing dots: \"$['report.csv']\".",
+    "",
+    "`field` instead of `path` strips that key at any depth, for a field added to",
+    "every row of a list. `file` may end in `*` for path and field entries alike."
   ],
   "accepted": [
     {
@@ -130,6 +133,109 @@
       "file": "api/settings.json",
       "path": "$.body.netWorth",
       "why": "New key. Which classes of holding count toward net worth, per class. Absent means counted."
+    },
+    {
+      "file": "*",
+      "field": "investment",
+      "why": "Investing is its own flow (server/engines/investing.js): a movement into an ETF, a broker, an exchange or a skin marketplace is neither income nor spending. New per-row field: the reason a movement counts as investing (link, order, category, counterparty), absent when it does not."
+    },
+    {
+      "file": "*",
+      "field": "position",
+      "why": "Investing is its own flow (server/engines/investing.js): a movement into an ETF, a broker, an exchange or a skin marketplace is neither income nor spending. New per-row field on rows a marketplace module wrote for its own trades (Pricempire's \"Buy 1x …\"). They describe a holding, not money leaving an account, and leave every flow total; the bank debit is the money."
+    },
+    {
+      "file": "*",
+      "field": "legacyTravel",
+      "why": "Travel is no longer a category (server/lib/derivedCategories.js): category assignments that said `travel` are skipped in the fold, so those movements keep the category they had before, or return to the review queue when travel was all they ever had. New per-row field marking the movements that once carried it, so the Travel page can hand them to a trip."
+    },
+    {
+      "file": "api/analytics*",
+      "path": "$.body",
+      "why": "Investing is its own flow (server/engines/investing.js): a movement into an ETF, a broker, an exchange or a skin marketplace is neither income nor spending. Every aggregate moves with it: the cashflow gains an `invested` column and its expense drops by what was invested; breakdowns, trend, merchants, calendar, shifts, amortized view and insights are drawn from consumption only; the flow sends investing to its own nodes. Marketplace position rows leave the totals. Travel is no longer a category (server/lib/derivedCategories.js): category assignments that said `travel` are skipped in the fold, so those movements keep the category they had before, or return to the review queue when travel was all they ever had. The analytics response also gains `previous` (the prior span's totals for the headline tiles), the prior span is calendar-aligned (September against August, not the 30 days before), and granularity=week is now weekly instead of silently monthly."
+    },
+    {
+      "file": "api/analytics_pace.json",
+      "why": "New endpoint. GET /api/analytics/pace, a month's cumulative spending by day against the month before and a typical month, behind the Spending pace card."
+    },
+    {
+      "file": "api/travels_*_summary.json",
+      "why": "New endpoint. GET /api/travels/:id/summary, one trip per day and per category, behind the single-trip card."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.investing",
+      "why": "Investing is its own flow (server/engines/investing.js): a movement into an ETF, a broker, an exchange or a skin marketplace is neither income nor spending. New key: `counterparties`, null meaning the shipped list."
+    },
+    {
+      "file": "api/travels.json",
+      "path": "$.body",
+      "why": "Each trip's `transactionCount` and `total` are now what the trip *claimed* rather than everything between its dates (which counted the rent and the salary of that week), and it gains `reviewWindow` and `toReview`: the late tail, seven days after the trip, where charges that post after coming home are offered for review."
+    },
+    {
+      "file": "api/travels_trip-*",
+      "path": "$.body",
+      "why": "The trip screen lists the late tail too (up to seven days after the trip, debits only), sorted by date, each late row saying it is after the trip and, when it looks like part of it, why."
+    },
+    {
+      "file": "api/travels_anomalies.json",
+      "path": "$.body.late",
+      "why": "New list: charges after a trip that look like they came from it (paid abroad, or at a merchant already paid during the trip)."
+    },
+    {
+      "file": "api/travels_anomalies.json",
+      "path": "$.body.legacy",
+      "why": "Travel is no longer a category (server/lib/derivedCategories.js): category assignments that said `travel` are skipped in the fold, so those movements keep the category they had before, or return to the review queue when travel was all they ever had. New list: movements once filed as travel that no trip claims, each with the trip it most likely belonged to."
+    },
+    {
+      "file": "api/travels_anomalies.json",
+      "path": "$.body.lateTotal",
+      "why": "Count for the list above."
+    },
+    {
+      "file": "api/travels_anomalies.json",
+      "path": "$.body.legacyTotal",
+      "why": "Count for the list above."
+    },
+    {
+      "file": "api/travels_spending.json",
+      "path": "$.body",
+      "why": "Travel is no longer a category (server/lib/derivedCategories.js): category assignments that said `travel` are skipped in the fold, so those movements keep the category they had before, or return to the review queue when travel was all they ever had. This is the change the user asked for: a trip claimed under the old model read as 100% travel, and now reads as what it was spent on."
+    },
+    {
+      "file": "api/categories.json",
+      "path": "$.body",
+      "why": "New default category `accommodation` (hotels, Airbnb), which is where the old travel keywords for lodging point; `travel` is now system and derived; `investments` carries `investment: true`."
+    },
+    {
+      "file": "«ui»",
+      "why": "Not a captured file. The rows that change category because of the travel fold above — in transactions*.json, transactions_pending*.json, suggestions_*.json and projections.json — cannot be named by path; they are exactly the movements carrying `legacyTravel`, and nothing else should differ there. Suggestions also stop offering `travel` (the lodging keywords now say `accommodation`, the airline ones `transport`), and the CS2 marketplaces suggest `investments` instead of `gaming`."
+    },
+    {
+      "file": "api/recurring.json",
+      "why": "New endpoint. GET /api/recurring, bills and income inferred from the ledger (server/engines/recurring.js), behind the Upcoming bills card and the forecast."
+    },
+    {
+      "file": "api/analytics_forecast.json",
+      "why": "New endpoint. GET /api/analytics/forecast, today's cash from the printed balances, the last thirty days and the weeks ahead (server/engines/forecast.js)."
+    },
+    {
+      "file": "api/analytics_runway.json",
+      "why": "New endpoint. GET /api/analytics/runway, the typical month over the last twelve complete ones, behind the Runway & independence card."
+    },
+    {
+      "file": "api/budgets.json",
+      "why": "New endpoint. GET /api/budgets, this month against the per-category goals (server/engines/budgets.js), and each category's usual month as a suggested goal."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.planning",
+      "why": "New key: the withdrawal rate and real return the independence projection assumes."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.dashboard.views",
+      "why": "New key: the filter-bar states the reader saved as named views."
     }
   ]
 }

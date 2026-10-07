@@ -508,9 +508,19 @@ export default function Transactions() {
                           <Icon name="link" size={13} />
                         </span>
                       )}
+                      {/* Counted as investing rather than spending, and why —
+                          the reason is what lets a wrong verdict be put right. */}
+                      {tx.investment && (
+                        <span
+                          title={t('transactions.investedBecause', { reason: t(`investing.reason.${tx.investment}`) })}
+                          style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle', color: 'var(--info)' }}
+                        >
+                          <Icon name="investments" size={13} />
+                        </span>
+                      )}
                       {travel && (
                         <span
-                          title={`Durante a viagem "${travel.name}"`}
+                          title={t('transactions.duringTrip', { name: travel.name })}
                           style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle', color: 'var(--info)' }}
                         >
                           <Icon name="travel" size={13} />

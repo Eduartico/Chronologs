@@ -116,13 +116,45 @@ function prune(value, path) {
   delete node[last];
 }
 
+/** A file name against an accepted entry's `file`, which may end in `*`. */
+const fileMatches = (pattern, file) =>
+  pattern.endsWith('*') ? file.startsWith(pattern.slice(0, -1)) : pattern === file;
+
+/**
+ * Removes a key wherever it occurs, at any depth.
+ *
+ * For a field that was *added* to every row of a list — `investment` on each
+ * transaction — a JSON path cannot name it: there is one per element, and the
+ * paths here have no wildcard for an index. Stripping the key by name says the
+ * same thing, "this field is new", without accepting anything else about the row.
+ */
+function stripField(value, field) {
+  if (Array.isArray(value)) {
+    for (const item of value) stripField(item, field);
+  } else if (value && typeof value === 'object') {
+    delete value[field];
+    for (const key of Object.keys(value)) stripField(value[key], field);
+  }
+}
+
 let compared = 0;
 const accepted = [];
 for (const file of [...expectedFiles].filter((f) => actualFiles.has(f)).sort()) {
   const expected = JSON.parse(readFileSync(join(root, file), 'utf-8'));
   const actual = JSON.parse(JSON.stringify(captured[file]));
 
-  for (const entry of ACCEPTED.filter((a) => a.file === file)) {
+  // A path-less entry accepts the file appearing or disappearing (see
+  // `wholeFileAccepted`), never what is in it: once a file is in both captures
+  // it is compared like any other. It used to reach `prune` with no path and
+  // throw, which only stayed hidden while those files were absent from the
+  // baseline altogether.
+  for (const entry of ACCEPTED.filter((a) => fileMatches(a.file, file) && (a.path || a.field))) {
+    if (entry.field) {
+      stripField(expected, entry.field);
+      stripField(actual, entry.field);
+      accepted.push(`${file} .${entry.field} — ${entry.why}`);
+      continue;
+    }
     prune(expected, entry.path);
     prune(actual, entry.path);
     accepted.push(`${file} ${entry.path} — ${entry.why}`);

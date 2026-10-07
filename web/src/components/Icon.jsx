@@ -107,6 +107,14 @@ const PATHS = {
   tag: 'M3 12V4h8l9 9-8 8zM7.5 7.5h.01',
   lightbulb: 'M9 18h6M10 21h4M8 14a5 5 0 116 0c-.7.9-1 1.6-1 3H9c0-1.4-.3-2.1-1-3zM12 2v1.5M4 7l1.2.9M20 7l-1.2.9',
   play: 'M6 4l14 8-14 8z',
+  // Rings around a centre: a goal.
+  target: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7a5 5 0 100 10 5 5 0 000-10zM12 11a1 1 0 100 2 1 1 0 000-2z',
+  // A flag planted at the top: the point at which work becomes optional.
+  flag: 'M5 21V4M5 4h11l-2.5 4 2.5 4H5',
+  // A bookmark: a saved view.
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
+  // A gauge: how fast, not how much.
+  pace: 'M4 18a8 8 0 1116 0M12 18l4.5-5.5M7.5 12.5h.01M12 10v.01M16.5 12.5h.01',
   hourglass: 'M6 3h12M6 21h12M7 3c0 5 4 6 5 9-1 3-5 4-5 9M17 3c0 5-4 6-5 9 1 3 5 4 5 9',
   sparkles: 'M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8zM4 14l.6 1.7L6.5 16l-1.9.6L4 18.5l-.6-1.9L1.5 16l1.9-.3z',
   alert: 'M12 3l10 18H2zM12 9v5M12 17h.01',

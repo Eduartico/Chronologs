@@ -19,6 +19,13 @@ import Committed from './widgets/Committed.jsx';
 import Projection from './widgets/Projection.jsx';
 import Trips from './widgets/Trips.jsx';
 import NetWorth from './widgets/NetWorth.jsx';
+import TripDetail from './widgets/TripDetail.jsx';
+import Pace from './widgets/Pace.jsx';
+import Investing from './widgets/Investing.jsx';
+import Upcoming from './widgets/Upcoming.jsx';
+import Forecast from './widgets/Forecast.jsx';
+import Goals from './widgets/Goals.jsx';
+import Freedom from './widgets/Freedom.jsx';
 
 /** The one place a widget id becomes a component. The catalogue names what
     exists; this says what draws it. */
@@ -36,6 +43,13 @@ const COMPONENTS = {
   projection: Projection,
   trips: Trips,
   networth: NetWorth,
+  trip: TripDetail,
+  pace: Pace,
+  investing: Investing,
+  upcoming: Upcoming,
+  forecast: Forecast,
+  goals: Goals,
+  freedom: Freedom,
 };
 
 /**

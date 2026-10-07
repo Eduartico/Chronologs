@@ -49,6 +49,7 @@ export const VIEW_ICONS = {
   sunburst: 'chartSunburst',
   sankey: 'chartSankey',
   heatmap: 'chartCalendar',
+  calendar: 'calendar',
   table: 'table',
   // The uncontrolled fallback for a card that is not a dashboard node and so has
   // no named views: whatever it draws, or its rows.
@@ -199,6 +200,71 @@ export const WIDGETS = [
     icon: 'wallet',
     views: ['bar', 'table'],
     defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /*
+   * One trip, chosen on the card. Not a view of `trips`: that card compares
+   * every trip at once and follows the dashboard's range, while this one is a
+   * single trip over its own dates — a different question with a different
+   * period, which is the line between a view and a card.
+   */
+  {
+    id: 'trip',
+    icon: 'plane',
+    views: ['bar', 'pie', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* A month's spending as it built up, against last month and a typical one —
+     "am I on track", which neither the cashflow nor the projection answers. */
+  {
+    id: 'pace',
+    icon: 'pace',
+    views: ['line', 'table'],
+    defaultView: 'line',
+    defaultSize: 'half',
+  },
+  /* Where the money that is no longer "spending" went. */
+  {
+    id: 'investing',
+    icon: 'investments',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* What will be charged next, inferred from what already was. A calendar, not
+     the heatmap: the heatmap is how much was spent on a day that happened, this
+     is which bill lands on a day that has not. */
+  {
+    id: 'upcoming',
+    icon: 'calendar',
+    views: ['calendar', 'table'],
+    defaultView: 'calendar',
+    defaultSize: 'half',
+  },
+  /* The month against the reader's own per-category goals. */
+  {
+    id: 'goals',
+    icon: 'target',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* How many months the cash covers, and when the invested pot would pay for a
+     typical year. */
+  {
+    id: 'freedom',
+    icon: 'flag',
+    views: ['line', 'table'],
+    defaultView: 'line',
+    defaultSize: 'half',
+  },
+  /* The balance ahead, from today's figure, those bills and everyday spending. */
+  {
+    id: 'forecast',
+    icon: 'chartArea',
+    views: ['line', 'table'],
+    defaultView: 'line',
     defaultSize: 'half',
   },
 ];

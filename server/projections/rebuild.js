@@ -2,6 +2,8 @@ import { replayEvents } from '../ledger/eventStore.js';
 import { loadAssets, loadCategories, loadRules } from '../ledger/fileStore.js';
 import { analyzeAccounts, deriveSelfNames, isCashWithdrawal, compileProfiles } from '../engines/accounts.js';
 import { loadSettings } from '../lib/settings.js';
+import { compileCounterparties, investmentReason } from '../engines/investing.js';
+import { derivedCategoryNames } from '../lib/derivedCategories.js';
 
 export const INTERNAL_CATEGORY = 'internal transfer';
 export const CASH_WITHDRAWAL_CATEGORY = 'cash withdrawal';
@@ -32,6 +34,23 @@ async function institutionProfiles() {
   }
 }
 
+/**
+ * The instances whose transactions are records of a *position* rather than of
+ * money moving through an account — a marketplace's own trade log.
+ *
+ * Read off the manifest's `family`, so a fork with a different marketplace gets
+ * the same treatment without naming it anywhere. Same dynamic import and the
+ * same fallback as the profiles above.
+ */
+async function positionSources() {
+  try {
+    const { instancesOfFamily } = await import('../framework/registry.js');
+    return new Set((await instancesOfFamily('marketplace', { includeDisabled: true })).map((i) => i.id));
+  } catch {
+    return new Set();
+  }
+}
+
 export async function buildProjections() {
   const events = await replayEvents();
 
@@ -52,7 +71,24 @@ export async function buildProjections() {
   // means the last void/unvoid wins, so a mistaken merge can be undone.
   const voided = {};
 
+  // Assignments to a computed category (`travel`) are history, not decisions.
+  // They are skipped in the fold, so the transaction keeps whatever it was filed
+  // under before — or goes back to the review queue if "travel" was all it ever
+  // had, which is the honest state: nobody has said what it bought. The fact
+  // that it *was* called travel is kept, because it is the only clue to which
+  // trip a flight booked six weeks ahead belonged to.
+  const derived = derivedCategoryNames(loadCategories());
+  const legacyDerived = {};
+
   for (const ev of events) {
+    if (ev.type === 'category_assignment' && derived.has(ev.payload.category)) {
+      legacyDerived[ev.payload.event_id] = true;
+      continue;
+    }
+    if (ev.type === 'manual_override' && derived.has(ev.payload.new_category)) {
+      legacyDerived[ev.payload.event_id] = true;
+      continue;
+    }
     if (ev.type === 'category_assignment') {
       const key = ev.payload.event_id;
       // Manual overrides always win, even against assignments that were
@@ -158,6 +194,7 @@ export async function buildProjections() {
     const override = byAnyId(overrides);
     const void_ = byAnyId(voided);
     const learned = byAnyId(enrichments) || {};
+    const wasTravel = !!byAnyId(legacyDerived);
     return {
       // What the document said this movement belongs to. Read at ingestion when
       // the parser knew how, backfilled from the stored originals when it did not.
@@ -187,6 +224,9 @@ export async function buildProjections() {
       tags: [...(tagsByTransaction[stableId] || [])],
       removedTags: [...(removedTagsByTransaction[stableId] || [])],
       links: linksByTransaction[stableId] || [],
+      // Only present when true, so a ledger with no old travel assignments
+      // projects exactly as it did.
+      ...(wasTravel ? { legacyTravel: true } : {}),
       raw: ev,
     };
   });
@@ -254,9 +294,45 @@ export async function buildProjections() {
   const excludedCategories = new Set(categories.filter((c) => c.excludeFromSpending).map((c) => c.name));
   const excludedFromSpending = (t) => excludedCategories.has(categoryMap[t.id] || t.category);
 
+  /*
+   * Investing, decided once, here, beside the internal-transfer verdict above.
+   *
+   * Two separate things happen:
+   *
+   *  - A marketplace module's own trade rows ("Buy 1x AK-47 | Redline") are
+   *    marked `position` and leave every flow total. They describe a holding,
+   *    not money leaving an account: the bank's debit to the marketplace is the
+   *    money, and counting both counted every skin twice. They stay in
+   *    `transactions`, and the Investments page reads holdings from its own
+   *    events regardless.
+   *  - Every other row gets `investment` set to the *reason* it is investing
+   *    (see engines/investing.js), or nothing. The aggregates keep those in a
+   *    column of their own — neither income nor spending.
+   */
+  const positions = await positionSources();
+  const positionIds = new Set(transactions.filter((t) => positions.has(t.source)).map((t) => t.id));
+  const investmentCategories = new Set(categories.filter((c) => c.investment).map((c) => c.name));
+  const matchCounterparty = compileCounterparties(settings.investing?.counterparties);
+  for (const tx of transactions) {
+    if (positionIds.has(tx.id)) {
+      tx.position = true;
+      continue;
+    }
+    if (tx.internal) continue;
+    const reason = investmentReason(tx, {
+      investmentCategories,
+      matchCounterparty,
+      positionIds,
+      category: categoryMap[tx.id] || tx.category,
+    });
+    if (reason) tx.investment = reason;
+  }
+
   // What every spending figure should be computed over. Internal movements are
   // not income and not expense; they are the same euros changing pocket.
-  const spendingTransactions = transactions.filter((t) => !t.internal && !excludedFromSpending(t));
+  const spendingTransactions = transactions.filter(
+    (t) => !t.internal && !t.position && !excludedFromSpending(t),
+  );
 
   // Investment transactions are projected separately from bank transactions on
   // purpose: they need no categorizing, and mixing them in would bury the

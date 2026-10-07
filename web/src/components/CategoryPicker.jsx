@@ -89,7 +89,9 @@ export default function CategoryPicker({
 function Grid({ categories, selected, onPick, disabled }) {
   return (
     <div className="category-grid">
-      {categories.map((c) => (
+      {/* A computed category (`travel`) is never offered: the Travel page claims
+          a transaction for a trip, and the category stays what it bought. */}
+      {categories.filter((c) => !c.derived).map((c) => (
         <button
           key={c.id}
           type="button"

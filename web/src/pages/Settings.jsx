@@ -289,6 +289,36 @@ export default function Settings() {
         />
       </div>
 
+      {/* The two guesses behind the financial-independence card. Plain number
+          fields: they are ordinary form inputs, not inline editors. */}
+      <div className="card" hidden={tab !== 'general'} style={{ maxWidth: 760 }}>
+        <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="flag" size={16} />{t('settings.planning.title')}</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 12px' }}>
+          {t('settings.planning.help')}
+        </p>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {['withdrawalRate', 'realReturn'].map((key) => (
+            <label key={key} className="form-group" style={{ minWidth: 220 }}>
+              <span>{t(`settings.planning.${key}`)}</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="20"
+                defaultValue={settings.planning?.[key] ?? (key === 'withdrawalRate' ? 4 : 5)}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isFinite(value) || value < 0 || value > 20) return;
+                  if (value === settings.planning?.[key]) return;
+                  save({ planning: { ...settings.planning, [key]: value } });
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
       <CurrencyCard hidden={tab !== 'general'} onToast={showToast} />
 
       {toast && <div className="toast">{toast}</div>}

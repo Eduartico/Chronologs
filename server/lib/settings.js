@@ -108,6 +108,25 @@ const DEFAULT_SETTINGS = {
    * silently vanish from the total.
    */
   netWorth: { include: {} },
+  /*
+   * Money moved into an investment is neither income nor spending.
+   *
+   * `counterparties` is the list of brokers, exchanges and skin marketplaces a
+   * bank memo is matched against (see engines/investing.js). `null` means the
+   * shipped list, `DEFAULT_COUNTERPARTIES`, which is the one place it lives —
+   * the same convention as `internal.profile`.
+   */
+  investing: { counterparties: null },
+  /*
+   * The two assumptions behind the financial-independence card, in percent.
+   *
+   * `withdrawalRate` is how much of the invested pot could be drawn a year
+   * without running it down — 4% is the long-standing rule of thumb, and the
+   * reader can be more careful. `realReturn` is growth after inflation, used
+   * only to project the years ahead. Both are guesses about the future and the
+   * card says which ones it used.
+   */
+  planning: { withdrawalRate: 4, realReturn: 5 },
   // How the app looks and reads.
   //
   // `theme` names an entry in web/src/styles/themes.js; the light/dark, sidebar
@@ -158,6 +177,9 @@ const DEFAULT_SETTINGS = {
       { id: 'merchants', widget: 'merchants', view: 'bar', size: 'half' },
       { id: 'savings', widget: 'savings', view: 'line', size: 'full' },
     ],
+    // Named filter-bar states — a preset or a fixed range, the granularity and
+    // the category filter — that the reader saved to come back to.
+    views: [],
   },
 };
 
@@ -187,6 +209,8 @@ export function loadSettings() {
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     analytics: { ...DEFAULT_SETTINGS.analytics, ...(stored.analytics || {}) },
     netWorth: { ...structuredClone(DEFAULT_SETTINGS.netWorth), ...(stored.netWorth || {}) },
+    investing: { ...DEFAULT_SETTINGS.investing, ...(stored.investing || {}) },
+    planning: { ...DEFAULT_SETTINGS.planning, ...(stored.planning || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
     dashboard: { ...structuredClone(DEFAULT_SETTINGS.dashboard), ...(stored.dashboard || {}) },
     modules: { ...(stored.modules || {}) },

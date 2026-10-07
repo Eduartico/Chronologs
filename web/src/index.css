@@ -619,6 +619,13 @@ tbody tr:hover td {
   color: var(--accent);
   border-color: var(--accent);
 }
+/* A label that is information, not a filter chip: the accent marks it as the
+   one worth looking at ("likely from the trip"), and its words say so without it. */
+.tag-accent {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .tag.active {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -1667,6 +1674,21 @@ tbody tr:focus-within .icon-swatch-button {
   color: var(--bad);
 }
 
+/* A two-state toggle that is only an icon (the investing flag on a category).
+   On is the accent, filled; off is the ordinary quiet glyph. The state is also
+   `aria-pressed` and the tooltip says which, so the hue is never the only
+   channel carrying it. */
+.icon-btn.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.icon-btn.is-off {
+  opacity: 0.45;
+}
+.icon-btn.is-off:hover:not(:disabled) {
+  opacity: 1;
+}
+
 /* A fixed floor under the cluster: edit/delete and confirm/cancel are the same
    two positions, so swapping between them must not move the column. */
 .row-actions {
@@ -2386,8 +2408,12 @@ th.sortable.num .th-inner {
   margin-bottom: var(--sp-3);
   flex-wrap: wrap;
 }
+/* A basis rather than `auto`: with `auto` the basis is the subtitle's full
+   length, so a card with a long subtitle wrapped its whole title block onto a
+   line of its own under the grip. A fixed basis keeps the title beside the grip
+   and the controls and lets the subtitle wrap inside it. */
 .chart-head-title {
-  flex: 1 1 auto;
+  flex: 1 1 12rem;
   min-width: 0;
 }
 .chart-head-controls {
@@ -2395,6 +2421,116 @@ th.sortable.num .th-inner {
   gap: var(--sp-1);
   align-items: center;
   margin-left: auto;
+}
+/* ---- upcoming bills calendar ----
+   A real calendar laid out by CSS: seven columns from the locale's first day,
+   five weeks. The cell height is fixed so a busy day scrolls inside the card
+   rather than stretching one row of the month. */
+.bills-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  height: 100%;
+  overflow: auto;
+  font-size: var(--fs-xs);
+}
+.bills-head {
+  color: var(--text-muted);
+  text-align: center;
+  padding-bottom: 2px;
+  text-transform: capitalize;
+}
+.bills-day {
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px 3px;
+  background: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bills-day.is-past {
+  opacity: 0.45;
+}
+/* Today is outlined in the accent and its date is bold, so it is found without
+   relying on the hue. */
+.bills-day.is-today {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.bills-day.is-today .bills-date {
+  font-weight: 700;
+  color: var(--text);
+}
+.bills-date {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.bills-chip {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 1px 3px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.bills-chip:hover {
+  border-color: var(--accent);
+}
+/* Money coming in is the one kind of entry that is not a bill; it carries a
+   `+` through Value, and a solid left edge as the non-colour channel. */
+.bills-chip.is-in {
+  border-left: 3px solid var(--pnl-up);
+}
+/* Expected and not seen yet: dashed, the same "inferred" mark the projection
+   card uses for what has not happened. */
+.bills-chip.is-overdue {
+  border-style: dashed;
+}
+.bills-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.bills-more {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.bill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+  font-size: var(--fs-sm);
+}
+.bill-detail-amount {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.bill-hidden-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A choice that belongs to one card (which trip the trip card shows). Smaller
+   than a form field so it sits in the header beside the view switch, and capped
+   so a long trip name cannot push the switch off the card. */
+.chart-select {
+  font-size: var(--fs-sm);
+  padding: 3px 6px;
+  max-width: 180px;
+  text-overflow: ellipsis;
 }
 .dash-node > .chart-head {
   /* Not a drag source any more — the grip is. Text in here is selectable. */

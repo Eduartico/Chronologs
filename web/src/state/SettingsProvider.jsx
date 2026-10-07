@@ -186,6 +186,27 @@ export function useAppearance() {
 export function useDashboardSettings() {
   const { settings, save, saving } = useSettings();
   const nodes = settings?.dashboard?.nodes ?? null;
-  const setNodes = useCallback((next) => save({ dashboard: { nodes: next } }), [save]);
+  // Merged into the dashboard block, never written over it: the block holds the
+  // saved views too, and a card dragged one slot along must not delete them.
+  const setNodes = useCallback(
+    (next) => save({ dashboard: { ...(settings?.dashboard || {}), nodes: next } }),
+    [save, settings?.dashboard],
+  );
   return { nodes, setNodes, saving };
+}
+
+/**
+ * Named filter-bar states the reader can come back to — "Last month · food",
+ * "This year, weekly". Stored beside the layout, in the same block, for the same
+ * reason the layout is stored at all: it should survive a cache clear and
+ * another browser.
+ */
+export function useSavedViews() {
+  const { settings, save } = useSettings();
+  const views = settings?.dashboard?.views ?? [];
+  const setViews = useCallback(
+    (next) => save({ dashboard: { ...(settings?.dashboard || {}), views: next } }),
+    [save, settings?.dashboard],
+  );
+  return { views, setViews };
 }

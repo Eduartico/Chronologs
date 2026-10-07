@@ -2,16 +2,108 @@ const amountOf = (tx) => (typeof tx.amount === 'number' ? tx.amount : parseFloat
 
 const dateOf = (tx) => (tx.date || tx.timestamp || '').slice(0, 10);
 
-/** Buckets a date into the requested granularity: 2026-03-14 -> "2026-Q1". */
+/**
+ * Money that went into an investment, or came back out of one.
+ *
+ * Decided once, in the projection (`tx.investment` carries the reason — see
+ * `investmentReason` in `server/projections/rebuild.js`), and read here as a
+ * plain flag. An ETF bought for €500 used to land in "spending" beside the rent,
+ * which said the month cost €500 more than it did: the money left the current
+ * account, but it is still the owner's, in a different form.
+ */
+export const isInvestment = (tx) => !!tx.investment;
+
+/** The two halves every aggregate below is fed: what was consumed, and what was
+    moved into or out of an investment. */
+export function splitFlows(transactions) {
+  const consumption = [];
+  const investing = [];
+  for (const tx of transactions) (isInvestment(tx) ? investing : consumption).push(tx);
+  return { consumption, investing };
+}
+
+/** The bucket sizes the dashboard can draw, finest first. */
+export const GRANULARITIES = ['day', 'week', 'month', 'quarter', 'year'];
+
+const DAY_MS = 86400000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+const dayMs = (iso) => Date.parse(`${String(iso).slice(0, 10)}T00:00:00Z`);
+
+/** The Monday of the week a date falls in. Weeks start on Monday in Portugal and
+    across most of the locales this ships, and an ISO week is the one people mean
+    when they say "this week". */
+function weekStart(iso) {
+  const ms = dayMs(iso);
+  if (!Number.isFinite(ms)) return null;
+  const weekday = (new Date(ms).getUTCDay() + 6) % 7;
+  return isoDay(ms - weekday * DAY_MS);
+}
+
+/**
+ * Buckets a date into the requested granularity: 2026-03-14 -> "2026-Q1".
+ *
+ * A day is its own date and a week is named by its Monday, so both sort as
+ * strings like every other key here and both read as a date on an axis.
+ */
 export function bucketKey(dateStr, granularity = 'month') {
   const iso = String(dateStr || '');
   if (iso.length < 7) return null;
+  if (granularity === 'day') return iso.length >= 10 ? iso.slice(0, 10) : null;
+  if (granularity === 'week') return iso.length >= 10 ? weekStart(iso) : null;
   if (granularity === 'year') return iso.slice(0, 4);
   if (granularity === 'quarter') {
     const q = Math.floor((Number(iso.slice(5, 7)) - 1) / 3) + 1;
     return `${iso.slice(0, 4)}-Q${q}`;
   }
   return iso.slice(0, 7);
+}
+
+/**
+ * The bucket size that suits a range, when the reader has not picked one.
+ *
+ * A month drawn monthly is one point, which is not a chart: picking "last
+ * month" used to show a single dot on every card, and the only way out was to
+ * know that the granularity selector existed and change it by hand. The steps
+ * are where the point count stops being readable — a day per point up to about
+ * six weeks (≤45 points), a week per point up to about half a year (≤27), a
+ * month after that.
+ */
+export function resolveGranularity(requested, { from, to, earliest, latest, today } = {}) {
+  if (GRANULARITIES.includes(requested)) return requested;
+  if (requested !== 'auto') return 'month';
+  const start = from || earliest;
+  const end = to || latest || today || isoDay(Date.now());
+  if (!start || !end) return 'month';
+  const days = Math.round((dayMs(end) - dayMs(start)) / DAY_MS) + 1;
+  if (!Number.isFinite(days)) return 'month';
+  if (days <= 45) return 'day';
+  if (days <= 190) return 'week';
+  return 'month';
+}
+
+/**
+ * Every bucket key between two dates, for the granularities fine enough to have
+ * holes.
+ *
+ * A month without a single transaction is rare enough that the monthly series
+ * has never needed this. A day without one is most days, and a line drawn only
+ * through the days that had spending skips the quiet ones — Saturday €80 joined
+ * straight to Tuesday €12 reads as two days of steady spending, when the truth
+ * is two spikes and three zeroes. Only day and week are filled, so a monthly
+ * response is exactly what it always was.
+ */
+export function periodKeys(from, to, granularity) {
+  if (granularity !== 'day' && granularity !== 'week') return null;
+  const start = dayMs(from);
+  const end = dayMs(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  // A guard rather than a limit anyone should meet: ten years of days.
+  if ((end - start) / DAY_MS > 3700) return null;
+  const step = granularity === 'week' ? 7 : 1;
+  const keys = [];
+  let cursor = dayMs(bucketKey(isoDay(start), granularity));
+  for (; cursor <= end; cursor += step * DAY_MS) keys.push(isoDay(cursor));
+  return keys;
 }
 
 /** Applies the dashboard's date range and category filter to a transaction list. */
@@ -77,17 +169,41 @@ export function applyTransactionFilters(transactions, query = {}) {
   return list;
 }
 
-export function computeMonthlyCashflow(transactions, granularity = 'month') {
+/**
+ * Income, spending and investing per period.
+ *
+ * Three columns, not two. A movement into an investment is neither income nor
+ * spending: buying €500 of an ETF does not make the month €500 more expensive,
+ * and selling skins does not make it €300 richer — in both cases the money
+ * changed form and stayed the owner's. So `invested` is the *net* put into
+ * investments over the period (purchases less sales, and it can go negative in
+ * a month that sold more than it bought), and it is kept apart from both.
+ *
+ * `net` is still the cash the period added to or took from the accounts —
+ * `income − expense − invested` — which is the same number it always was,
+ * because the investment rows used to sit inside income and expense. The
+ * running balance is built from it, so that card does not move at all.
+ *
+ * `bounds` fills the empty days or weeks of a fine-grained range with zeroes;
+ * see `periodKeys`.
+ */
+export function computeMonthlyCashflow(transactions, granularity = 'month', bounds = {}) {
   const buckets = {};
+  const blank = () => ({ income: 0, expense: 0, invested: 0, net: 0, count: 0 });
   for (const tx of transactions) {
     const key = bucketKey(dateOf(tx), granularity);
     if (!key) continue;
-    if (!buckets[key]) buckets[key] = { income: 0, expense: 0, net: 0, count: 0 };
+    if (!buckets[key]) buckets[key] = blank();
     const amt = amountOf(tx);
-    if (amt > 0) buckets[key].income += amt;
-    else buckets[key].expense += Math.abs(amt);
-    buckets[key].net = buckets[key].income - buckets[key].expense;
-    buckets[key].count++;
+    const bucket = buckets[key];
+    if (isInvestment(tx)) bucket.invested -= amt;
+    else if (amt > 0) bucket.income += amt;
+    else bucket.expense += Math.abs(amt);
+    bucket.net = bucket.income - bucket.expense - bucket.invested;
+    bucket.count++;
+  }
+  for (const key of periodKeys(bounds.from, bounds.to, granularity) || []) {
+    if (!buckets[key]) buckets[key] = blank();
   }
   return Object.entries(buckets)
     .map(([month, data]) => ({ month, ...data }))
@@ -102,7 +218,7 @@ export const OTHER_BUCKET = 'other';
  * per period with a column per category. Categories are capped so the chart
  * never needs more colours than the palette has slots.
  */
-export function computeCategoryTrend(transactions, categoryMap = {}, granularity = 'month', maxSeries = 8) {
+export function computeCategoryTrend(transactions, categoryMap = {}, granularity = 'month', maxSeries = 8, bounds = {}) {
   const totals = {};
   for (const tx of transactions) {
     const amt = amountOf(tx);
@@ -131,6 +247,12 @@ export function computeCategoryTrend(transactions, categoryMap = {}, granularity
     const row = buckets.get(key) || { period: key };
     row[slot] = (row[slot] || 0) + Math.abs(amt);
     buckets.set(key, row);
+  }
+
+  // The same holes as the cashflow, filled the same way: a stack drawn only
+  // through the days that had spending interpolates across the ones that did not.
+  for (const key of periodKeys(bounds.from, bounds.to, granularity) || []) {
+    if (!buckets.has(key)) buckets.set(key, { period: key });
   }
 
   return {
@@ -181,7 +303,22 @@ const RATE_LIMIT = 100;
  * twelve months outside ±100%, the worst being July 2021 — €45 of income
  * against €379 of spending, which is a student year, not a data error.
  */
-export function computeSavingsRate(cashflow) {
+export function computeSavingsRate(cashflow, { cumulative = false } = {}) {
+  // A savings rate per *day* is noise: most days have no income at all, so the
+  // series would be a row of gaps with the occasional payday spike. Over a fine
+  // range the question is "how much of what came in so far is still here", so
+  // each point is the rate of the range up to and including that period.
+  if (cumulative) {
+    let income = 0;
+    let expense = 0;
+    return computeSavingsRate(
+      cashflow.map((m) => {
+        income += m.income;
+        expense += m.expense;
+        return { month: m.month, income, expense };
+      }),
+    );
+  }
   return cashflow.map((m) => {
     const material = m.income > 0 && (m.income >= MATERIAL_INCOME || m.income >= MATERIAL_INCOME_RATIO * m.expense);
     if (!material) return { month: m.month, rate: null, trueRate: null, clamped: false };
@@ -346,6 +483,46 @@ function cadenceLabel(days) {
   if (days <= 120) return 'trimestral';
   if (days <= 250) return 'semestral';
   return 'anual';
+}
+
+/**
+ * The span a range is compared against.
+ *
+ * A range that starts on the first of a month is read as calendar months, and
+ * compared with the same calendar months before it: September against August,
+ * not against the thirty days ending on 31 August (which starts on the 2nd);
+ * the first week of October against the first week of September, not against the
+ * last week of September, which holds the rent; this year so far against the same
+ * days of last year. Anything else keeps the old rule —
+ * the same number of days, immediately before.
+ */
+export function priorSpan(from, to) {
+  const DAY = 86400000;
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const ms = (d) => Date.parse(`${d}T00:00:00Z`);
+  if (from.endsWith('-01')) {
+    const [fy, fm] = from.split('-').map(Number);
+    const [ty, tm, td] = to.split('-').map(Number);
+    // A range inside one year that starts on 1 January is "the year so far",
+    // and the period before it is the same stretch of last year — not the ten
+    // months ending in December.
+    const yearToDate = from.endsWith('-01-01') && ty === fy;
+    const months = yearToDate ? 12 : (ty - fy) * 12 + (tm - fm) + 1;
+    const shift = (y, m, d) => {
+      const target = new Date(Date.UTC(y, m - 1 - months, 1));
+      const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+      target.setUTCDate(Math.min(d, last));
+      return iso(target.getTime());
+    };
+    const monthEnd = new Date(Date.UTC(ty, tm, 0)).getUTCDate() === td;
+    return {
+      priorFrom: shift(fy, fm, 1),
+      priorTo: monthEnd ? iso(ms(from) - DAY) : shift(ty, tm, td),
+    };
+  }
+  const days = Math.round((ms(to) - ms(from)) / DAY) + 1;
+  const priorTo = iso(ms(from) - DAY);
+  return { priorFrom: iso(ms(priorTo) - (days - 1) * DAY), priorTo };
 }
 
 /**
@@ -552,12 +729,14 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
     const amount = amountOf(tx);
     if (!amount) continue;
     const size = Math.abs(amount);
-    const category = categoryOf(tx);
-    const bucket = amount > 0 ? credits : debits;
-    bucket.set(category, (bucket.get(category) || 0) + size);
     const account = String(accountOf(tx));
     accountTotals.set(account, (accountTotals.get(account) || 0) + size);
     scale += size;
+    // Investing has nodes of its own and never competes for a category slot.
+    if (isInvestment(tx)) continue;
+    const category = categoryOf(tx);
+    const bucket = amount > 0 ? credits : debits;
+    bucket.set(category, (bucket.get(category) || 0) + size);
   }
 
   const isSource = (category) => (credits.get(category) || 0) >= (debits.get(category) || 0);
@@ -587,11 +766,22 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
 
   const income = new Map();
   const expense = new Map();
+  // Per account, kept out of the category columns: what went into investments
+  // ends in an "invested" node beside "saved", and what came back out of one
+  // opens in a "divested" node beside "drawn". Money that changed form is not a
+  // category it was spent on, and selling an ETF is not where income comes from.
+  const invested = new Map();
+  const divested = new Map();
 
   for (const tx of transactions) {
     const amount = amountOf(tx);
     if (!amount) continue;
     const account = foldAccount(String(accountOf(tx)));
+    if (isInvestment(tx)) {
+      const side = amount < 0 ? invested : divested;
+      side.set(account, (side.get(account) || 0) + Math.abs(amount));
+      continue;
+    }
     if (amount > 0) {
       const key = foldSource(sourceOf(tx));
       const byAccount = income.get(key) || new Map();
@@ -645,6 +835,21 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
     }
   }
 
+  // Totals are measured before the investment legs join the account balances:
+  // the footnote says what was earned and what was spent, and investing is
+  // neither.
+  const earned = [...inflows.values()].reduce((a, b) => a + b, 0);
+  const spent = [...outflows.values()].reduce((a, b) => a + b, 0);
+
+  for (const [account, value] of bySizeDesc(divested)) {
+    links.push({ source: nodeAt('divested', 'residual'), target: nodeAt(account, 'account'), value });
+    inflows.set(account, (inflows.get(account) || 0) + value);
+  }
+  for (const [account, value] of bySizeDesc(invested)) {
+    links.push({ source: nodeAt(account, 'account'), target: nodeAt('invested', 'residual'), value });
+    outflows.set(account, (outflows.get(account) || 0) + value);
+  }
+
   for (const account of new Set([...inflows.keys(), ...outflows.keys()])) {
     const residual = round2((inflows.get(account) || 0) - (outflows.get(account) || 0));
     if (residual > 0.005) {
@@ -658,8 +863,9 @@ export function computeFlow(transactions, categorizedMap = {}, options = {}) {
     nodes,
     links: links.map((l) => ({ ...l, value: round2(l.value) })).filter((l) => l.value > 0),
     totals: {
-      income: round2([...inflows.values()].reduce((a, b) => a + b, 0)),
-      expense: round2([...outflows.values()].reduce((a, b) => a + b, 0)),
+      income: round2(earned),
+      expense: round2(spent),
+      invested: round2(sumMap(invested) - sumMap(divested)),
     },
   };
 }
@@ -725,7 +931,7 @@ export function computeDailySpend(transactions, categorizedMap = {}) {
   const days = new Map();
   for (const tx of transactions) {
     const amount = amountOf(tx);
-    if (amount >= 0) continue;
+    if (amount >= 0 || isInvestment(tx)) continue;
     const date = dateOf(tx);
     if (!date) continue;
     const day = days.get(date) || { date, total: 0, count: 0, top: null, topAmount: 0 };
@@ -743,4 +949,148 @@ export function computeDailySpend(transactions, categorizedMap = {}) {
   return [...days.values()]
     .map((d) => ({ ...d, total: round2(d.total), topAmount: round2(d.topAmount) }))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+/**
+ * How a month's spending built up, day by day, against the month before and
+ * against a typical month.
+ *
+ * The question a reader brings to the dashboard on the 18th is "am I spending
+ * more than usual", and a total cannot answer it — €900 by the 18th is a lot or
+ * nothing depending on how the other months got there. So all three lines are
+ * cumulative by day of month: this month, last month, and the average of the
+ * months before (up to `history` of them, only ones the ledger actually
+ * covers). Where the lines are by the same day is the comparison; the
+ * projection card already says where this one will end.
+ *
+ * Spending only, investing excluded, the same as every other spending figure.
+ * A shorter month carries its final total forward, so day 31 of a 30-day
+ * month reads as "the whole month", which is what it was.
+ */
+export function computePace(transactions, month, { today, earliest, history = 6 } = {}) {
+  const [year, mon] = String(month).split('-').map(Number);
+  if (!year || !mon) return null;
+  const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const keyOf = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+  const back = (n) => {
+    const total = year * 12 + (mon - 1) - n;
+    return { y: Math.floor(total / 12), m: (total % 12) + 1 };
+  };
+
+  // Spending per month, per day of month, in one pass.
+  const daily = new Map();
+  for (const tx of transactions) {
+    const amount = amountOf(tx);
+    if (amount >= 0 || isInvestment(tx)) continue;
+    const date = dateOf(tx);
+    const key = date.slice(0, 7);
+    const day = Number(date.slice(8, 10));
+    if (!day) continue;
+    const days = daily.get(key) || new Map();
+    days.set(day, (days.get(day) || 0) + Math.abs(amount));
+    daily.set(key, days);
+  }
+
+  const cumulative = (y, m, length) => {
+    const days = daily.get(keyOf(y, m)) || new Map();
+    const own = daysInMonth(y, m);
+    const out = [];
+    let running = 0;
+    for (let d = 1; d <= length; d++) {
+      if (d <= own) running += days.get(d) || 0;
+      out.push(running);
+    }
+    return out;
+  };
+
+  const length = daysInMonth(year, mon);
+  const current = cumulative(year, mon, length);
+  const previous = back(1);
+  const prior = cumulative(previous.y, previous.m, length);
+
+  // The months that make "typical": before this one, and not before the ledger
+  // begins — a month the history does not reach is not a month of zero spending.
+  const firstMonth = earliest ? earliest.slice(0, 7) : null;
+  const sample = [];
+  for (let n = 1; n <= history; n++) {
+    const { y, m } = back(n);
+    if (firstMonth && keyOf(y, m) < firstMonth) break;
+    sample.push(cumulative(y, m, length));
+  }
+  const typical = sample.length
+    ? Array.from({ length }, (_, i) => sample.reduce((s, series) => s + series[i], 0) / sample.length)
+    : null;
+
+  // The current month stops at today: the line does not run flat into a future
+  // that has not been spent yet.
+  const todayIso = String(today || '');
+  const isCurrent = todayIso.slice(0, 7) === keyOf(year, mon);
+  const lastDay = isCurrent ? Number(todayIso.slice(8, 10)) : length;
+
+  const rows = Array.from({ length }, (_, i) => ({
+    day: i + 1,
+    current: i < lastDay ? round2(current[i]) : null,
+    previous: round2(prior[i]),
+    typical: typical ? round2(typical[i]) : null,
+  }));
+
+  const at = Math.max(1, Math.min(lastDay, length)) - 1;
+  return {
+    month: keyOf(year, mon),
+    previousMonth: keyOf(previous.y, previous.m),
+    day: isCurrent ? lastDay : null,
+    monthsInTypical: sample.length,
+    rows,
+    // The three lines read at the same day — the comparison the card is for.
+    atDay: {
+      day: at + 1,
+      current: round2(current[at]),
+      previous: round2(prior[at]),
+      typical: typical ? round2(typical[at]) : null,
+    },
+  };
+}
+
+/**
+ * A typical month, measured over the last complete ones: what goes out, what
+ * comes in, what is put into investments.
+ *
+ * The runway and financial-independence figures are only as good as this
+ * denominator, so it is careful about two things. Only *complete* months count
+ * — the current one is a third of a month and would drag every average down.
+ * And only months the ledger reaches count: a year-long window over a ledger
+ * that starts in March is nine months, not twelve with three of them zero.
+ * The median month is reported beside the mean because one month with a
+ * laptop in it moves the mean and leaves the median where the year really was.
+ */
+export function typicalMonth(transactions, { today, months = 12 } = {}) {
+  const [year, mon] = String(today).slice(0, 7).split('-').map(Number);
+  const keys = [];
+  for (let i = months; i >= 1; i--) {
+    const total = year * 12 + (mon - 1) - i;
+    keys.push(`${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`);
+  }
+  const first = transactions.reduce((min, tx) => {
+    const d = dateOf(tx).slice(0, 7);
+    return d && (!min || d < min) ? d : min;
+  }, null);
+  const covered = new Set(keys.filter((k) => first && k >= first));
+  const rows = computeMonthlyCashflow(
+    transactions.filter((tx) => covered.has(dateOf(tx).slice(0, 7))),
+    'month',
+  );
+  const byMonth = new Map(rows.map((r) => [r.month, r]));
+  const series = [...covered].map((k) => byMonth.get(k) || { month: k, income: 0, expense: 0, invested: 0 });
+  const n = series.length;
+  const mean = (pick) => (n ? round2(series.reduce((s, r) => s + pick(r), 0) / n) : 0);
+  const sorted = series.map((r) => r.expense).sort((a, b) => a - b);
+  const medianExpense = n ? (n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2) : 0;
+  return {
+    months: n,
+    from: n ? series[0].month : null,
+    to: n ? series[n - 1].month : null,
+    expense: mean((r) => r.expense),
+    medianExpense: round2(medianExpense),
+    income: mean((r) => r.income),
+    invested: mean((r) => r.invested || 0),
+  };
 }

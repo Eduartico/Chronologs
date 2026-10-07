@@ -9,6 +9,9 @@ import {
   buildTravelIndex,
   travelOverlay,
   tripSpending,
+  reviewWindow,
+  lateSignals,
+  suggestTrip,
 } from './travel.js';
 
 const tx = (date, description, amount = -10, extra = {}) => ({
@@ -251,4 +254,69 @@ test('buildTravelIndex maps transactions to their trip', () => {
   const index = buildTravelIndex([inside, outside], travels);
   assert.equal(index.get(inside.id).id, 't1');
   assert.equal(index.get(outside.id), undefined);
+});
+
+/* ---- the late tail ---- */
+
+const DUBLIN = {
+  id: 'dublin',
+  name: 'Dublin',
+  country: 'IE',
+  startDate: '2025-12-20',
+  endDate: '2025-12-27',
+  forgivingDays: 2,
+  status: 'confirmed',
+  tagId: 'tag-dublin',
+};
+
+test('the trip screen lists a week after the trip; the trip itself does not grow', () => {
+  assert.deepEqual(reviewWindow(DUBLIN), { from: '2025-12-18', to: '2026-01-03' });
+  // What the trip *is* keeps its two-day margin, so a week of groceries at home
+  // after the holiday is offered for review and never reported as missed.
+  assert.deepEqual(travelWindow(DUBLIN), { from: '2025-12-18', to: '2025-12-29' });
+  // A trip written with a margin wider than the tail keeps its margin.
+  assert.equal(reviewWindow({ ...DUBLIN, forgivingDays: 10 }).to, '2026-01-06');
+  // And a trip can carry its own tail.
+  assert.equal(reviewWindow({ ...DUBLIN, trailingDays: 14 }).to, '2026-01-10');
+
+  const late = tx('2026-01-02', 'COMPRA 0412 HOTEL DUBLIN IE');
+  const home = tx('2026-01-02', 'COMPRA 0412 CONTINENTE PORTO PT');
+  assert.equal(transactionsInTravel(DUBLIN, [late, home]).length, 0);
+  assert.equal(transactionsInTravel(DUBLIN, [late, home], { includeLate: true }).length, 2);
+});
+
+test('a late charge is flagged when it was paid abroad or at a merchant from the trip', () => {
+  const during = tx('2025-12-22', 'COMPRA 0412 BOWES DUBLIN IE', -30, { tags: ['tag-dublin'] });
+  const foreignLate = tx('2026-01-01', 'COMPRA 0412 TEMPLE BAR HOTEL DUBLIN IE', -240);
+  const sameMerchantLate = tx('2025-12-31', 'COMPRA 0412 BOWES', -12);
+  const groceries = tx('2025-12-31', 'COMPRA 0412 CONTINENTE PORTO', -45);
+  const signals = lateSignals(DUBLIN, [during, foreignLate, sameMerchantLate, groceries]);
+  assert.equal(signals.get(foreignLate.id), 'foreign');
+  assert.equal(signals.get(sameMerchantLate.id), 'sameMerchant');
+  assert.equal(signals.has(groceries.id), false);
+  // Inside the margin is not "late": it is the trip.
+  assert.equal(signals.has(during.id), false);
+});
+
+test('an old "travel" movement is handed to the trip it most likely belonged to', () => {
+  // Inside the trip, late tail included.
+  assert.equal(suggestTrip(tx('2026-01-02', 'X'), [DUBLIN]).reason, 'during');
+  // Booked six weeks ahead.
+  const flight = suggestTrip(tx('2025-11-08', 'COMPRA 0412 RYANAIR'), [DUBLIN]);
+  assert.equal(flight.travel.id, 'dublin');
+  assert.equal(flight.reason, 'booking');
+  // A year before anything: no honest guess.
+  assert.equal(suggestTrip(tx('2024-11-08', 'COMPRA 0412 RYANAIR'), [DUBLIN]), null);
+  // A rejected proposal is not a trip.
+  assert.equal(suggestTrip(tx('2025-12-22', 'X'), [{ ...DUBLIN, status: 'rejected' }]), null);
+});
+
+test('travelAnomalies lists unclaimed legacy travel and late charges, and nothing claimed', () => {
+  const legacyFlight = tx('2025-11-08', 'COMPRA 0412 RYANAIR', -120, { legacyTravel: true });
+  const legacyClaimed = tx('2025-12-21', 'COMPRA 0412 PUB DUBLIN IE', -20, { legacyTravel: true, tags: ['tag-dublin'] });
+  const lateHotel = tx('2026-01-01', 'COMPRA 0412 TEMPLE BAR HOTEL DUBLIN IE', -240);
+  const { legacy, late } = travelAnomalies([legacyFlight, legacyClaimed, lateHotel], [DUBLIN]);
+  assert.deepEqual(legacy.map((l) => l.transaction.id), [legacyFlight.id]);
+  assert.equal(legacy[0].suggestion.travel.id, 'dublin');
+  assert.deepEqual(late.map((l) => [l.transaction.id, l.reason]), [[lateHotel.id, 'foreign']]);
 });

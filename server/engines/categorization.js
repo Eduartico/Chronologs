@@ -14,6 +14,20 @@ import {
   appendIfNewIndexed,
 } from '../ledger/eventStore.js';
 import { getProjections } from '../projections/cache.js';
+import { httpError } from '../lib/httpError.js';
+import { derivedCategoryNames } from '../lib/derivedCategories.js';
+
+/**
+ * Refuses a category nothing may assign by hand — `travel`, which a trip
+ * computes (see lib/derivedCategories.js). One guard at the three doors a
+ * category comes in through, rather than one per route that happens to call
+ * them, so a new route cannot forget it.
+ */
+function assertAssignable(category) {
+  if (derivedCategoryNames(loadCategories()).has(category)) {
+    throw httpError(400, 'api.error.categoryDerived', { category });
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CATEGORIES_FILE = join(__dirname, '..', 'config', 'defaults', 'categories.json');
@@ -85,6 +99,16 @@ export function ensureDefaultCategories() {
       }
       if (d.excludeFromSpending && !existing.excludeFromSpending) {
         existing.excludeFromSpending = true;
+        changed = true;
+      }
+      if (d.derived && !existing.derived) {
+        existing.derived = true;
+        changed = true;
+      }
+      // Seeded once, and only where the key has never been written: a reader
+      // who switched it off on purpose stored `false`, and that stays.
+      if (d.investment && existing.investment === undefined) {
+        existing.investment = true;
         changed = true;
       }
     }
@@ -201,6 +225,13 @@ export async function updateCategory(id, patch = {}) {
   if (patch.color) cat.color = patch.color;
   if (patch.icon !== undefined) cat.icon = patch.icon || null;
   if (patch.parent !== undefined) cat.parent = patch.parent;
+  // Whether money filed here is investing rather than spending. Stored as an
+  // explicit `false` when switched off, so the default seeding never turns it
+  // back on (see ensureDefaultCategories).
+  if (patch.investment !== undefined) {
+    result.flowChanged = !!cat.investment !== !!patch.investment;
+    cat.investment = !!patch.investment;
+  }
 
   cat.updated = new Date().toISOString();
   saveCategories(cats);
@@ -256,6 +287,7 @@ export async function mergeCategories(target, source) {
 }
 
 export async function applyCategorization(transactionId, category, confidence = 1, ruleId = null, source = 'engine') {
+  assertAssignable(category);
   const ev = categoryAssignment(source, { transactionId, category, confidence, ruleId });
   await appendIfNew(ev);
   return ev;
@@ -270,6 +302,7 @@ export async function applyCategorization(transactionId, category, confidence = 
  * decision always outranks a bulk action.
  */
 export async function applyCategorizationBulk(transactionIds, category, source = 'bulk') {
+  assertAssignable(category);
   const projections = await getProjections();
   const byId = new Map(projections.transactions.map((t) => [t.id, t]));
   const index = await loadLedgerIndex();
@@ -299,6 +332,7 @@ export async function applyCategorizationBulk(transactionIds, category, source =
 }
 
 export async function applyManualOverride(transactionId, originalCategory, newCategory) {
+  assertAssignable(newCategory);
   // Stamped for the same reason as `categoryAssignment` above: correcting a
   // transaction back to a category it already held once must not be swallowed.
   const ev = createEvent('manual_override', 'manual', {

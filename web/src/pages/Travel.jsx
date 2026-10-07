@@ -210,6 +210,54 @@ function TravelAddRow({ draft, tags, onChange, onAdd, onClear, inputRef }) {
   );
 }
 
+/**
+ * One of the two review lists under "check tagging": late charges after a trip,
+ * and movements filed under the old "travel" category. Same shape, same two
+ * answers — claim it for the trip named beside it, or say it has nothing to do
+ * with a trip — so one component.
+ */
+function TravelReviewList({ title, help, items, total, reasonLabel, busy, onClaim, onDismiss }) {
+  const { t } = useT();
+  if (!total) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h4 style={{ marginBottom: 4 }}>{t('travel.reviewCount', { title, count: total })}</h4>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{help}</p>
+      {items.slice(0, 12).map((item) => (
+        <div key={item.transaction.id} className="dup-row">
+          <span style={{ minWidth: 84 }}>{formatDate(item.transaction.date)}</span>
+          <span style={{ flex: 1 }}>{item.transaction.description}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+            {item.travelName ? `${item.travelName} · ${reasonLabel(item)}` : reasonLabel(item)}
+          </span>
+          <span style={{ minWidth: 74, textAlign: 'right' }}>{formatMoney(item.transaction.amount)}</span>
+          {item.travelId && (
+            <button
+              className="btn-primary btn-sm"
+              disabled={busy === item.transaction.id}
+              onClick={() => onClaim(item.travelId, item.transaction.id)}
+              title={t('travel.claimHint')}
+            >
+              {t('travel.claim')}
+            </button>
+          )}
+          <IconButton
+            icon="close"
+            label={t('travel.dismiss')}
+            disabled={busy === item.transaction.id}
+            onClick={() => onDismiss(item.transaction.id)}
+          />
+        </div>
+      ))}
+      {total > 12 && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+          {t('travel.moreRows', { count: total - 12 })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Travel() {
   const [travels, setTravels] = useState([]);
   const [proposals, setProposals] = useState([]);
@@ -281,6 +329,18 @@ export default function Travel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The review lists open on their own when there is something on them — a
+  // charge that posted after a trip is exactly the thing nobody goes looking
+  // for. With nothing to review the page looks as it always did.
+  useEffect(() => {
+    api
+      .getTravelAnomalies()
+      .then((result) => {
+        if (result?.lateTotal || result?.legacyTotal) setAnomalies(result);
+      })
+      .catch(() => {});
+  }, []);
 
   // The calendar shades days that had spending, so a trip's shape is visible
   // even before it is confirmed.
@@ -510,6 +570,36 @@ export default function Travel() {
     }
   }
 
+  /**
+   * Claims one movement for a trip straight from the review lists below, without
+   * opening the trip — the late charge and the old "travel" flight both arrive
+   * with the trip already named.
+   */
+  async function claimFor(travelId, txId) {
+    setBusy(txId);
+    try {
+      await api.markTravelTransaction(travelId, txId, true);
+      await Promise.all([load(), loadAnomalies()]);
+    } catch (err) {
+      showToast(errText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** "Nothing to do with a trip": off the review lists for good, untouched. */
+  async function dismiss(txId) {
+    setBusy(txId);
+    try {
+      await api.dismissFromTravel([txId]);
+      await loadAnomalies();
+    } catch (err) {
+      showToast(errText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function loadAnomalies() {
     setBusy('anomalies');
     try {
@@ -673,9 +763,29 @@ export default function Travel() {
           ))}
           {anomalies.missingTotal > 8 && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-              … e mais {anomalies.missingTotal - 8}. Abre a viagem e usa "Marcar tudo na janela".
+              {t('travel.moreMissing', { count: anomalies.missingTotal - 8 })}
             </p>
           )}
+          <TravelReviewList
+            title={t('travel.late.title')}
+            help={t('travel.late.help')}
+            items={anomalies.late || []}
+            total={anomalies.lateTotal || 0}
+            reasonLabel={(item) => t(`travel.late.reason.${item.reason}`)}
+            busy={busy}
+            onClaim={claimFor}
+            onDismiss={dismiss}
+          />
+          <TravelReviewList
+            title={t('travel.legacy.title')}
+            help={t('travel.legacy.help')}
+            items={anomalies.legacy || []}
+            total={anomalies.legacyTotal || 0}
+            reasonLabel={(item) => (item.reason ? t(`travel.legacy.reason.${item.reason}`) : t('travel.legacy.noGuess'))}
+            busy={busy}
+            onClaim={claimFor}
+            onDismiss={dismiss}
+          />
         </div>
       )}
 
@@ -808,7 +918,17 @@ export default function Travel() {
                         </>
                       )}
                     </td>
-                    <td className="num">{tr.transactionCount}</td>
+                    <td className="num">
+                      {tr.transactionCount}
+                      {/* What is still undecided on the trip's own screen, late
+                          tail included — the charge that posted after coming
+                          home is the one this exists to surface. */}
+                      {tr.toReview > 0 && (
+                        <div className="muted" style={{ fontSize: 11 }}>
+                          {t('travel.toReview', { count: tr.toReview })}
+                        </div>
+                      )}
+                    </td>
                     <td className="num">
                       {/* Travel spend is an expense, not a loss — `symbol="none"`
                           keeps it out of the gain/loss colour scheme entirely. */}
@@ -915,8 +1035,8 @@ export default function Travel() {
                   "2026-08-22" on a page where every other date is dd/mm/aaaa. */}
               {t('travel.modalRange', {
                 count: openTravel.transactions.length,
-                from: formatDate(openTravel.travel.window?.from),
-                to: formatDate(openTravel.travel.window?.to),
+                from: formatDate((openTravel.travel.reviewWindow || openTravel.travel.window)?.from),
+                to: formatDate((openTravel.travel.reviewWindow || openTravel.travel.window)?.to),
               })}
             </p>
             {/*
@@ -935,7 +1055,22 @@ export default function Travel() {
                 return (
                   <div key={tx.id} className={`dup-row${marked ? ' row-marked' : ''}`}>
                     <span style={{ minWidth: 84 }}>{formatDate(tx.date)}</span>
-                    <span style={{ flex: 1 }}>{tx.description}</span>
+                    <span style={{ flex: 1 }}>
+                      {tx.description}
+                      {/* After the trip: offered because charges abroad post
+                          late, and labelled so it is never mistaken for a day of
+                          the trip. The reason, when there is one, says why this
+                          one looks like it belongs. */}
+                      {tx.afterTrip && (
+                        <span
+                          className={`tag${tx.lateReason ? ' tag-accent' : ''}`}
+                          style={{ marginLeft: 6, whiteSpace: 'nowrap', display: 'inline-block' }}
+                          title={tx.lateReason ? t(`travel.late.reason.${tx.lateReason}`) : undefined}
+                        >
+                          {tx.lateReason ? t('travel.afterTripLikely') : t('travel.afterTrip')}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{tx.category}</span>
                     <span style={{ minWidth: 74, textAlign: 'right' }}>{formatMoney(tx.amount)}</span>
                     <button

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
@@ -17,35 +17,27 @@ import { api } from '../lib/api.js';
 import { INK } from '../components/charts/chartTheme.js';
 import Value from '../components/ui/Value.jsx';
 import { DateRangeField } from '../components/ui/DateField.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import Popover from '../components/ui/Popover.jsx';
+import { useSavedViews } from '../state/SettingsProvider.jsx';
 import DashboardGrid from '../dashboard/DashboardGrid.jsx';
+import { PRESETS, rangeFor, shiftRange, presetOf } from '../lib/dateRanges.js';
 
 /* `labelKey`, not `label`: these are user-visible copy, and `t()` cannot be
-   called at module scope — see web/src/lib/i18nScope.test.js. */
+   called at module scope — see web/src/lib/i18nScope.test.js.
+
+   `auto` is the default and the one most readers should never change: it picks
+   the bucket from the length of the range on the server (`resolveGranularity`),
+   so "last month" draws thirty days and "last two years" draws twenty-four
+   months without anyone having to know there was a setting. */
 const GRANULARITIES = [
+  { id: 'auto', labelKey: 'dashboard.granularity.auto' },
+  { id: 'day', labelKey: 'dashboard.granularity.day' },
+  { id: 'week', labelKey: 'dashboard.granularity.week' },
   { id: 'month', labelKey: 'dashboard.granularity.month' },
   { id: 'quarter', labelKey: 'dashboard.granularity.quarter' },
   { id: 'year', labelKey: 'dashboard.granularity.year' },
 ];
-
-const PRESETS = [
-  { id: '12m', labelKey: 'dashboard.preset.12m', months: 12 },
-  { id: '24m', labelKey: 'dashboard.preset.24m', months: 24 },
-  { id: 'ytd', labelKey: 'dashboard.preset.ytd', ytd: true },
-  { id: 'all', labelKey: 'dashboard.preset.all' },
-];
-
-function isoMonthsAgo(n) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  return d.toISOString().slice(0, 10);
-}
-
-function rangeFor(preset) {
-  if (preset === 'all') return { from: '', to: '' };
-  if (preset === 'ytd') return { from: `${new Date().getFullYear()}-01-01`, to: '' };
-  const p = PRESETS.find((x) => x.id === preset);
-  return { from: isoMonthsAgo(p?.months ?? 12), to: '' };
-}
 
 /**
  * One headline figure.
@@ -106,7 +98,11 @@ export default function Dashboard() {
     () => (preset === 'custom' ? customRange : rangeFor(preset)),
     [preset, customRange],
   );
-  const [granularity, setGranularity] = usePersistentState('dashboard.granularity', 'month');
+  // A new key rather than the old one: every reader who ever opened the page
+  // has 'month' stored under `dashboard.granularity`, and reading that would
+  // keep "last month" drawn as a single point for exactly the people who asked
+  // for it not to be.
+  const [granularity, setGranularity] = usePersistentState('dashboard.granularity.v2', 'auto');
   const [categories, setCategories] = useState([]);
   const [selectedCats, setSelectedCats] = usePersistentState('dashboard.categories', []);
   const [error, setError] = useState(null);
@@ -144,31 +140,104 @@ export default function Dashboard() {
     setPreset('custom');
   }
 
+  /** One step back or forward: last month to the month before, and so on. The
+      control relabels itself when the step lands on a named preset. */
+  function step(direction) {
+    const next = shiftRange(range, direction);
+    if (!next) return;
+    const named = presetOf(next);
+    if (named !== 'custom') {
+      setPreset(named);
+      return;
+    }
+    setCustomRange(next);
+    setPreset('custom');
+  }
+  const canStep = !!(range.from && range.to);
+
+  /* ---- saved views ----
+     A view keeps the *preset* when there is one, so "Last month" saved today
+     still means last month next spring; only a hand-picked range is stored as
+     its dates. */
+  const { views, setViews } = useSavedViews();
+  const current = useMemo(
+    () => ({
+      preset,
+      ...(preset === 'custom' ? { from: customRange.from, to: customRange.to } : {}),
+      granularity,
+      categories: selectedCats,
+    }),
+    [preset, customRange, granularity, selectedCats],
+  );
+  const sameView = (v) =>
+    v.preset === current.preset &&
+    (v.preset !== 'custom' || (v.from === current.from && v.to === current.to)) &&
+    v.granularity === current.granularity &&
+    (v.categories || []).join(',') === (current.categories || []).join(',');
+  const activeView = views.find(sameView) || null;
+  const saveAnchor = useRef(null);
+  const [naming, setNaming] = useState(false);
+  const [viewName, setViewName] = useState('');
+  const [armedDelete, setArmedDelete] = useState(false);
+
+  function applyView(id) {
+    const v = views.find((x) => x.id === id);
+    if (!v) return;
+    if (v.preset === 'custom') setCustomRange({ from: v.from || '', to: v.to || '' });
+    setPreset(v.preset);
+    setGranularity(v.granularity || 'auto');
+    setSelectedCats(v.categories || []);
+  }
+
+  function saveView() {
+    const name = viewName.trim();
+    if (!name) return;
+    const id = globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+    // A name already in use is replaced rather than duplicated: saving "Food"
+    // again means "Food is now this".
+    setViews([...views.filter((v) => v.name !== name), { id, name, ...current }]).catch(() => {});
+    setNaming(false);
+    setViewName('');
+  }
+
+  function deleteView() {
+    if (!activeView) return;
+    if (!armedDelete) {
+      setArmedDelete(true);
+      setTimeout(() => setArmedDelete(false), 1000);
+      return;
+    }
+    setArmedDelete(false);
+    setViews(views.filter((v) => v.id !== activeView.id)).catch(() => {});
+  }
+
   const cashflow = data?.monthlyCashflow || [];
 
   const totals = useMemo(() => {
     const income = cashflow.reduce((s, m) => s + m.income, 0);
     const expense = cashflow.reduce((s, m) => s + m.expense, 0);
-    // Halves of the range, so "against the period before" means something even
-    // when the range is a hand-picked fortnight.
+    const invested = cashflow.reduce((s, m) => s + (m.invested || 0), 0);
+    // Against the period before, as the server measured it: the same calendar
+    // span immediately earlier (last month against the month before it, this
+    // month so far against the same days of last month), under the same
+    // category filter. It used to be the two halves of the range on screen,
+    // which over a month drawn by day compared the half holding the salary
+    // with the half that did not, and read "−100%".
     //
-    // Measured on *spending*, not on the net. The net crosses zero routinely —
+    // Measured on the flows, never on the net. The net crosses zero routinely —
     // one month of tuition against one of salary — and a percentage change
-    // across zero is arithmetic, not information: the first version of this read
-    // "1,839.1% against the period before", which is true and says nothing.
-    // Spending is always positive and always comparable.
-    const half = Math.floor(cashflow.length / 2);
-    const shift = (pick) => {
-      const prior = cashflow.slice(0, half).reduce((s, m) => s + pick(m), 0);
-      const recent = cashflow.slice(half).reduce((s, m) => s + pick(m), 0);
-      // Only offered when there are two halves to compare and the earlier one is
-      // not zero — a percentage change from nothing is not a number.
-      return half && prior > 0 ? ((recent - prior) / prior) * 100 : null;
-    };
+    // across zero is arithmetic, not information. Only offered where the
+    // earlier figure is not zero: a percentage change from nothing is not a
+    // number.
+    const previous = data?.previous;
+    const shift = (now, before) => (previous && before > 0 ? ((now - before) / before) * 100 : null);
     return {
       income,
       expense,
-      net: income - expense,
+      invested,
+      // What the accounts kept: investing is not spending, but the money did
+      // leave them, so the balance is after it.
+      net: income - expense - invested,
       savings: income > 0 ? ((income - expense) / income) * 100 : null,
       // Both tiles get the same two figures. Spending had an average per period
       // and a shift against the period before; income had neither, so the one
@@ -176,12 +245,14 @@ export default function Dashboard() {
       // had an answer on one tile and not on the other sitting beside it.
       avgIncome: cashflow.length ? income / cashflow.length : 0,
       avgExpense: cashflow.length ? expense / cashflow.length : 0,
-      incomeShift: shift((m) => m.income),
-      spendShift: shift((m) => m.expense),
+      incomeShift: shift(income, previous?.income),
+      spendShift: shift(expense, previous?.expense),
     };
-  }, [cashflow]);
+  }, [cashflow, data?.previous]);
 
-  const periodWord = t(`dashboard.periodWord.${granularity}`);
+  // The bucket actually drawn, which under `auto` is the server's decision.
+  const resolvedGranularity = data?.range?.granularity || (granularity === 'auto' ? 'month' : granularity);
+  const periodWord = t(`dashboard.periodWord.${resolvedGranularity}`);
   const hintFor = (average, shift) =>
     [
       t('dashboard.perPeriod', { amount: eur(average), period: periodWord }),
@@ -218,6 +289,14 @@ export default function Dashboard() {
       {/* One control row above the grid drives every card on the page. It is not
           a node for exactly that reason. */}
       <div className="filter-bar">
+        {/* Stepping is how "how did last month go" becomes "and the one before":
+            one click each way, without reopening the date fields. */}
+        <IconButton
+          icon="chevronLeft"
+          label={t('dashboard.stepBack')}
+          disabled={!canStep}
+          onClick={() => step(-1)}
+        />
         <select value={preset} onChange={(e) => setPreset(e.target.value)}>
           {PRESETS.map((p) => (
             <option key={p.id} value={p.id}>{t(p.labelKey)}</option>
@@ -225,6 +304,12 @@ export default function Dashboard() {
           {/* Named, so a hand-picked range never leaves the control blank. */}
           <option value="custom">{t('dashboard.customRange')}</option>
         </select>
+        <IconButton
+          icon="chevronRight"
+          label={t('dashboard.stepForward')}
+          disabled={!canStep}
+          onClick={() => step(1)}
+        />
         <DateRangeField
           from={range.from}
           to={range.to}
@@ -235,7 +320,14 @@ export default function Dashboard() {
         />
         <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
           {GRANULARITIES.map((g) => (
-            <option key={g.id} value={g.id}>{t(g.labelKey)}</option>
+            <option key={g.id} value={g.id}>
+              {/* "Automatic (daily)": the choice, and what it chose. */}
+              {g.id === 'auto' && data?.range?.granularity
+                ? t('dashboard.granularity.autoResolved', {
+                    granularity: t(`dashboard.granularity.${data.range.granularity}`),
+                  })
+                : t(g.labelKey)}
+            </option>
           ))}
         </select>
         <select
@@ -247,6 +339,60 @@ export default function Dashboard() {
             <option key={c.id} value={c.name}>{c.name}</option>
           ))}
         </select>
+        {/* Saved views: pick one to put the whole bar back the way it was saved,
+            the bookmark to save what is on screen now. */}
+        {views.length > 0 && (
+          <select
+            value={activeView?.id || ''}
+            onChange={(e) => applyView(e.target.value)}
+            aria-label={t('dashboard.views.pick')}
+          >
+            <option value="" disabled>
+              {t('dashboard.views.pick')}
+            </option>
+            {views.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        )}
+        <span ref={saveAnchor} style={{ display: 'inline-flex' }}>
+          <IconButton
+            icon="bookmark"
+            label={t('dashboard.views.save')}
+            className={activeView ? 'is-on' : undefined}
+            onClick={() => {
+              setViewName(activeView?.name || '');
+              setNaming((v) => !v);
+            }}
+          />
+        </span>
+        {activeView && (
+          <IconButton
+            icon={armedDelete ? 'check' : 'trash'}
+            tone={armedDelete ? 'armed' : 'danger'}
+            label={armedDelete ? t('dashboard.views.confirmDelete') : t('dashboard.views.delete', { name: activeView.name })}
+            onClick={deleteView}
+          />
+        )}
+        <Popover anchorRef={saveAnchor} open={naming} onClose={() => setNaming(false)} width={260} className="widget-picker">
+          <div className="bill-detail">
+            <label htmlFor="view-name">{t('dashboard.views.name')}</label>
+            <input
+              id="view-name"
+              autoFocus
+              value={viewName}
+              placeholder={t('dashboard.views.placeholder')}
+              onChange={(e) => setViewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveView();
+                if (e.key === 'Escape') setNaming(false);
+              }}
+            />
+            <button type="button" className="btn-primary btn-sm" disabled={!viewName.trim()} onClick={saveView}>
+              {t('common.save')}
+            </button>
+          </div>
+        </Popover>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
@@ -262,6 +408,19 @@ export default function Dashboard() {
           tone="down"
           hint={hintFor(totals.avgExpense, totals.spendShift)}
         />
+        {/* Its own tile, and no tone: money put into an ETF or a skin is not
+            gone, and colouring it as spending would say it was. Signed, because
+            a period that sold more than it bought is a real negative here. */}
+        <Stat
+          label={t('dashboard.invested')}
+          value={totals.invested}
+          symbol={totals.invested < 0 ? 'sign' : 'none'}
+          hint={
+            totals.income > 0 && totals.invested > 0
+              ? t('dashboard.investedHint', { rate: percent((totals.invested / totals.income) * 100) })
+              : t('dashboard.investedHelp')
+          }
+        />
         {/* The one tile where direction is real: a balance above zero is money
             kept and below it is money spent that was not earned, so this is the
             tile that carries a sign and a colour. */}
@@ -273,7 +432,13 @@ export default function Dashboard() {
         />
       </div>
 
-      <DashboardGrid data={data} loading={loading} range={range} periodWord={periodWord} />
+      <DashboardGrid
+        data={data}
+        loading={loading}
+        range={range}
+        periodWord={periodWord}
+        categories={selectedCats}
+      />
     </div>
   );
 }
