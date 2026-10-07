@@ -668,6 +668,7 @@
       "duplicateOf": null,
       "eventId": "ev-031",
       "id": "tx-security-debit",
+      "investment": "link",
       "links": [
         {
           "linkId": "link-1",
@@ -710,62 +711,6 @@
       "source": "activobank",
       "sourceEventIds": [
         "ev-031"
-      ],
-      "status": "pending",
-      "tags": [],
-      "voidReason": null,
-      "voided": false
-    },
-    {
-      "account": null,
-      "accountHolder": null,
-      "accountId": null,
-      "amortize": null,
-      "amount": -84.3,
-      "balance": null,
-      "category": "uncategorized",
-      "currency": "EUR",
-      "date": "2025-05-02",
-      "description": "Buy 1x Example Skin | Factory New",
-      "duplicateOf": null,
-      "eventId": "ev-032",
-      "id": "pricempire-2025-05-02-deadbeef",
-      "links": [
-        {
-          "linkId": "link-1",
-          "note": "synthetic correlation",
-          "ruleId": "corr-1",
-          "transactionIds": [
-            "tx-security-debit",
-            "pricempire-2025-05-02-deadbeef"
-          ]
-        }
-      ],
-      "merchant": "pricempire",
-      "originalCategory": null,
-      "overridden": false,
-      "raw": {
-        "hash": "hash-32",
-        "id": "ev-032",
-        "linked_entities": [],
-        "payload": {
-          "amount": -84.3,
-          "currency": "EUR",
-          "date": "2025-05-02",
-          "description": "Buy 1x Example Skin | Factory New",
-          "merchant": "pricempire",
-          "portfolio_id": "portfolio-1",
-          "source": "pricempire",
-          "transaction_id": "pricempire-2025-05-02-deadbeef"
-        },
-        "source": "pricempire",
-        "timestamp": "2026-01-01T00:00:00.000Z",
-        "type": "transaction"
-      },
-      "removedTags": [],
-      "source": "pricempire",
-      "sourceEventIds": [
-        "ev-032"
       ],
       "status": "pending",
       "tags": [],
@@ -1662,6 +1607,7 @@
       "duplicateOf": null,
       "eventId": "ev-031",
       "id": "tx-security-debit",
+      "investment": "link",
       "links": [
         {
           "linkId": "link-1",
@@ -1738,6 +1684,7 @@
       "merchant": "pricempire",
       "originalCategory": null,
       "overridden": false,
+      "position": true,
       "raw": {
         "hash": "hash-32",
         "id": "ev-032",

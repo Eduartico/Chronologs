@@ -46,7 +46,7 @@ function saveRulesV2(rules) {
 
 test('the general rule "minipreco" shadows the specific "minipreco campanha"', async () => {
   saveRulesV2([
-    rule('general', 'minipreco', 'travel', 10),
+    rule('general', 'minipreco', 'shopping', 10),
     rule('specific', 'minipreco campanha', 'food', 20),
   ]);
 
@@ -62,13 +62,13 @@ test('the general rule "minipreco" shadows the specific "minipreco campanha"', a
   assert.equal(finding.shadowedBy.id, 'general');
   assert.equal(finding.redundant, false);
   // Every real transaction the general rule actually catches here resolved to
-  // food, not travel — so retargeting is offered as the other way out.
+  // food, not shopping — so retargeting is offered as the other way out.
   assert.equal(finding.retargetTo, 'food');
 });
 
 test('promoting moves the shadowed rule directly above the one stealing its transactions', async () => {
   saveRulesV2([
-    rule('general', 'minipreco', 'travel', 10),
+    rule('general', 'minipreco', 'shopping', 10),
     rule('specific', 'minipreco campanha', 'food', 20),
   ]);
   const transactions = [tx('a', 'COMPRA 0412 MINIPRECO CAMPANHA PORTO', 'food')];
@@ -85,7 +85,7 @@ test('promoting moves the shadowed rule directly above the one stealing its tran
 
 test('retargeting rewrites the general rule to the majority category, not the shadowed one', async () => {
   saveRulesV2([
-    rule('general', 'minipreco', 'travel', 10),
+    rule('general', 'minipreco', 'shopping', 10),
     rule('specific', 'minipreco campanha', 'food', 20),
   ]);
   const transactions = [
@@ -127,7 +127,7 @@ test('deleting a genuinely different pair is allowed and reports zero impact', a
   // Eduardo wanted for real cases ("pingo doce cais do s li" tapada por
   // "pingo doce": he wanted the specific one gone, not promoted).
   saveRulesV2([
-    rule('general', 'minipreco', 'travel', 10),
+    rule('general', 'minipreco', 'shopping', 10),
     rule('specific', 'minipreco campanha', 'food', 20),
   ]);
   const transactions = [tx('a', 'COMPRA 0412 MINIPRECO CAMPANHA PORTO', 'food')];
@@ -143,7 +143,7 @@ test('deleting a genuinely different pair is allowed and reports zero impact', a
 
 test('deleteGeneral removes the shadowing rule instead, when it is learned', async () => {
   saveRulesV2([
-    rule('general', 'spar supermarket', 'travel', 10),
+    rule('general', 'spar supermarket', 'shopping', 10),
     rule('specific', 'spar supermarket', 'food', 20),
   ]);
   const transactions = [
@@ -157,10 +157,10 @@ test('deleteGeneral removes the shadowing rule instead, when it is learned', asy
   assert.equal(result.action, 'deleteGeneral');
   assert.equal(result.removed, 'general');
   // The general rule was the one actually winning today (it ran first and
-  // said travel) — removing it lets the specific rule decide instead, which
-  // genuinely moves both transactions from travel to food.
+  // said shopping) — removing it lets the specific rule decide instead, which
+  // genuinely moves both transactions from shopping to food.
   assert.equal(result.impact.affected, 2);
-  assert.equal(result.impact.changes[0].before, 'travel');
+  assert.equal(result.impact.changes[0].before, 'shopping');
   assert.equal(result.impact.changes[0].after, 'food');
   assert.equal(loadRules().some((r) => r.id === 'general'), false);
   assert.equal(loadRules().some((r) => r.id === 'specific'), true);
@@ -168,7 +168,7 @@ test('deleteGeneral removes the shadowing rule instead, when it is learned', asy
 
 test('deleteGeneral refuses a hand-written rule', async () => {
   saveRulesV2([
-    rule('general', 'minipreco', 'travel', 10, { origin: 'manual' }),
+    rule('general', 'minipreco', 'shopping', 10, { origin: 'manual' }),
     rule('specific', 'minipreco campanha', 'food', 20),
   ]);
   const transactions = [tx('a', 'COMPRA 0412 MINIPRECO CAMPANHA PORTO', 'food')];

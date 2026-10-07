@@ -105,6 +105,9 @@ import {
   detectTravels,
   transactionsInTravel,
   travelWindow,
+  reviewWindow,
+  lateSignals,
+  dismissFromTravel,
   travelAnomalies,
   countryName,
   syncTravelTag,
@@ -112,6 +115,7 @@ import {
   markTransactionAsTravel,
   travelOverlay,
   tripSpending,
+  tripDetail,
 } from '../engines/travel.js';
 import {
   findDuplicateCandidates,
@@ -137,12 +141,17 @@ import {
   applyTransactionFilters,
   computeFlow,
   computeDailySpend,
+  splitFlows,
+  resolveGranularity,
+  priorSpan,
+  computePace,
 } from '../engines/analytics.js';
 import { getProjections, invalidateProjections } from '../projections/cache.js';
 import { replayEvents } from '../ledger/eventStore.js';
 import { listNotifications, markRead, markAllRead } from '../lib/notify.js';
 import { loadSettings, saveSettings } from '../lib/settings.js';
 import { computeNetWorth } from '../engines/netWorth.js';
+import { derivedCategoryNames } from '../lib/derivedCategories.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -400,10 +409,25 @@ router.get('/categories', async (req, res) => {
       const name = tx.category || 'uncategorized';
       counts.set(name, (counts.get(name) || 0) + 1);
     }
+    // What left the accounts under each category, by its real category: the
+    // Categories page used to borrow the dashboard's breakdown, which reads
+    // trips as "travel" and — since investing left spending — would have shown
+    // the investments category as €0. Internal moves stay out, as everywhere.
+    const expense = new Map();
+    for (const tx of projections.spendingTransactions) {
+      const amount = Number(tx.amount) || 0;
+      if (amount >= 0) continue;
+      const name = tx.category || 'uncategorized';
+      expense.set(name, (expense.get(name) || 0) + Math.abs(amount));
+    }
 
     res.json(
       cats
-        .map((c) => ({ ...c, count: counts.get(c.name) || 0 }))
+        .map((c) => ({
+          ...c,
+          count: counts.get(c.name) || 0,
+          expense: Math.round((expense.get(c.name) || 0) * 100) / 100,
+        }))
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     );
   } catch (err) {
@@ -430,6 +454,8 @@ router.put('/categories/:id', async (req, res) => {
       return fail(res, 400, 'api.error.categoryProtectedRename');
     }
     if (result.error === 'duplicate') return fail(res, 409, 'api.error.categoryExists');
+    // The projection reads the investing flag, so every total moves with it.
+    if (result.flowChanged) invalidateProjections();
     res.json(result);
   } catch (err) {
     failFrom(res, err);
@@ -524,9 +550,11 @@ router.post('/suggest/llm', async (req, res) => {
     const groups = groupByMerchant(pending, ctx, 'date_desc');
 
     const unknown = groups.filter((g) => (g.suggestions[0]?.confidence ?? 0) < 0.75);
+    // Never a computed category: the model would be asked to guess a trip.
+    const derived = derivedCategoryNames(getCategories());
     const categories = getCategories()
       .map((c) => c.name)
-      .filter((n) => n !== 'uncategorized');
+      .filter((n) => n !== 'uncategorized' && !derived.has(n));
 
     const classified = await classifyMerchantGroups(unknown, categories);
     res.json({
@@ -1134,15 +1162,30 @@ router.get('/travels', async (req, res) => {
     const projections = await getProjections();
     // Each trip carries its own totals: a calendar entry with no money attached
     // to it is not worth confirming.
+    //
+    // What the trip *claimed*, not everything that happened between its dates.
+    // Claims have been made by hand since the trip stopped stamping a category,
+    // and a total of the whole window counted the rent, the salary and the gym
+    // that happened to fall that week — a figure that described the calendar,
+    // not the trip. `toReview` is what is left to decide on the trip's own
+    // screen, late tail included, which is where a charge that posted four days
+    // after coming home is found.
     res.json(
       travels.map((t) => {
-        const inWindow = transactionsInTravel(t, projections.transactions);
+        const claimed = t.tagId
+          ? projections.transactions.filter((tx) => (tx.tags || []).includes(t.tagId))
+          : [];
+        const toReview = transactionsInTravel(t, projections.transactions, { includeLate: true }).filter(
+          (tx) => !(tx.tags || []).includes(t.tagId) && Number(tx.amount) < 0,
+        );
         return {
           ...t,
           countryName: countryName(t.country),
           window: travelWindow(t),
-          transactionCount: inWindow.length,
-          total: inWindow.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0),
+          reviewWindow: reviewWindow(t),
+          transactionCount: claimed.length,
+          total: claimed.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0),
+          toReview: toReview.length,
         };
       })
     );
@@ -1208,12 +1251,42 @@ router.post('/travels/detect', async (req, res) => {
   }
 });
 
+/**
+ * One trip in detail — per day, per category, before/during/after — for the
+ * dashboard's trip card. Real categories, never the overlay: this is the
+ * screen that says what the trip was spent on.
+ */
+router.get('/travels/:id/summary', async (req, res) => {
+  try {
+    const travels = loadTravels();
+    const travel = travels.find((t) => t.id === req.params.id);
+    if (!travel) return fail(res, 404, 'api.error.travelNotFound');
+    const projections = await getProjections();
+    res.json(tripDetail(travel, projections.spendingTransactions, projections.categoryMap, travels));
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
 router.get('/travels/:id/transactions', async (req, res) => {
   try {
     const travel = loadTravels().find((t) => t.id === req.params.id);
     if (!travel) return fail(res, 404, 'api.error.travelNotFound');
     const projections = await getProjections();
-    res.json(transactionsInTravel(travel, projections.transactions));
+    // The late tail is listed too, each row saying whether it falls after the
+    // trip and, when it does, what makes it look like part of it.
+    const signals = lateSignals(travel, projections.transactions);
+    res.json(
+      transactionsInTravel(travel, projections.transactions, { includeLate: true })
+        // Past the margin only money going out is offered: the salary that
+        // landed the week after a holiday is never part of it.
+        .filter((tx) => String(tx.date).slice(0, 10) <= travelWindow(travel).to || Number(tx.amount) < 0)
+        .map((tx) => {
+          const after = String(tx.date).slice(0, 10) > travel.endDate;
+          if (!after) return tx;
+          return { ...tx, afterTrip: true, lateReason: signals.get(tx.id) || null };
+        }),
+    );
   } catch (err) {
     failFrom(res, err);
   }
@@ -1319,7 +1392,7 @@ router.get('/travels/spending', async (req, res) => {
 router.get('/travels/anomalies', async (req, res) => {
   try {
     const projections = await getProjections();
-    const { missing, stray } = travelAnomalies(projections.transactions);
+    const { missing, stray, legacy, late } = travelAnomalies(projections.transactions);
     res.json({
       missing: missing.slice(0, 200).map((m) => ({
         transaction: m.transaction,
@@ -1327,9 +1400,37 @@ router.get('/travels/anomalies', async (req, res) => {
         travelName: m.travel.name,
       })),
       stray: stray.slice(0, 200).map((s) => s.transaction),
+      // Charges after a trip that look like they came from it.
+      late: late.slice(0, 200).map((l) => ({
+        transaction: l.transaction,
+        travelId: l.travel.id,
+        travelName: l.travel.name,
+        reason: l.reason,
+      })),
+      // Filed under the old "travel" category and claimed by no trip.
+      legacy: legacy.slice(0, 200).map((l) => ({
+        transaction: l.transaction,
+        travelId: l.suggestion?.travel.id || null,
+        travelName: l.suggestion?.travel.name || null,
+        reason: l.suggestion?.reason || null,
+      })),
       missingTotal: missing.length,
       strayTotal: stray.length,
+      lateTotal: late.length,
+      legacyTotal: legacy.length,
     });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/** "Nothing to do with any trip" — takes a movement off the late and legacy
+    lists for good, without touching the movement itself. */
+router.post('/travels/dismiss', (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (!ids.length) return fail(res, 400, 'api.error.transactionIdsRequired');
+    res.json({ dismissed: dismissFromTravel(ids) });
   } catch (err) {
     failFrom(res, err);
   }
@@ -1631,17 +1732,16 @@ router.get('/assets', async (req, res) => {
  */
 function previousPeriod(current, all, { from, to }) {
   if (!from || !to) return [];
-  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
-  const priorTo = new Date(Date.parse(from) - 86400000).toISOString().slice(0, 10);
-  const priorFrom = new Date(Date.parse(priorTo) - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const { priorFrom, priorTo } = priorSpan(from, to);
   return all.filter((t) => {
     const d = String(t.date).slice(0, 10);
     return d >= priorFrom && d <= priorTo;
   });
 }
+
 router.get('/analytics', async (req, res) => {
   try {
-    const { from, to, granularity = 'month' } = req.query;
+    const { from, to } = req.query;
     const categories = req.query.categories ? String(req.query.categories).split(',') : null;
 
     const projections = await getProjections();
@@ -1660,38 +1760,84 @@ router.get('/analytics', async (req, res) => {
       categories,
       categoryMap: categorizedMap,
     });
+    // Everything that describes *spending* is drawn from what was consumed;
+    // only the cashflow sees both halves, and keeps investing in its own column.
+    const { consumption } = splitFlows(transactions);
 
-    const monthlyCashflow = computeMonthlyCashflow(transactions, granularity);
-    const categoryBreakdown = computeCategoryBreakdown(transactions, categorizedMap);
-    const amortized = computeAmortizedView(transactions);
+    const dates = all.map((t) => (t.date || '').slice(0, 10)).filter(Boolean).sort();
+    const earliest = dates[0] || null;
+    const latest = dates[dates.length - 1] || null;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // `auto` picks the bucket from the length of the range; anything else is the
+    // reader's own choice. A request with no granularity at all still means
+    // monthly, which is what it always meant.
+    const granularity = resolveGranularity(req.query.granularity || 'month', { from, to, earliest, latest, today });
+    // The holes in a fine-grained range are filled up to today, never into the
+    // future: the rest of this month is not a fortnight of zero spending.
+    const bounds = {
+      from: from || earliest,
+      to: [to || today, today].sort()[0],
+    };
+
+    const monthlyCashflow = computeMonthlyCashflow(transactions, granularity, bounds);
+    // The projection and the insights are about calendar months whatever the
+    // chart is bucketed by: "this month, projected" cannot be read off a weekly
+    // series, and a daily one would make every quiet Sunday an anomaly.
+    const calendarMonths =
+      granularity === 'month' ? monthlyCashflow : computeMonthlyCashflow(transactions, 'month');
+    const categoryBreakdown = computeCategoryBreakdown(consumption, categorizedMap);
+    const amortized = computeAmortizedView(consumption);
     const netWorth = computeNetWorthEvolution(projections.assetSnapshots);
     const allocation = computeAssetAllocation(projections.assets);
     const roi = computeROI(projections.assets);
-    const insights = computeInsights(transactions, categorizedMap, monthlyCashflow);
+    const insights = computeInsights(consumption, categorizedMap, calendarMonths);
 
     // The same span again, immediately before this one, so every figure can be
     // shown against what it was rather than on its own.
-    const previous = previousPeriod(transactions, all, { from, to });
-    const shifts = computeCategoryShifts(transactions, previous, categorizedMap);
-    const projection = projectCurrentMonth(monthlyCashflow);
-
-    const dates = all.map((t) => (t.date || '').slice(0, 10)).filter(Boolean).sort();
+    const previousAll = previousPeriod(transactions, all, { from, to });
+    const previous = splitFlows(previousAll).consumption;
+    const shifts = computeCategoryShifts(consumption, previous, categorizedMap);
+    // The headline tiles' "against the period before", measured on the period
+    // before rather than guessed from the two halves of this one — which, over
+    // a month drawn by day, compared the half with the salary in it to the half
+    // without and called the difference "−100%".
+    // Not offered when the period before reaches back past the first movement on
+    // file: a span the history does not cover is not a span of zero spending,
+    // and "+300% against the period before" over a ledger that starts halfway
+    // through it is a comparison with nothing.
+    const prior =
+      from && to && earliest && priorSpan(from, to).priorFrom >= earliest
+        ? computeMonthlyCashflow(
+            filterTransactions(previousAll, { categories, categoryMap: categorizedMap }),
+            'year',
+          ).reduce(
+            (sum, row) => ({
+              income: sum.income + row.income,
+              expense: sum.expense + row.expense,
+              invested: sum.invested + row.invested,
+            }),
+            { income: 0, expense: 0, invested: 0 },
+          )
+        : null;
+    const projection = projectCurrentMonth(calendarMonths);
+    const fine = granularity === 'day' || granularity === 'week';
 
     res.json({
       range: {
         from: from || null,
         to: to || null,
         granularity,
-        earliest: dates[0] || null,
-        latest: dates[dates.length - 1] || null,
+        earliest,
+        latest,
         matched: transactions.length,
         total: all.length,
       },
       monthlyCashflow,
       cumulative: computeCumulativeBalance(monthlyCashflow),
-      savingsRate: computeSavingsRate(monthlyCashflow),
-      categoryTrend: computeCategoryTrend(transactions, categorizedMap, granularity),
-      topMerchants: computeTopMerchants(transactions),
+      savingsRate: computeSavingsRate(monthlyCashflow, { cumulative: fine }),
+      categoryTrend: computeCategoryTrend(consumption, categorizedMap, granularity, 8, bounds),
+      topMerchants: computeTopMerchants(consumption),
       categoryBreakdown,
       amortized,
       netWorth,
@@ -1699,6 +1845,7 @@ router.get('/analytics', async (req, res) => {
       roi,
       insights,
       shifts,
+      previous: prior && { ...priorSpan(from, to), ...prior },
       projection,
       vaults: projections.vaults,
       vaultTotal: projections.vaultTotal,
@@ -1750,6 +1897,28 @@ router.get('/analytics/daily', async (req, res) => {
   }
 });
 
+/*
+ * Spending pace: one month built up day by day, against the month before it
+ * and a typical month. Its own route for the same reason as the two above.
+ * `month` defaults to the current one; `categories` narrows it the way the
+ * dashboard's category filter narrows everything else.
+ */
+router.get('/analytics/pace', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = /^\d{4}-\d{2}$/.test(String(req.query.month || '')) ? req.query.month : today.slice(0, 7);
+    const categories = req.query.categories ? String(req.query.categories).split(',') : null;
+    const projections = await getProjections();
+    const categoryMap = analyticsCategoryMap(projections);
+    const all = projections.spendingTransactions;
+    const transactions = filterTransactions(all, { categories, categoryMap });
+    const earliest = all.map((t) => String(t.date || '').slice(0, 10)).filter(Boolean).sort()[0] || null;
+    res.json(computePace(transactions, month, { today, earliest }));
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
 router.get('/analytics/cashflow', async (req, res) => {
   try {
     const projections = await getProjections();
@@ -1765,7 +1934,7 @@ router.get('/analytics/insights', async (req, res) => {
     const projections = await getProjections();
     const cashflow = computeMonthlyCashflow(projections.spendingTransactions);
     const insights = computeInsights(
-      projections.spendingTransactions,
+      splitFlows(projections.spendingTransactions).consumption,
       projections.categoryMap,
       cashflow
     );

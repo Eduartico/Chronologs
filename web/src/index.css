@@ -619,6 +619,13 @@ tbody tr:hover td {
   color: var(--accent);
   border-color: var(--accent);
 }
+/* A label that is information, not a filter chip: the accent marks it as the
+   one worth looking at ("likely from the trip"), and its words say so without it. */
+.tag-accent {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .tag.active {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -1667,6 +1674,21 @@ tbody tr:focus-within .icon-swatch-button {
   color: var(--bad);
 }
 
+/* A two-state toggle that is only an icon (the investing flag on a category).
+   On is the accent, filled; off is the ordinary quiet glyph. The state is also
+   `aria-pressed` and the tooltip says which, so the hue is never the only
+   channel carrying it. */
+.icon-btn.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.icon-btn.is-off {
+  opacity: 0.45;
+}
+.icon-btn.is-off:hover:not(:disabled) {
+  opacity: 1;
+}
+
 /* A fixed floor under the cluster: edit/delete and confirm/cancel are the same
    two positions, so swapping between them must not move the column. */
 .row-actions {
@@ -2395,6 +2417,15 @@ th.sortable.num .th-inner {
   gap: var(--sp-1);
   align-items: center;
   margin-left: auto;
+}
+/* A choice that belongs to one card (which trip the trip card shows). Smaller
+   than a form field so it sits in the header beside the view switch, and capped
+   so a long trip name cannot push the switch off the card. */
+.chart-select {
+  font-size: var(--fs-sm);
+  padding: 3px 6px;
+  max-width: 180px;
+  text-overflow: ellipsis;
 }
 .dash-node > .chart-head {
   /* Not a drag source any more — the grip is. Text in here is selectable. */

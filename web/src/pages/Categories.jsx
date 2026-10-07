@@ -96,7 +96,6 @@ const emptyDraft = () => ({
 export default function Categories() {
   const { t, tx } = useT();
   const [categories, setCategories] = useState([]);
-  const [breakdown, setBreakdown] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -116,9 +115,11 @@ export default function Categories() {
 
   async function loadData() {
     try {
-      const [cats, analytics] = await Promise.all([api.getCategories(), api.getAnalytics()]);
-      setCategories(cats);
-      setBreakdown(analytics.categoryBreakdown || []);
+      // Usage and spending per *real* category, straight from the categories
+      // route — not the dashboard's breakdown, which folds trips into "travel"
+      // and leaves investing out of spending, neither of which a list of
+      // categories should do.
+      setCategories(await api.getCategories(true));
     } catch (err) {
       showToast(errText(err));
     } finally {
@@ -209,15 +210,9 @@ export default function Categories() {
 
   const editor = useRowEditor({ onSave: saveName });
 
-  // The numbers live in the analytics payload and the names in the category
-  // list; sorting needs them on one object.
   const rows = useMemo(
-    () =>
-      categories.map((cat) => {
-        const stats = breakdown.find((b) => b.category === cat.name);
-        return { ...cat, expense: stats?.expense || 0, count: stats?.count || 0 };
-      }),
-    [categories, breakdown]
+    () => categories.map((cat) => ({ ...cat, expense: cat.expense || 0, count: cat.count || 0 })),
+    [categories]
   );
   // Rebuilt when the language moves; the descriptor is a function of `t` because
   // it lives at module scope and cannot call a hook itself.
@@ -277,7 +272,7 @@ export default function Categories() {
               <label>{t('categories.mergeSource')}</label>
               <select value={mergeSource} onChange={(e) => setMergeSource(e.target.value)}>
                 <option value="">{t('categories.choose')}</option>
-                {categories.filter((c) => c.name !== PROTECTED).map((c) => (
+                {categories.filter((c) => c.name !== PROTECTED && !c.derived).map((c) => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
@@ -286,7 +281,7 @@ export default function Categories() {
               <label>{t('categories.mergeTarget')}</label>
               <select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
                 <option value="">{t('categories.choose')}</option>
-                {categories.filter((c) => c.name !== mergeSource).map((c) => (
+                {categories.filter((c) => c.name !== mergeSource && !c.derived).map((c) => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
@@ -341,8 +336,21 @@ export default function Categories() {
                       />
                       {!editing && isProtected && (
                         <span className="tag" title={t('categories.systemHeld')}>
-                          sistema
+                          {t('categories.systemTag')}
                         </span>
+                      )}
+                      {/* Investing is a flow, not a kind of purchase: money filed
+                          here leaves "spending" and is counted as invested. One
+                          press either way, like the icon and colour beside it. */}
+                      {!editing && !isProtected && (
+                        <IconButton
+                          icon="investments"
+                          size={14}
+                          label={cat.investment ? t('categories.investingOn') : t('categories.investingOff')}
+                          className={cat.investment ? 'is-on' : 'is-off'}
+                          aria-pressed={!!cat.investment}
+                          onClick={() => restyle(cat, { investment: !cat.investment })}
+                        />
                       )}
                     </div>
                   </td>

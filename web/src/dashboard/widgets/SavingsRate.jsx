@@ -37,9 +37,14 @@ const TREND_WINDOW = 3;
 
 export default function SavingsRate({ card, data, loading }) {
   const { t } = useT();
+  // Over days or weeks the server sends the rate *so far* rather than a rate
+  // per bucket (most days have no income to divide by), and a running figure
+  // has already done the calming a trailing average would do.
+  const running = data?.range?.granularity === 'day' || data?.range?.granularity === 'week';
 
   const rows = useMemo(() => {
     const source = data?.savingsRate || [];
+    if (running) return source.map((row) => ({ ...row, trend: null }));
     const window = [];
     return source.map((row) => {
       if (row.rate != null) {
@@ -53,7 +58,7 @@ export default function SavingsRate({ card, data, loading }) {
         trend: window.length ? window.reduce((a, b) => a + b, 0) / window.length : null,
       };
     });
-  }, [data]);
+  }, [data, running]);
 
   const clampedMonths = rows.filter((r) => r.clamped).length;
 
@@ -79,7 +84,9 @@ export default function SavingsRate({ card, data, loading }) {
       subtitle={
         clampedMonths
           ? t('dashboard.savingsRateClamped', { count: clampedMonths })
-          : t('widget.savings.desc')
+          : running
+            ? t('widget.savings.descRunning')
+            : t('widget.savings.desc')
       }
       loading={loading}
       empty={!rows.some((r) => r.rate != null)}
@@ -134,7 +141,9 @@ export default function SavingsRate({ card, data, loading }) {
           // A hollow dot marks a month drawn at the limit rather than at its real
           // value, so a clipped point never reads as an ordinary one.
           dot={(props) =>
-            props.payload?.clamped ? (
+            running && !props.payload?.clamped ? (
+              <g key={props.payload.month} />
+            ) : props.payload?.clamped ? (
               <circle
                 key={props.payload.month}
                 cx={props.cx}
@@ -153,7 +162,7 @@ export default function SavingsRate({ card, data, loading }) {
         />
         {/* Dashed and thinner, so the derived line never reads as a second
             measurement — it is the same numbers, calmed down. */}
-        <Line
+        {!running && <Line
           type="monotone"
           dataKey="trend"
           name={t('widget.savings.trend', { count: TREND_WINDOW })}
@@ -163,7 +172,7 @@ export default function SavingsRate({ card, data, loading }) {
           dot={false}
           activeDot={{ r: 4 }}
           connectNulls
-        />
+        />}
       </LineChart>
     </ChartCard>
   );

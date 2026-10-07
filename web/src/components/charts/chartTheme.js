@@ -125,9 +125,22 @@ export function tooltipMoney(value, currency = baseCurrency()) {
   return `${symbol}${nf({ maximumFractionDigits: 2 }).format(value || 0)}`;
 }
 
-/** "2026-03" -> "Mar 26". Month names come from the locale, not from an array. */
+/**
+ * A period key as an axis label: "2026-03" -> "Mar 26".
+ *
+ * Every dashboard series is keyed by period, and the period can now be a day
+ * or a week as well as a month — a week is named by its Monday — so a full date
+ * reads as the day it is ("7 Oct") rather than being cut down to its month,
+ * which drew thirty identical "Oct 26" ticks under a daily chart. Quarters and
+ * years are already readable as they come. Month names come from the locale,
+ * not from an array.
+ */
 export function axisMonth(value) {
-  const m = /^(\d{4})-(\d{2})/.exec(String(value || ''));
+  const text = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return df({ day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${text}T00:00:00Z`));
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(text);
   if (!m) return value;
   return `${monthNames('short')[Number(m[2]) - 1]} ${m[1].slice(2)}`;
 }

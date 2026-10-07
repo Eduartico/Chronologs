@@ -201,6 +201,36 @@ export const WIDGETS = [
     defaultView: 'bar',
     defaultSize: 'half',
   },
+  /*
+   * One trip, chosen on the card. Not a view of `trips`: that card compares
+   * every trip at once and follows the dashboard's range, while this one is a
+   * single trip over its own dates — a different question with a different
+   * period, which is the line between a view and a card.
+   */
+  {
+    id: 'trip',
+    icon: 'plane',
+    views: ['bar', 'pie', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* A month's spending as it built up, against last month and a typical one —
+     "am I on track", which neither the cashflow nor the projection answers. */
+  {
+    id: 'pace',
+    icon: 'pace',
+    views: ['line', 'table'],
+    defaultView: 'line',
+    defaultSize: 'half',
+  },
+  /* Where the money that is no longer "spending" went. */
+  {
+    id: 'investing',
+    icon: 'investments',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
 ];
 
 export const WIDGET_IDS = WIDGETS.map((w) => w.id);

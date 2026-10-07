@@ -9,6 +9,9 @@ import {
   computeCumulativeBalance,
   computeSavingsRate,
   applyTransactionFilters,
+  resolveGranularity,
+  periodKeys,
+  priorSpan,
 } from './analytics.js';
 
 const tx = (id, date, amount, category, merchant = '') => ({
@@ -34,6 +37,54 @@ test('bucketKey groups by month, quarter and year', () => {
   assert.equal(bucketKey('2026-11-02', 'quarter'), '2026-Q4');
   assert.equal(bucketKey('2026-03-14', 'year'), '2026');
   assert.equal(bucketKey('', 'month'), null);
+});
+
+test('bucketKey groups by day, and by week under the Monday that starts it', () => {
+  assert.equal(bucketKey('2026-10-07', 'day'), '2026-10-07');
+  // Wednesday 7 October 2026 belongs to the week of Monday 5 October.
+  assert.equal(bucketKey('2026-10-07', 'week'), '2026-10-05');
+  assert.equal(bucketKey('2026-10-05', 'week'), '2026-10-05');
+  // A Sunday is the last day of its week, not the first of the next.
+  assert.equal(bucketKey('2026-10-11', 'week'), '2026-10-05');
+  // Across a year boundary.
+  assert.equal(bucketKey('2027-01-01', 'week'), '2026-12-28');
+});
+
+test('auto picks days for a month, weeks for a quarter, months for a year', () => {
+  assert.equal(resolveGranularity('auto', { from: '2026-09-01', to: '2026-09-30' }), 'day');
+  assert.equal(resolveGranularity('auto', { from: '2026-07-08', to: '2026-10-07' }), 'week');
+  assert.equal(resolveGranularity('auto', { from: '2025-10-08', to: '2026-10-07' }), 'month');
+  // Open-ended: measured from the first transaction to today.
+  assert.equal(resolveGranularity('auto', { earliest: '2020-01-01', today: '2026-10-07' }), 'month');
+  // A choice is honoured, and nonsense means what no choice always meant.
+  assert.equal(resolveGranularity('quarter', { from: '2026-09-01', to: '2026-09-30' }), 'quarter');
+  assert.equal(resolveGranularity('fortnight', {}), 'month');
+});
+
+test('a daily range is filled with the quiet days, and a monthly one is left alone', () => {
+  const days = computeMonthlyCashflow(
+    [tx('a', '2026-09-02', -10, 'food'), tx('b', '2026-09-05', -20, 'food')],
+    'day',
+    { from: '2026-09-01', to: '2026-09-07' },
+  );
+  assert.deepEqual(days.map((d) => d.month), [
+    '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07',
+  ]);
+  assert.equal(days[2].expense, 0);
+  assert.equal(periodKeys('2026-09-01', '2026-09-30', 'month'), null);
+  // Weeks are filled from the Monday of the first one.
+  assert.deepEqual(periodKeys('2026-09-01', '2026-09-20', 'week'), ['2026-08-31', '2026-09-07', '2026-09-14']);
+});
+
+test('a calendar month is compared with the calendar month before it', () => {
+  assert.deepEqual(priorSpan('2026-09-01', '2026-09-30'), { priorFrom: '2026-08-01', priorTo: '2026-08-31' });
+  assert.deepEqual(priorSpan('2026-03-01', '2026-03-31'), { priorFrom: '2026-02-01', priorTo: '2026-02-28' });
+  // The month so far against the same days of last month, not the week that held the rent.
+  assert.deepEqual(priorSpan('2026-10-01', '2026-10-07'), { priorFrom: '2026-09-01', priorTo: '2026-09-07' });
+  // The year so far against the same days of last year.
+  assert.deepEqual(priorSpan('2026-01-01', '2026-10-07'), { priorFrom: '2025-01-01', priorTo: '2025-10-07' });
+  // Anything else: the same number of days, immediately before.
+  assert.deepEqual(priorSpan('2026-07-08', '2026-10-07'), { priorFrom: '2026-04-07', priorTo: '2026-07-07' });
 });
 
 test('filterTransactions honours the date range', () => {

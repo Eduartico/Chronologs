@@ -183,3 +183,18 @@ test('two sources coexist and investments stay out of the bank projection', asyn
   assert.equal(p.investments.length, 1);
   assert.equal(p.securityOrders.length, 1);
 });
+
+test('a marketplace trade is a position, and the bank debit paired with it is investing', async () => {
+  const p = await project();
+  // Pricempire's own "Buy 1x …" row describes a holding, not money leaving an
+  // account. Counting it beside the bank debit counted every skin twice.
+  const trade = p.transactions.find((t) => t.id === 'pricempire-2025-05-02-deadbeef');
+  assert.equal(trade.position, true);
+  assert.equal(p.spendingTransactions.some((t) => t.id === trade.id), false);
+  // The debit it is linked to is the cash leg: still in the flow totals, but as
+  // investing, with the reason it was decided on.
+  const debit = p.spendingTransactions.find((t) => t.id === 'tx-security-debit');
+  assert.equal(debit.investment, 'link');
+  // Ordinary spending carries no verdict at all.
+  assert.equal(p.transactions.find((t) => t.id === 'tx-restaurant').investment, undefined);
+});

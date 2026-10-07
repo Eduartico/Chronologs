@@ -165,14 +165,20 @@ export const api = {
   markTravelTransaction: (id, txId, on) =>
     post(`/travels/${id}/transactions/${txId}`, { on }),
   applyTravel: (id, options) => post(`/travels/${id}/apply`, options || {}),
-  getTripSpending: (params) => get('/travels/spending', params),
+  // Through `qs`: `get` takes a URL and nothing else, so the range used to be
+  // passed as a second argument that went nowhere, and the Trips card drew every
+  // trip ever taken whatever the filter bar said.
+  getTripSpending: (params) => get(`/travels/spending${qs(params)}`),
+  getTripSummary: (id) => get(`/travels/${id}/summary`),
   getTravelAnomalies: () => get('/travels/anomalies'),
+  dismissFromTravel: (ids) => post('/travels/dismiss', { ids }),
 
   // The two aggregates behind the flow and calendar cards. Separate endpoints so
   // /analytics stays byte-identical for the snapshot baseline, and so a page
   // with the flag off never asks for them.
   getFlow: (params) => get(`/analytics/flow${qs(params)}`),
   getDailySpend: (params) => get(`/analytics/daily${qs(params)}`),
+  getPace: (params) => get(`/analytics/pace${qs(params)}`),
 
   getCurrencyRate: () => get('/currency/rate'),
   refreshCurrencyRate: (force) => post('/currency/rate/refresh', { force }),

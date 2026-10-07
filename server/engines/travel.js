@@ -35,6 +35,26 @@ export const TRAVEL_CATEGORY = 'travel';
 export const DEFAULT_FORGIVING_DAYS = 2;
 
 /**
+ * Days after a trip in which a charge is still offered as possibly belonging
+ * to it.
+ *
+ * Longer than the margin, and only on the far side, because the bank does not
+ * book a foreign card payment the day it is made: a hotel charged at checkout,
+ * a car rental's final bill, the taxi from the airport and a restaurant
+ * abroad all arrive days later, and the trip screen used to stop listing
+ * candidates two days after the trip ended — so they were found weeks on, by
+ * accident. Seven days catches them; the late rows are *offered*, flagged as
+ * after the trip, and never claimed or counted on their own.
+ */
+export const DEFAULT_TRAILING_DAYS = 7;
+
+// How far ahead a trip can be paid for and still be the likely owner of an old
+// "travel" movement: flights and rooms are booked weeks before leaving.
+const BOOKING_LEAD_DAYS = 90;
+
+const DISMISSED_FILE = 'travel-dismissed.json';
+
+/**
  * Two purchases in one country this far apart belong to the same trip.
  *
  * Ten days chained a weekend in Valencia (21–22 April) to a day out in Vigo on
@@ -529,12 +549,110 @@ export function travelWindow(travel) {
   return { from: shiftDate(travel.startDate, -margin), to: shiftDate(travel.endDate, margin) };
 }
 
-export function transactionsInTravel(travel, transactions) {
-  const { from, to } = travelWindow(travel);
-  return transactions.filter((t) => {
-    const d = String(t.date).slice(0, 10);
+/**
+ * The range the trip screen lists candidates from: the trip, its margin, and the
+ * late tail after it (`DEFAULT_TRAILING_DAYS`). A trip may carry its own
+ * `trailingDays`; it is never shorter than the margin.
+ *
+ * Only the trip screen reads this. What a trip *is* — which date belongs to
+ * which trip, what "claim everything in the window" claims, what counts as a
+ * missed claim — stays `travelWindow`, so a week of groceries at home after a
+ * holiday is offered for review and never reported as an error.
+ */
+export function reviewWindow(travel) {
+  const margin = travel.forgivingDays ?? DEFAULT_FORGIVING_DAYS;
+  const trailing = Math.max(margin, Number(travel.trailingDays ?? DEFAULT_TRAILING_DAYS) || 0);
+  return { from: shiftDate(travel.startDate, -margin), to: shiftDate(travel.endDate, trailing) };
+}
+
+export function transactionsInTravel(travel, transactions, { includeLate = false } = {}) {
+  const { from, to } = includeLate ? reviewWindow(travel) : travelWindow(travel);
+  return transactions
+    .filter((t) => {
+      const d = String(t.date).slice(0, 10);
+      return d >= from && d <= to;
+    })
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+/**
+ * The late rows that look like they came from the trip, and why.
+ *
+ * Two signals, both cheap and both visible to the reader:
+ *
+ *   foreign       the card was used abroad (`countryOf`) — nobody buys a
+ *                 sandwich in Tallinn from their sofa in Porto.
+ *   sameMerchant  the merchant was already paid during the trip itself: the
+ *                 second Bolt ride, the hotel's minibar charged on its own.
+ *
+ * A merchant that bills from abroad every month is a subscription, not a trip,
+ * and the shops that only exist online prove nothing about where anyone was —
+ * the same exclusions detection uses.
+ */
+export function lateSignals(travel, transactions) {
+  const core = travelWindow(travel);
+  const review = reviewWindow(travel);
+  const recurring = recurringForeignMerchants(transactions);
+  const usable = (tx) => !recurring.has(merchantKey(tx)) && !isOnlineMerchant(tx.description);
+
+  const during = new Set();
+  for (const tx of transactions) {
+    const d = String(tx.date).slice(0, 10);
+    if (d < travel.startDate || d > travel.endDate) continue;
+    const claimed = travel.tagId && (tx.tags || []).includes(travel.tagId);
+    if ((claimed || countryOf(tx)) && usable(tx)) during.add(merchantKey(tx));
+  }
+
+  const signals = new Map();
+  for (const tx of transactions) {
+    const d = String(tx.date).slice(0, 10);
+    if (d <= core.to || d > review.to) continue;
+    if (Number(tx.amount) >= 0 || !usable(tx)) continue;
+    if (countryOf(tx)) signals.set(tx.id, 'foreign');
+    else if (during.has(merchantKey(tx))) signals.set(tx.id, 'sameMerchant');
+  }
+  return signals;
+}
+
+/** Movements the owner has said are nothing to do with any trip. */
+export function loadDismissed() {
+  const path = statePath(DISMISSED_FILE);
+  if (!existsSync(path)) return new Set();
+  try {
+    return new Set(JSON.parse(readFileSync(path, 'utf-8')));
+  } catch {
+    return new Set();
+  }
+}
+
+export function dismissFromTravel(ids = []) {
+  const dismissed = loadDismissed();
+  for (const id of ids) dismissed.add(String(id));
+  writeFileSync(statePath(DISMISSED_FILE), JSON.stringify([...dismissed], null, 2), 'utf-8');
+  return dismissed.size;
+}
+
+/**
+ * The trip an old "travel" movement most likely belonged to.
+ *
+ * Inside a trip's window (late tail included) is the trip. Before one, within
+ * a booking lead, is the trip it was booked for — the flight bought in June for
+ * August. Otherwise there is no honest guess, and none is offered.
+ */
+export function suggestTrip(tx, travels = loadTravels()) {
+  const d = String(tx.date).slice(0, 10);
+  const active = travels.filter((t) => t.status !== 'rejected');
+  const inside = active.find((t) => {
+    const { from, to } = reviewWindow(t);
     return d >= from && d <= to;
   });
+  if (inside) return { travel: inside, reason: 'during' };
+  const day = dayNumber(d);
+  const ahead = active
+    .map((t) => ({ travel: t, lead: dayNumber(t.startDate) - day }))
+    .filter((c) => c.lead > 0 && c.lead <= BOOKING_LEAD_DAYS)
+    .sort((a, b) => a.lead - b.lead)[0];
+  return ahead ? { travel: ahead.travel, reason: 'booking' } : null;
 }
 
 /** The trip a date falls inside, if any. Confirmed trips only. */
@@ -584,6 +702,9 @@ export function travelAnomalies(transactions, travels = loadTravels()) {
 
   const missing = [];
   const stray = [];
+  const legacy = [];
+  const late = [];
+  const dismissed = loadDismissed();
 
   for (const tx of transactions) {
     const travel = index.get(tx.id);
@@ -592,9 +713,26 @@ export function travelAnomalies(transactions, travels = loadTravels()) {
     } else if (!travel && isLabelled(tx)) {
       stray.push({ transaction: tx });
     }
+    // Filed under "travel" back when that was a category, and never claimed
+    // by a trip since. The category is gone (see lib/derivedCategories.js); this
+    // is the one place left that remembers it, so it can be handed to a trip.
+    if (tx.legacyTravel && !isLabelled(tx) && !dismissed.has(tx.id) && Number(tx.amount) < 0) {
+      legacy.push({ transaction: tx, suggestion: suggestTrip(tx, travels) });
+    }
   }
 
-  return { missing, stray };
+  for (const travel of travels) {
+    if (travel.status === 'rejected') continue;
+    const signals = lateSignals(travel, transactions);
+    if (!signals.size) continue;
+    for (const tx of transactions) {
+      const reason = signals.get(tx.id);
+      if (!reason || isLabelled(tx) || dismissed.has(tx.id)) continue;
+      late.push({ transaction: tx, travel, reason });
+    }
+  }
+
+  return { missing, stray, legacy, late };
 }
 
 /**
@@ -694,4 +832,113 @@ function tripDays(startDate, endDate) {
   const to = Date.parse(endDate);
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
   return Math.max(1, Math.round((to - from) / 86400000) + 1);
+}
+
+/**
+ * One trip, in enough detail to answer "how did that trip go".
+ *
+ * Built from what the trip *claimed*, with the real categories, like
+ * `tripSpending` — but for a single trip, and over its own dates rather than
+ * the dashboard's range: a trip is its own period, and a card asked about the
+ * Dublin trip should not go blank because the filter bar says "this month".
+ *
+ * Three phases, because a trip's money does not all happen on the trip:
+ *
+ *   before   booked ahead — the flight in June for August
+ *   during   on the ground, the trip's dates
+ *   after    charges that posted on the way home and later
+ *
+ * Two daily figures, because they answer different questions. `perDay` is the
+ * whole cost over the trip's days — what the trip cost per day, flights and all,
+ * which is the figure that compares one trip with another. `perDayOnTrip` is
+ * only what was spent while there — the "how much did a day in Dublin cost"
+ * figure, which a €300 flight booked months ahead would otherwise swamp. The
+ * travel-budgeting apps keep pre-paid items out of the daily average for the
+ * same reason.
+ */
+export function tripDetail(travel, transactions, categoryMap = {}, travels = loadTravels()) {
+  const claimed = travel.tagId
+    ? transactions.filter((tx) => (tx.tags || []).includes(travel.tagId))
+    : [];
+  const days = tripDays(travel.startDate, travel.endDate);
+  const phaseOf = (date) => (date < travel.startDate ? 'before' : date > travel.endDate ? 'after' : 'during');
+
+  const phases = { before: 0, during: 0, after: 0 };
+  const byCategory = new Map();
+  const byDay = new Map();
+  let refunds = 0;
+
+  for (const tx of claimed) {
+    const amount = Number(tx.amount) || 0;
+    const date = String(tx.date).slice(0, 10);
+    // A refund inside a trip makes the trip cheaper; it is netted, not hidden.
+    if (amount > 0) {
+      refunds += amount;
+      continue;
+    }
+    const value = Math.abs(amount);
+    const category = categoryMap[tx.id] || tx.category || 'uncategorized';
+    phases[phaseOf(date)] += value;
+    const entry = byCategory.get(category) || { category, value: 0, count: 0 };
+    entry.value += value;
+    entry.count += 1;
+    byCategory.set(category, entry);
+    const day = byDay.get(date) || { date, phase: phaseOf(date), total: 0, count: 0 };
+    day.total += value;
+    day.count += 1;
+    byDay.set(date, day);
+  }
+
+  // The trip's own days are always drawn, quiet ones included: a day that cost
+  // nothing is information about the trip, not a gap in it.
+  for (let d = travel.startDate; d <= travel.endDate; d = shiftDate(d, 1)) {
+    if (!byDay.has(d)) byDay.set(d, { date: d, phase: 'during', total: 0, count: 0 });
+  }
+
+  const spent = phases.before + phases.during + phases.after;
+  const total = round2(spent - refunds);
+
+  // Every other trip's whole-cost-per-day, so this one has something to be
+  // measured against.
+  const others = tripSpending(transactions, categoryMap, travels)
+    .filter((t) => t.id !== travel.id && t.days)
+    .map((t) => t.total / t.days);
+
+  return {
+    id: travel.id,
+    name: travel.name,
+    country: travel.country,
+    startDate: travel.startDate,
+    endDate: travel.endDate,
+    days,
+    count: claimed.length,
+    total,
+    refunds: round2(refunds),
+    perDay: days ? round2(total / days) : null,
+    perDayOnTrip: days ? round2(phases.during / days) : null,
+    phases: { before: round2(phases.before), during: round2(phases.during), after: round2(phases.after) },
+    otherTripsPerDay: others.length ? round2(others.reduce((a, b) => a + b, 0) / others.length) : null,
+    otherTrips: others.length,
+    categories: [...byCategory.values()]
+      .map((c) => ({ ...c, value: round2(c.value) }))
+      .sort((a, b) => b.value - a.value),
+    daily: [...byDay.values()]
+      .map((d) => ({ ...d, total: round2(d.total) }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    largest: claimed
+      .filter((tx) => Number(tx.amount) < 0)
+      .sort((a, b) => Number(a.amount) - Number(b.amount))
+      .slice(0, 5)
+      .map((tx) => ({
+        id: tx.id,
+        date: String(tx.date).slice(0, 10),
+        description: tx.description,
+        amount: Number(tx.amount),
+        category: categoryMap[tx.id] || tx.category || 'uncategorized',
+      })),
+  };
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
 }

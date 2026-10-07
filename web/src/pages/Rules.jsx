@@ -451,9 +451,13 @@ export default function Rules() {
                 onChange={(e) => setDraft({ ...draft, actions: { ...draft.actions, setCategory: e.target.value } })}
               >
                 <option value="">(don't set category)</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.name}>set category: {c.name}</option>
-                ))}
+                {/* Computed categories are not a rule's to set — only shown when
+                    an old rule already names one, so it still reads truthfully. */}
+                {categories
+                  .filter((c) => !c.derived || c.name === draft.actions.setCategory)
+                  .map((c) => (
+                    <option key={c.id} value={c.name}>set category: {c.name}</option>
+                  ))}
               </select>
               {tags.map((t) => (
                 <label key={t.id} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>

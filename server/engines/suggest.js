@@ -19,6 +19,8 @@ import { loadTemplates, loadKeywords, matchesPattern } from '../config/knowledge
 import { cleanDescription, normalizeMerchantKey, stripAccents } from '../lib/merchant.js';
 import { loadRules, ruleMatches } from './rules.js';
 import { loadTravels, travelWindow } from './travel.js';
+import { loadCategories } from '../ledger/fileStore.js';
+import { derivedCategoryNames } from '../lib/derivedCategories.js';
 
 export { cleanDescription, normalizeMerchantKey };
 
@@ -66,6 +68,7 @@ export function buildSuggestionContext(transactions = [], { travels = loadTravel
       .filter((t) => t.status !== 'rejected')
       .map((t) => ({ travel: t, ...travelWindow(t) })),
     llmByKey: new Map(),
+    derived: derivedCategoryNames(loadCategories()),
   };
 }
 
@@ -73,6 +76,8 @@ export function suggestForTransaction(tx, ctx) {
   const found = new Map();
   const add = (category, confidence, source, reason) => {
     if (!category || category === 'uncategorized') return;
+    // Never offered: a trip is recorded by the Travel page, not by a category.
+    if (ctx.derived?.has(category)) return;
     const existing = found.get(category);
     if (!existing || existing.confidence < confidence) {
       found.set(category, { category, confidence, source, reason });

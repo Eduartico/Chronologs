@@ -108,6 +108,15 @@ const DEFAULT_SETTINGS = {
    * silently vanish from the total.
    */
   netWorth: { include: {} },
+  /*
+   * Money moved into an investment is neither income nor spending.
+   *
+   * `counterparties` is the list of brokers, exchanges and skin marketplaces a
+   * bank memo is matched against (see engines/investing.js). `null` means the
+   * shipped list, `DEFAULT_COUNTERPARTIES`, which is the one place it lives —
+   * the same convention as `internal.profile`.
+   */
+  investing: { counterparties: null },
   // How the app looks and reads.
   //
   // `theme` names an entry in web/src/styles/themes.js; the light/dark, sidebar
@@ -187,6 +196,7 @@ export function loadSettings() {
     internal: { ...DEFAULT_SETTINGS.internal, ...(stored.internal || {}) },
     analytics: { ...DEFAULT_SETTINGS.analytics, ...(stored.analytics || {}) },
     netWorth: { ...structuredClone(DEFAULT_SETTINGS.netWorth), ...(stored.netWorth || {}) },
+    investing: { ...DEFAULT_SETTINGS.investing, ...(stored.investing || {}) },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...(stored.appearance || {}) },
     dashboard: { ...structuredClone(DEFAULT_SETTINGS.dashboard), ...(stored.dashboard || {}) },
     modules: { ...(stored.modules || {}) },

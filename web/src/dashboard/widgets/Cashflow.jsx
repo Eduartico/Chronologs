@@ -47,26 +47,37 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
   const cashflow = data?.monthlyCashflow || [];
 
   const names = useMemo(
-    () => ({ income: t('dashboard.income'), expense: t('dashboard.expenses'), net: t('dashboard.net') }),
+    () => ({
+      income: t('dashboard.income'),
+      expense: t('dashboard.expenses'),
+      invested: t('dashboard.invested'),
+      net: t('dashboard.net'),
+    }),
     [t],
   );
 
   const rows = useMemo(
     // The engine already carries the net, rounded the way every other total
     // on the page is. Recomputing it here would drift by a cent per period.
-    () => cashflow.map((m) => ({ ...m, net: m.net ?? m.income - m.expense })),
+    () => cashflow.map((m) => ({ ...m, invested: m.invested || 0, net: m.net ?? m.income - m.expense })),
     [cashflow],
   );
 
   const totals = useMemo(() => {
     const income = rows.reduce((s, m) => s + m.income, 0);
     const expense = rows.reduce((s, m) => s + m.expense, 0);
-    return { income, expense, net: income - expense };
+    const invested = rows.reduce((s, m) => s + m.invested, 0);
+    return { income, expense, invested, net: income - expense - invested };
   }, [rows]);
+
+  // Investing is drawn only when the range has any. A flat line at zero on every
+  // card for a reader who never invests is a series that says nothing.
+  const hasInvesting = rows.some((r) => r.invested);
+  const keys = hasInvesting ? ['income', 'expense', 'invested', 'net'] : ['income', 'expense', 'net'];
 
   // Keyed by node, not by widget: two cashflow cards on one dashboard are two
   // cards, and hiding a series on one must not hide it on the other.
-  const filter = useSeriesToggle(`dashboard.${nodeId}.hidden`, [names.income, names.expense, names.net]);
+  const filter = useSeriesToggle(`dashboard.${nodeId}.hidden`, keys.map((k) => names[k]));
 
   /* The axis is sized on what is actually drawn. Recharts' own domain rounds the
      top up to a whole number of steps measured from zero, which turned a range of
@@ -76,12 +87,12 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
   const yAxis = useMemo(() => {
     const visible = [];
     for (const row of rows) {
-      for (const key of ['income', 'expense', 'net']) {
+      for (const key of keys) {
         if (!filter.hidden.has(names[key])) visible.push(row[key]);
       }
     }
     return fitAxis(visible);
-  }, [rows, filter.hidden, names]);
+  }, [rows, filter.hidden, names, keys]);
 
   /* Hover isolation is information, not decoration: dimming everything but the
      series under the pointer answers "which one is this" where the eye already
@@ -112,16 +123,22 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
           { key: 'month', label: t('common.date'), format: axisMonth },
           { key: 'income', label: names.income, align: 'right', format: eur },
           { key: 'expense', label: names.expense, align: 'right', format: eur },
+          ...(hasInvesting ? [{ key: 'invested', label: names.invested, align: 'right', format: eur }] : []),
           { key: 'net', label: names.net, align: 'right', format: eur },
         ],
       }}
       footnote={
         rows.length
-          ? t('widget.cashflow.footnote', {
-              income: eur(totals.income),
-              expense: eur(totals.expense),
-              net: eur(totals.net),
-            })
+          ? [
+              t('widget.cashflow.footnote', {
+                income: eur(totals.income),
+                expense: eur(totals.expense),
+                net: eur(totals.net),
+              }),
+              hasInvesting ? t('widget.cashflow.footnoteInvested', { amount: eur(totals.invested) }) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
           : undefined
       }
     >
@@ -141,6 +158,7 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
           <ReferenceLine y={0} stroke={INK.axis} />
           <Bar {...seriesProps('income', SERIES[2])} radius={[4, 4, 0, 0]} />
           <Bar {...seriesProps('expense', SERIES[1])} radius={[4, 4, 0, 0]} />
+          {hasInvesting && <Bar {...seriesProps('invested', SERIES[3])} radius={[4, 4, 0, 0]} />}
           <Line
             type="monotone"
             {...seriesProps('net', SERIES[0])}
@@ -162,6 +180,7 @@ export default function Cashflow({ card, view, data, loading, nodeId, periodWord
             ['income', SERIES[2]],
             ['expense', SERIES[1]],
             ['net', SERIES[0]],
+            ...(hasInvesting ? [['invested', SERIES[3]]] : []),
           ].map(([key, colour], i) => (
             <Line
               key={key}

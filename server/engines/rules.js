@@ -1,5 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
-import { loadRules as loadRawRules, saveRules as saveRawRules } from '../ledger/fileStore.js';
+import { loadRules as loadRawRules, saveRules as saveRawRules, loadCategories } from '../ledger/fileStore.js';
+import { derivedCategoryNames } from '../lib/derivedCategories.js';
+import { httpError } from '../lib/httpError.js';
+
+/** A rule may not file anything under a computed category — see
+    lib/derivedCategories.js. Existing ones are skipped at evaluation instead. */
+function assertRuleCategory(category) {
+  if (category && derivedCategoryNames(loadCategories()).has(category)) {
+    throw httpError(400, 'api.error.categoryDerived', { category });
+  }
+}
 import { createEvent, appendEvent } from '../ledger/eventStore.js';
 import { getProjections } from '../projections/cache.js';
 import { applyCategorization } from './categorization.js';
@@ -53,6 +63,7 @@ function nextOrder(rules) {
 }
 
 export function createRule(input) {
+  assertRuleCategory(input.actions?.setCategory);
   const rules = loadRules();
   const rule = {
     id: uuidv4(),
@@ -80,6 +91,7 @@ export function updateRule(id, patch) {
   const rule = rules.find((r) => r.id === id);
   if (!rule) return null;
   const { id: _ignore, created, ...rest } = patch;
+  if (rest.actions?.setCategory !== rule.actions?.setCategory) assertRuleCategory(rest.actions?.setCategory);
   Object.assign(rule, rest, { updated: new Date().toISOString() });
   saveRules(rules);
   return rule;
@@ -310,17 +322,20 @@ export function ruleMatches(tx, rule, { lenient = false } = {}) {
  * Walks enabled rules in execution order, accumulating actions. A matching
  * rule with stopProcessing halts the walk (Outlook-style).
  */
-export function evaluateRules(tx, rules = null) {
+export function evaluateRules(tx, rules = null, derived = null) {
   const list = (rules || loadRules())
     .filter((r) => r.enabled)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const result = { category: null, categoryRuleId: null, tags: [], matchedRules: [] };
+  // A rule written before travel stopped being a category still matches and
+  // still adds its tags; it simply no longer files anything under "travel".
+  const skip = derived || derivedCategoryNames(loadCategories());
 
   for (const rule of list) {
     if (!ruleMatches(tx, rule)) continue;
     result.matchedRules.push(rule.id);
-    if (rule.actions?.setCategory && result.category === null) {
+    if (rule.actions?.setCategory && result.category === null && !skip.has(rule.actions.setCategory)) {
       result.category = rule.actions.setCategory;
       result.categoryRuleId = rule.id;
     }
@@ -382,9 +397,10 @@ export async function runRules({ transactionIds = null } = {}) {
     : projections.transactions;
 
   const result = { evaluated: targets.length, categorized: 0, tagged: 0 };
+  const derived = derivedCategoryNames(loadCategories());
 
   for (const tx of targets) {
-    const outcome = evaluateRules(tx, rules);
+    const outcome = evaluateRules(tx, rules, derived);
 
     if (
       outcome.category &&

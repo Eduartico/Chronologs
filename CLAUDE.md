@@ -73,7 +73,9 @@ template with passing tests, and `npm run new:module <id>` copies it.
 | Rule advisor (collapse/shadowed/pattern/anomaly findings) | `server/engines/advisor.js` — see `docs/rules-model.md` |
 | Internal transfers / PoupeUp vaults | `server/engines/accounts.js` — one editable profile per bank instance, see `chronologs-institution-agnostic` |
 | Categorization application (writes ledger events) | `server/engines/categorization.js` |
-| Travel detection, trip tagging, the overlay | `server/engines/travel.js` |
+| Travel detection, trip tagging, the overlay, late tail, trip detail | `server/engines/travel.js` |
+| Investing vs spending verdict | `server/engines/investing.js` |
+| Categories nothing may assign (`travel`) | `server/lib/derivedCategories.js` |
 | Net worth (accounts + holdings, per-class opt-out) | `server/engines/netWorth.js` |
 | Duplicate detection | `server/engines/duplicates.js` |
 | Correlations (bank ↔ marketplace matching) | `server/engines/correlation.js` |
@@ -245,6 +247,20 @@ how many decimals a share deserves, and all of them would print `0.000001%`.
 `server/lib/settings.js` ships a six-card default. Eduardo's twelve-card layout
 lives in `user-data/`, which is the distinction defaults exist for.
 
+**Ranges and buckets.** Presets live in `web/src/lib/dateRanges.js` and every one
+except "everything" resolves to *both* bounds (local calendar days), so the server
+always has a span to compare against. The ‹ › arrows step a range by itself —
+whole calendar months by whole months. Granularity defaults to `auto`, resolved
+on the server by `resolveGranularity` (≤45 days → day, ≤190 → week, else month)
+and echoed back in `range.granularity`; day and week buckets are gap-filled up to
+today (`periodKeys`), month buckets never are. A week is keyed by its Monday, a
+day by its date, and `axisMonth` formats both. "Against the period before" is
+`priorSpan` — calendar-aligned for ranges starting on the 1st, same length
+otherwise, and not offered when it reaches back before the ledger begins.
+
+`/analytics/pace` (`computePace`) and `/travels/:id/summary` (`tripDetail`) are
+their own routes for the same snapshot reason as the flow and calendar ones.
+
 ## Travel is a dimension, not a category
 
 A trip is *when and where* money was spent; the category is *what it bought*.
@@ -262,8 +278,47 @@ all.
   overlay: it is what the Trips card draws, and a card saying a trip was 100%
   "travel" would be the loss the refactor undoes.
 - Nothing may infer the trip from `tx.category === 'travel'` any more — not the
-  anomaly check, not `suggest.js`, not the advisor. Transactions claimed under
-  the old behaviour still carry that word and it now means nothing.
+  anomaly check, not `suggest.js`, not the advisor.
+- **`travel` is a derived category** (`server/lib/derivedCategories.js`): it
+  exists for the overlay to read as, and nothing may assign it. The fold in
+  `rebuild.js` skips every assignment and override that said it — the movement
+  keeps its previous category or returns to the review queue — and marks the row
+  `legacyTravel`. `categorization.js` refuses it (`api.error.categoryDerived`),
+  the rules engine skips a rule that sets it, suggestions never offer it, and the
+  pickers hide categories with `derived: true`. Lodging keywords point at the
+  `accommodation` category, airlines at `transport`.
+- **Two windows.** `travelWindow` (dates ± `forgivingDays`) is what a trip *is*:
+  the claim-all, the missed-claim anomaly, containment. `reviewWindow` adds a
+  late tail after the trip (`DEFAULT_TRAILING_DAYS` = 7, or the trip's own
+  `trailingDays`) and is only what the trip screen *offers*, because card
+  payments abroad post days late. `lateSignals` flags the tail rows that look
+  like the trip's (paid abroad, or a merchant from the trip);
+  `travelAnomalies` returns those as `late` and unclaimed `legacyTravel` rows as
+  `legacy`, each with a `suggestTrip`. "Not part of a trip" is
+  `state/travel-dismissed.json`.
+- `/travels` reports what a trip *claimed* (`transactionCount`, `total`), plus
+  `toReview` — not everything that happened between its dates.
+
+## Investing is a flow, not spending
+
+An ETF purchase moved money out of the current account, but it is not gone, and
+counting it as spending made the month look €500 worse than it was. So each
+movement is income, spending, or **investing**, decided once in `rebuild.js` by
+`investmentReason` (`server/engines/investing.js`): linked to an exchange order or
+a marketplace trade (`link`), the bank's own order/fee wording (`order`), a
+category with `investment: true` (`category`, toggled on the Categories page), or
+a broker/exchange/skin-marketplace counterparty (`counterparty`,
+`settings.investing.counterparties`, null = the shipped list). `tx.investment`
+holds the reason; the Transactions table shows it.
+
+- `computeMonthlyCashflow` keeps `invested` as its own column (purchases less
+  sales, can go negative); `net` is still `income − expense − invested`, so the
+  running balance did not move. Savings rate is `(income − expense) / income`.
+- Every *spending* aggregate is fed `splitFlows(...).consumption` at the route;
+  the flow sends investing to `invested`/`divested` nodes.
+- Rows a `family: 'marketplace'` module writes for its own trades are `position`
+  and leave `spendingTransactions` entirely — the bank debit is the money, and
+  counting both counted every skin twice.
 
 ## Net worth
 

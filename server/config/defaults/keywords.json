@@ -154,7 +154,18 @@
       "empark",
       "oficina",
       "pneus",
-      "inspecao auto"
+      "inspecao auto",
+      "ryanair",
+      "easyjet",
+      "tap air",
+      "tap portugal",
+      "vueling",
+      "wizz air",
+      "lufthansa",
+      "flixbus",
+      "rede expressos",
+      "aeroporto",
+      "skyscanner"
     ]
   },
   {
@@ -230,13 +241,6 @@
       "valve corp",
       "csgo",
       "cs2 ",
-      "csfloat",
-      "dmarket",
-      "buff163",
-      "skinport",
-      "skinbaron",
-      "haloskins",
-      "bitskins",
       "epic games",
       "playstation",
       "xbox",
@@ -293,7 +297,7 @@
     ]
   },
   {
-    "category": "travel",
+    "category": "accommodation",
     "weight": 0.72,
     "patterns": [
       "booking.com",
@@ -301,19 +305,8 @@
       "hotel",
       "hostel",
       "pousada",
-      "ryanair",
-      "easyjet",
-      "tap air",
-      "tap portugal",
-      "vueling",
-      "wizz air",
-      "lufthansa",
       "expedia",
-      "trivago",
-      "skyscanner",
-      "flixbus",
-      "rede expressos",
-      "aeroporto"
+      "trivago"
     ]
   },
   {
@@ -383,7 +376,14 @@
       "kraken",
       "unlimint",
       "bitcoin",
-      "crypto.com"
+      "crypto.com",
+      "csfloat",
+      "dmarket",
+      "buff163",
+      "skinport",
+      "skinbaron",
+      "haloskins",
+      "bitskins"
     ]
   },
   {
