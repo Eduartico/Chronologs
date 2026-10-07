@@ -179,6 +179,12 @@ export const api = {
   getFlow: (params) => get(`/analytics/flow${qs(params)}`),
   getDailySpend: (params) => get(`/analytics/daily${qs(params)}`),
   getPace: (params) => get(`/analytics/pace${qs(params)}`),
+  getForecast: (params) => get(`/analytics/forecast${qs(params)}`),
+  getBudgets: (params) => get(`/budgets${qs(params)}`),
+  getRunway: () => get('/analytics/runway'),
+  setBudget: (categoryId, amount) => put(`/budgets/${categoryId}`, { amount }),
+  getRecurring: (params) => get(`/recurring${qs(params)}`),
+  ignoreRecurring: (id, ignored = true) => post(`/recurring/${id}/ignore`, { ignored }),
 
   getCurrencyRate: () => get('/currency/rate'),
   refreshCurrencyRate: (force) => post('/currency/rate/refresh', { force }),

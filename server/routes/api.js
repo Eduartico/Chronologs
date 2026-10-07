@@ -145,6 +145,7 @@ import {
   resolveGranularity,
   priorSpan,
   computePace,
+  typicalMonth,
 } from '../engines/analytics.js';
 import { getProjections, invalidateProjections } from '../projections/cache.js';
 import { replayEvents } from '../ledger/eventStore.js';
@@ -152,6 +153,9 @@ import { listNotifications, markRead, markAllRead } from '../lib/notify.js';
 import { loadSettings, saveSettings } from '../lib/settings.js';
 import { computeNetWorth } from '../engines/netWorth.js';
 import { derivedCategoryNames } from '../lib/derivedCategories.js';
+import { detectRecurring, occurrences, loadRecurringState, setIgnored } from '../engines/recurring.js';
+import { forecastCash } from '../engines/forecast.js';
+import { budgetReport, loadGoals, setGoal } from '../engines/budgets.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1914,6 +1918,117 @@ router.get('/analytics/pace', async (req, res) => {
     const transactions = filterTransactions(all, { categories, categoryMap });
     const earliest = all.map((t) => String(t.date || '').slice(0, 10)).filter(Boolean).sort()[0] || null;
     res.json(computePace(transactions, month, { today, earliest }));
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/*
+ * Recurring money, inferred from the ledger: the bills calendar and the
+ * forecast both read it. `days` is how far ahead the upcoming list runs.
+ */
+router.get('/recurring', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const days = Math.min(Math.max(Number(req.query.days) || 35, 1), 366);
+    const projections = await getProjections();
+    const { ignored } = loadRecurringState();
+    const all = detectRecurring(projections.spendingTransactions, { today });
+    const ignoredSet = new Set(ignored);
+    const series = all.filter((s) => !ignoredSet.has(s.id));
+    const horizon = new Date(Date.parse(`${today}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+    res.json({
+      today,
+      to: horizon,
+      series,
+      upcoming: occurrences(series, today, horizon),
+      ignored: all.filter((s) => ignoredSet.has(s.id)),
+      monthlyIn: Math.round(series.filter((s) => s.amount > 0).reduce((sum, s) => sum + s.monthly, 0) * 100) / 100,
+      monthlyOut: Math.round(-series.filter((s) => s.amount < 0).reduce((sum, s) => sum + s.monthly, 0) * 100) / 100,
+    });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/** "Not a bill" — and back. Reversible, and touches nothing in the ledger. */
+router.post('/recurring/:id/ignore', (req, res) => {
+  try {
+    res.json(setIgnored(req.params.id, req.body?.ignored !== false));
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/*
+ * The typical month over the last twelve complete ones, and the planning
+ * assumptions, for the runway and financial-independence card. Holdings come
+ * from /networth on the client, which is where currencies are converted.
+ */
+router.get('/analytics/runway', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const projections = await getProjections();
+    res.json({
+      ...typicalMonth(projections.spendingTransactions, { today }),
+      planning: loadSettings().planning,
+    });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/*
+ * Monthly goals per category: how this month (or `month`) stands against each,
+ * and a suggested goal for every category from its usual month.
+ */
+router.get('/budgets', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = /^\d{4}-\d{2}$/.test(String(req.query.month || '')) ? req.query.month : today.slice(0, 7);
+    const projections = await getProjections();
+    const { ignored } = loadRecurringState();
+    const series = detectRecurring(projections.spendingTransactions, { today, ignored });
+    res.json(
+      budgetReport(projections.spendingTransactions, getCategories(), loadGoals(), { month, today, series }),
+    );
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+router.put('/budgets/:categoryId', (req, res) => {
+  try {
+    if (!getCategories().some((c) => c.id === req.params.categoryId)) {
+      return fail(res, 404, 'api.error.categoryNotFound');
+    }
+    res.json({ goals: setGoal(req.params.categoryId, req.body?.amount) });
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
+/*
+ * The cash forecast: today's balance, the last thirty days behind it, and the
+ * next `days` ahead from recurring items plus everyday spending.
+ */
+router.get('/analytics/forecast', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const days = Math.min(Math.max(Number(req.query.days) || 60, 7), 365);
+    const projections = await getProjections();
+    const { ignored } = loadRecurringState();
+    const series = detectRecurring(projections.spendingTransactions, { today, ignored });
+    res.json(
+      forecastCash({
+        accounts: projections.accounts,
+        transactions: projections.transactions,
+        spending: projections.spendingTransactions,
+        series,
+        today,
+        days,
+      }),
+    );
   } catch (err) {
     failFrom(res, err);
   }

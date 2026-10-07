@@ -75,6 +75,9 @@ template with passing tests, and `npm run new:module <id>` copies it.
 | Categorization application (writes ledger events) | `server/engines/categorization.js` |
 | Travel detection, trip tagging, the overlay, late tail, trip detail | `server/engines/travel.js` |
 | Investing vs spending verdict | `server/engines/investing.js` |
+| Recurring bills/income, next dates | `server/engines/recurring.js` |
+| Cash forecast | `server/engines/forecast.js` |
+| Category goals | `server/engines/budgets.js` |
 | Categories nothing may assign (`travel`) | `server/lib/derivedCategories.js` |
 | Net worth (accounts + holdings, per-class opt-out) | `server/engines/netWorth.js` |
 | Duplicate detection | `server/engines/duplicates.js` |
@@ -260,6 +263,38 @@ otherwise, and not offered when it reaches back before the ledger begins.
 
 `/analytics/pace` (`computePace`) and `/travels/:id/summary` (`tripDetail`) are
 their own routes for the same snapshot reason as the flow and calendar ones.
+
+**Saved views** live in `settings.dashboard.views` beside `nodes`, so every write
+to the dashboard block merges (`useDashboardSettings`, `useSavedViews`) — a card
+dragged one slot must not delete them. A view keeps its *preset* when it has
+one ("last month" stays relative), and only a custom range is stored as dates.
+
+## Looking ahead: bills, forecast, goals, independence
+
+- **Bills are inferred**, there is no feed: `server/engines/recurring.js` groups
+  the spending set by cleaned merchant key (the card number in "COMPRA 0412 …"
+  rotates), names a cadence from the median gap, wants ≥70% of gaps regular
+  (a skipped month is a multiple, not noise), a steady amount only for
+  weekly/fortnightly cadences, and drops a series overdue by more than half a
+  cycle. Calendar cadences keep their day of month. Income recurs too. "Not a
+  bill" is `state/recurring.json`. `detectRecurringSubscriptions` in
+  analytics.js is the older, narrower one behind the Committed card — left as
+  it is because it is in the snapshot baseline.
+- **The forecast** (`engines/forecast.js`) starts from each account's printed
+  `lastBalance`, caught up *per account* from its own `lastBalanceDate`, adds
+  the recurring occurrences on their dates and spreads everyday spending at the
+  *median week* of the last thirteen. Irregular income is never counted on.
+- **Goals** are keyed by category **id** (`state/budgets.json`), read by real
+  category (never the travel overlay), investing excluded, refunds netted. The
+  projection treats recurring charges as scheduled and extrapolates only the
+  rest, so a pass bought on the 2nd does not read as "at risk" on the 7th.
+  Edited in the Categories table through the row editor; the placeholder is
+  the category's median month.
+- **Runway & independence** is computed on the client, where currencies are
+  converted: cash from `/networth`, the typical month from `/analytics/runway`
+  (`typicalMonth`: complete months only, only months the ledger reaches), and
+  `settings.planning` (withdrawal rate, real return). The card prints every
+  assumption it used.
 
 ## Travel is a dimension, not a category
 

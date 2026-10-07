@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 import { usePersistentState } from '../lib/usePersistentState.js';
 import { formatDate } from '../lib/format.js';
@@ -18,6 +18,8 @@ import { INK } from '../components/charts/chartTheme.js';
 import Value from '../components/ui/Value.jsx';
 import { DateRangeField } from '../components/ui/DateField.jsx';
 import IconButton from '../components/ui/IconButton.jsx';
+import Popover from '../components/ui/Popover.jsx';
+import { useSavedViews } from '../state/SettingsProvider.jsx';
 import DashboardGrid from '../dashboard/DashboardGrid.jsx';
 import { PRESETS, rangeFor, shiftRange, presetOf } from '../lib/dateRanges.js';
 
@@ -153,6 +155,62 @@ export default function Dashboard() {
   }
   const canStep = !!(range.from && range.to);
 
+  /* ---- saved views ----
+     A view keeps the *preset* when there is one, so "Last month" saved today
+     still means last month next spring; only a hand-picked range is stored as
+     its dates. */
+  const { views, setViews } = useSavedViews();
+  const current = useMemo(
+    () => ({
+      preset,
+      ...(preset === 'custom' ? { from: customRange.from, to: customRange.to } : {}),
+      granularity,
+      categories: selectedCats,
+    }),
+    [preset, customRange, granularity, selectedCats],
+  );
+  const sameView = (v) =>
+    v.preset === current.preset &&
+    (v.preset !== 'custom' || (v.from === current.from && v.to === current.to)) &&
+    v.granularity === current.granularity &&
+    (v.categories || []).join(',') === (current.categories || []).join(',');
+  const activeView = views.find(sameView) || null;
+  const saveAnchor = useRef(null);
+  const [naming, setNaming] = useState(false);
+  const [viewName, setViewName] = useState('');
+  const [armedDelete, setArmedDelete] = useState(false);
+
+  function applyView(id) {
+    const v = views.find((x) => x.id === id);
+    if (!v) return;
+    if (v.preset === 'custom') setCustomRange({ from: v.from || '', to: v.to || '' });
+    setPreset(v.preset);
+    setGranularity(v.granularity || 'auto');
+    setSelectedCats(v.categories || []);
+  }
+
+  function saveView() {
+    const name = viewName.trim();
+    if (!name) return;
+    const id = globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+    // A name already in use is replaced rather than duplicated: saving "Food"
+    // again means "Food is now this".
+    setViews([...views.filter((v) => v.name !== name), { id, name, ...current }]).catch(() => {});
+    setNaming(false);
+    setViewName('');
+  }
+
+  function deleteView() {
+    if (!activeView) return;
+    if (!armedDelete) {
+      setArmedDelete(true);
+      setTimeout(() => setArmedDelete(false), 1000);
+      return;
+    }
+    setArmedDelete(false);
+    setViews(views.filter((v) => v.id !== activeView.id)).catch(() => {});
+  }
+
   const cashflow = data?.monthlyCashflow || [];
 
   const totals = useMemo(() => {
@@ -281,6 +339,60 @@ export default function Dashboard() {
             <option key={c.id} value={c.name}>{c.name}</option>
           ))}
         </select>
+        {/* Saved views: pick one to put the whole bar back the way it was saved,
+            the bookmark to save what is on screen now. */}
+        {views.length > 0 && (
+          <select
+            value={activeView?.id || ''}
+            onChange={(e) => applyView(e.target.value)}
+            aria-label={t('dashboard.views.pick')}
+          >
+            <option value="" disabled>
+              {t('dashboard.views.pick')}
+            </option>
+            {views.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        )}
+        <span ref={saveAnchor} style={{ display: 'inline-flex' }}>
+          <IconButton
+            icon="bookmark"
+            label={t('dashboard.views.save')}
+            className={activeView ? 'is-on' : undefined}
+            onClick={() => {
+              setViewName(activeView?.name || '');
+              setNaming((v) => !v);
+            }}
+          />
+        </span>
+        {activeView && (
+          <IconButton
+            icon={armedDelete ? 'check' : 'trash'}
+            tone={armedDelete ? 'armed' : 'danger'}
+            label={armedDelete ? t('dashboard.views.confirmDelete') : t('dashboard.views.delete', { name: activeView.name })}
+            onClick={deleteView}
+          />
+        )}
+        <Popover anchorRef={saveAnchor} open={naming} onClose={() => setNaming(false)} width={260} className="widget-picker">
+          <div className="bill-detail">
+            <label htmlFor="view-name">{t('dashboard.views.name')}</label>
+            <input
+              id="view-name"
+              autoFocus
+              value={viewName}
+              placeholder={t('dashboard.views.placeholder')}
+              onChange={(e) => setViewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveView();
+                if (e.key === 'Escape') setNaming(false);
+              }}
+            />
+            <button type="button" className="btn-primary btn-sm" disabled={!viewName.trim()} onClick={saveView}>
+              {t('common.save')}
+            </button>
+          </div>
+        </Popover>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>

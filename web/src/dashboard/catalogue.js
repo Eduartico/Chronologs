@@ -49,6 +49,7 @@ export const VIEW_ICONS = {
   sunburst: 'chartSunburst',
   sankey: 'chartSankey',
   heatmap: 'chartCalendar',
+  calendar: 'calendar',
   table: 'table',
   // The uncontrolled fallback for a card that is not a dashboard node and so has
   // no named views: whatever it draws, or its rows.
@@ -229,6 +230,41 @@ export const WIDGETS = [
     icon: 'investments',
     views: ['bar', 'table'],
     defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* What will be charged next, inferred from what already was. A calendar, not
+     the heatmap: the heatmap is how much was spent on a day that happened, this
+     is which bill lands on a day that has not. */
+  {
+    id: 'upcoming',
+    icon: 'calendar',
+    views: ['calendar', 'table'],
+    defaultView: 'calendar',
+    defaultSize: 'half',
+  },
+  /* The month against the reader's own per-category goals. */
+  {
+    id: 'goals',
+    icon: 'target',
+    views: ['bar', 'table'],
+    defaultView: 'bar',
+    defaultSize: 'half',
+  },
+  /* How many months the cash covers, and when the invested pot would pay for a
+     typical year. */
+  {
+    id: 'freedom',
+    icon: 'flag',
+    views: ['line', 'table'],
+    defaultView: 'line',
+    defaultSize: 'half',
+  },
+  /* The balance ahead, from today's figure, those bills and everyday spending. */
+  {
+    id: 'forecast',
+    icon: 'chartArea',
+    views: ['line', 'table'],
+    defaultView: 'line',
     defaultSize: 'half',
   },
 ];

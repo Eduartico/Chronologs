@@ -30,6 +30,8 @@ const COLUMNS = (t) => [
   { key: 'name', label: t('common.category'), get: (r) => r.name },
   { key: 'expense', label: t('categories.expense'), align: 'right', get: (r) => r.expense, width: 140 },
   { key: 'count', label: t('nav.transactions'), align: 'right', get: (r) => r.count, width: 130 },
+  // What the reader means to spend here in a month. Sorted with "no goal" last.
+  { key: 'goal', label: t('categories.goal'), align: 'right', get: (r) => r.goal ?? -1, width: 150 },
   { key: 'actions', label: '', sortable: false, width: 110 },
 ];
 
@@ -96,6 +98,8 @@ const emptyDraft = () => ({
 export default function Categories() {
   const { t, tx } = useT();
   const [categories, setCategories] = useState([]);
+  // Monthly goals and each category's usual month, from /budgets.
+  const [budgets, setBudgets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -119,7 +123,9 @@ export default function Categories() {
       // route — not the dashboard's breakdown, which folds trips into "travel"
       // and leaves investing out of spending, neither of which a list of
       // categories should do.
-      setCategories(await api.getCategories(true));
+      const [cats, budgets] = await Promise.all([api.getCategories(true), api.getBudgets()]);
+      setCategories(cats);
+      setBudgets(budgets);
     } catch (err) {
       showToast(errText(err));
     } finally {
@@ -140,6 +146,19 @@ export default function Categories() {
       loadData();
     } catch (err) {
       showToast(errText(err));
+    }
+  }
+
+  /** The goal cell's own save. Blank removes the goal. */
+  async function saveGoal(id, patch) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || String(patch.goal ?? '') === String(row.goal ?? '')) return;
+    try {
+      await api.setBudget(id, patch.goal === '' ? null : Number(patch.goal));
+      loadData();
+    } catch (err) {
+      showToast(errText(err));
+      throw err;
     }
   }
 
@@ -209,11 +228,21 @@ export default function Categories() {
   }
 
   const editor = useRowEditor({ onSave: saveName });
+  // A second editor for the goal cell alone. Sharing the row's would open the
+  // name field too, which takes focus, and moving to the goal would blur the
+  // name and cancel the edit before a digit was typed.
+  const goalEditor = useRowEditor({ onSave: saveGoal });
 
-  const rows = useMemo(
-    () => categories.map((cat) => ({ ...cat, expense: cat.expense || 0, count: cat.count || 0 })),
-    [categories]
-  );
+  const rows = useMemo(() => {
+    const goals = new Map((budgets?.rows || []).map((r) => [r.id, r.goal]));
+    return categories.map((cat) => ({
+      ...cat,
+      expense: cat.expense || 0,
+      count: cat.count || 0,
+      goal: goals.get(cat.id) ?? null,
+      suggested: budgets?.suggestions?.[cat.id] ?? null,
+    }));
+  }, [categories, budgets]);
   // Rebuilt when the language moves; the descriptor is a function of `t` because
   // it lives at module scope and cannot call a hook itself.
   const columns = useMemo(() => COLUMNS(t), [t]);
@@ -356,6 +385,31 @@ export default function Categories() {
                   </td>
                   <td className="num amount-negative">{formatCurrency(cat.expense)}</td>
                   <td className="num muted">{cat.count}</td>
+                  <td className="num">
+                    {/* Double-click to set, Enter to keep, Escape or click away
+                        to leave it — the same gestures as the name. Its usual
+                        month is the placeholder, so a first goal starts from
+                        what this category actually costs rather than a guess. */}
+                    <EditableField
+                      editing={goalEditor.isEditing(cat.id)}
+                      as="money"
+                      autoFocus
+                      value={goalEditor.isEditing(cat.id) ? goalEditor.draft?.goal : cat.goal}
+                      placeholder={cat.suggested != null ? String(cat.suggested) : ''}
+                      width={80}
+                      disabled={cat.name === PROTECTED || cat.derived || cat.excludeFromSpending}
+                      title={
+                        cat.suggested != null
+                          ? t('categories.goalSuggested', { amount: formatCurrency(cat.suggested) })
+                          : undefined
+                      }
+                      render={cat.goal != null ? formatCurrency : undefined}
+                      onChange={(goal) => goalEditor.patch({ goal })}
+                      onStartEdit={() => goalEditor.start(cat, { goal: cat.goal ?? '' })}
+                      onCommit={goalEditor.commit}
+                      onCancel={goalEditor.cancel}
+                    />
+                  </td>
                   <td>
                     <RowActions
                       editing={editing}
@@ -381,7 +435,7 @@ export default function Categories() {
               onAdd={handleCreate}
               onClear={() => setDraft(emptyDraft())}
             >
-              <td colSpan={2} />
+              <td colSpan={3} />
             </AddRow>
           </tbody>
         </table>

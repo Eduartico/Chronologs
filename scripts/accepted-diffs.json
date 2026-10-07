@@ -210,6 +210,32 @@
     {
       "file": "«ui»",
       "why": "Not a captured file. The rows that change category because of the travel fold above — in transactions*.json, transactions_pending*.json, suggestions_*.json and projections.json — cannot be named by path; they are exactly the movements carrying `legacyTravel`, and nothing else should differ there. Suggestions also stop offering `travel` (the lodging keywords now say `accommodation`, the airline ones `transport`), and the CS2 marketplaces suggest `investments` instead of `gaming`."
+    },
+    {
+      "file": "api/recurring.json",
+      "why": "New endpoint. GET /api/recurring, bills and income inferred from the ledger (server/engines/recurring.js), behind the Upcoming bills card and the forecast."
+    },
+    {
+      "file": "api/analytics_forecast.json",
+      "why": "New endpoint. GET /api/analytics/forecast, today's cash from the printed balances, the last thirty days and the weeks ahead (server/engines/forecast.js)."
+    },
+    {
+      "file": "api/analytics_runway.json",
+      "why": "New endpoint. GET /api/analytics/runway, the typical month over the last twelve complete ones, behind the Runway & independence card."
+    },
+    {
+      "file": "api/budgets.json",
+      "why": "New endpoint. GET /api/budgets, this month against the per-category goals (server/engines/budgets.js), and each category's usual month as a suggested goal."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.planning",
+      "why": "New key: the withdrawal rate and real return the independence projection assumes."
+    },
+    {
+      "file": "api/settings.json",
+      "path": "$.body.dashboard.views",
+      "why": "New key: the filter-bar states the reader saved as named views."
     }
   ]
 }

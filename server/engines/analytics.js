@@ -1049,3 +1049,48 @@ export function computePace(transactions, month, { today, earliest, history = 6 
     },
   };
 }
+
+/**
+ * A typical month, measured over the last complete ones: what goes out, what
+ * comes in, what is put into investments.
+ *
+ * The runway and financial-independence figures are only as good as this
+ * denominator, so it is careful about two things. Only *complete* months count
+ * — the current one is a third of a month and would drag every average down.
+ * And only months the ledger reaches count: a year-long window over a ledger
+ * that starts in March is nine months, not twelve with three of them zero.
+ * The median month is reported beside the mean because one month with a
+ * laptop in it moves the mean and leaves the median where the year really was.
+ */
+export function typicalMonth(transactions, { today, months = 12 } = {}) {
+  const [year, mon] = String(today).slice(0, 7).split('-').map(Number);
+  const keys = [];
+  for (let i = months; i >= 1; i--) {
+    const total = year * 12 + (mon - 1) - i;
+    keys.push(`${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`);
+  }
+  const first = transactions.reduce((min, tx) => {
+    const d = dateOf(tx).slice(0, 7);
+    return d && (!min || d < min) ? d : min;
+  }, null);
+  const covered = new Set(keys.filter((k) => first && k >= first));
+  const rows = computeMonthlyCashflow(
+    transactions.filter((tx) => covered.has(dateOf(tx).slice(0, 7))),
+    'month',
+  );
+  const byMonth = new Map(rows.map((r) => [r.month, r]));
+  const series = [...covered].map((k) => byMonth.get(k) || { month: k, income: 0, expense: 0, invested: 0 });
+  const n = series.length;
+  const mean = (pick) => (n ? round2(series.reduce((s, r) => s + pick(r), 0) / n) : 0);
+  const sorted = series.map((r) => r.expense).sort((a, b) => a - b);
+  const medianExpense = n ? (n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2) : 0;
+  return {
+    months: n,
+    from: n ? series[0].month : null,
+    to: n ? series[n - 1].month : null,
+    expense: mean((r) => r.expense),
+    medianExpense: round2(medianExpense),
+    income: mean((r) => r.income),
+    invested: mean((r) => r.invested || 0),
+  };
+}
