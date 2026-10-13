@@ -125,6 +125,22 @@ npm run build
 npm start   # serves the built frontend from the Express server on port 3001
 ```
 
+## Desktop window
+
+```bash
+npm run desktop
+```
+
+Opens Chronologs in its own window (Electron) instead of a browser tab. The
+server runs inside the app — closing the window stops it — unless one is already
+listening on port 3001, in which case the window uses that one. The frontend is
+rebuilt automatically when `web/dist` is missing or older than its sources.
+
+The first launch adds a **Chronologs** entry to the Start Menu. Right-click the
+window's taskbar icon and choose *Pin to taskbar*; the pin relaunches Chronologs
+from then on, with no terminal. Google sign-in and other outside links open in
+your default browser.
+
 ## Environment Variables (all optional)
 
 ```

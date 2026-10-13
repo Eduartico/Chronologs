@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "desktop/main.js",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"node server/index.js\" \"cd web && npx vite --port 5173 --open\"",
     "server": "node server/index.js",
@@ -13,7 +14,8 @@
     "lint:i18n": "node scripts/find_untranslated.js",
     "snapshot:baseline": "node scripts/snapshot_baseline.js",
     "snapshot:verify": "node scripts/verify_baseline.js",
-    "new:module": "node scripts/new_module.js"
+    "new:module": "node scripts/new_module.js",
+    "desktop": "electron ."
   },
   "dependencies": {
     "concurrently": "^9.0.0",
@@ -28,6 +30,7 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "culori": "^4.0.2"
+    "culori": "^4.0.2",
+    "electron": "^44.6.0"
   }
 }
