@@ -252,6 +252,52 @@ export const api = {
   saveSettings: (settings) => put('/settings', settings),
 
   // LLM (Ollama)
+  // Assistant (chat over the ledger, local model)
+  getAssistantStatus: () => get('/assistant/status'),
+  getAssistantStarters: () => get('/assistant/starters'),
+  listChats: () => get('/assistant/chats'),
+  createChat: () => post('/assistant/chats'),
+  getChat: (id) => get(`/assistant/chats/${id}`),
+  deleteChat: (id) => del(`/assistant/chats/${id}`),
+  /**
+   * One turn, streamed. `onEvent` receives each server-sent event as a parsed
+   * object; the returned promise settles when the stream ends. Abort through
+   * `signal` to stop the model mid-answer.
+   */
+  sendChatMessage: async (id, content, { onEvent, signal } = {}) => {
+    const res = await fetch(`${BASE}/assistant/chats/${id}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+      signal,
+    });
+    if (!res.ok) return unwrap(res);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        const data = frame
+          .split('\n')
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).trim())
+          .join('\n');
+        if (!data) continue;
+        try {
+          onEvent?.(JSON.parse(data));
+        } catch {
+          /* a torn frame; the next one carries on */
+        }
+      }
+    }
+    return true;
+  },
   getLlmModels: () => get('/llm/models'),
   getLlmStatus: () => get('/llm/status'),
   testLlm: () => post('/llm/test'),

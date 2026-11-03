@@ -83,11 +83,13 @@ template with passing tests, and `npm run new:module <id>` copies it.
 | Duplicate detection | `server/engines/duplicates.js` |
 | Correlations (bank ↔ marketplace matching) | `server/engines/correlation.js` |
 | Analytics / dashboard aggregates | `server/engines/analytics.js` |
+| Assistant (chat): tools, agent loop, conversation store | `server/engines/assistant/` — see `docs/assistant.md` |
 | Dashboard layout, widget catalogue, node editing | `web/src/dashboard/` |
 | ActivoBank ingestion (Gmail, PDF/CSV parsing) | `modules/activobank/` |
 | Pricempire ingestion | `modules/pricempire/` |
 | Module contract, registry, `ctx`, kits | `server/framework/` |
 | Generic module routes | `server/routes/modules.js` |
+| Assistant routes (SSE stream) | `server/routes/assistant.js` |
 | All other HTTP routes | `server/routes/api.js` (one large file, grouped by feature with comment headers) |
 | Scheduler (cron-style internal jobs) | `server/lib/scheduler.js` |
 
@@ -443,6 +445,21 @@ notification fallbacks.
   verdicts and its Portuguese JSON keys are the parse contract in both
   languages, and `normaliseVerdict()` catches a model that translates them
   anyway.
+
+## The assistant is tool-calling, not retrieval
+
+The Assistant page is a conversation with the local Ollama model about the
+ledger, built the way the hosted assistants are: a system prompt, a catalogue
+of **read-only** tools (`server/engines/assistant/tools.js`), and a loop that
+runs a tool when the model asks for one and feeds the result back
+(`agent.js`, `MAX_ROUNDS` = 6). The model never sees the ledger; every figure
+it quotes came from a tool result in that conversation, and the page shows the
+calls above each answer as evidence. Turns are streamed as server-sent events
+from `server/routes/assistant.js`; conversations are JSON files under
+`state/chats/`, never ledger events. A model without tool support gets
+**grounded mode** (three summaries pasted into the prompt) and says so. Adding
+a tool is one `TOOLS` entry plus an `assistant.tool.<name>` label in every
+catalogue. Full notes in `docs/assistant.md`.
 
 ## Verification
 

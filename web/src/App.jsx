@@ -12,6 +12,7 @@ import Accounts from './pages/Accounts.jsx';
 import Travel from './pages/Travel.jsx';
 import Categories from './pages/Categories.jsx';
 import Insights from './pages/Insights.jsx';
+import Assistant from './pages/Assistant.jsx';
 import Connections from './pages/Connections.jsx';
 import Rules from './pages/Rules.jsx';
 import Settings from './pages/Settings.jsx';
@@ -28,6 +29,7 @@ const NAV = [
   { id: 'transactions', label: 'nav.transactions', icon: 'transactions' },
   { id: 'pending', label: 'nav.pendingReview', icon: 'pending' },
   { id: 'insights', label: 'nav.insights', icon: 'insights' },
+  { id: 'assistant', label: 'nav.assistant', icon: 'chat' },
   { id: 'accounts', label: 'nav.accounts', icon: 'accounts' },
   { id: 'investments', label: 'nav.investments', icon: 'investments' },
   { id: 'travel', label: 'nav.travel', icon: 'travel' },
@@ -110,6 +112,8 @@ export default function App() {
         return <Categories />;
       case 'insights':
         return <Insights />;
+      case 'assistant':
+        return <Assistant onOpenSettings={() => setPage('settings')} />;
       case 'rules':
         return <Rules />;
       case 'connections':

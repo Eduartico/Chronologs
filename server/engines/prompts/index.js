@@ -22,12 +22,15 @@ import classifyPt from './classify.pt.js';
 import classifyEn from './classify.en.js';
 import ruleSuggestPt from './ruleSuggest.pt.js';
 import ruleSuggestEn from './ruleSuggest.en.js';
+import assistantPt from './assistant.pt.js';
+import assistantEn from './assistant.en.js';
 import { LOCALES, DEFAULT_LOCALE } from '../../../web/src/lib/locale.js';
 
 const PROMPTS = {
   advisor: { pt: advisorPt, en: advisorEn },
   classify: { pt: classifyPt, en: classifyEn },
   ruleSuggest: { pt: ruleSuggestPt, en: ruleSuggestEn },
+  assistant: { pt: assistantPt, en: assistantEn },
 };
 
 /**
@@ -56,6 +59,12 @@ function languageDirective(locale) {
   ].join('\n');
 }
 
+function languageOnly(locale) {
+  const name = LOCALES[locale]?.name;
+  if (!name) return '';
+  return `\n\nLANGUAGE: write every sentence in ${name}. Tool names and category ids stay as written.`;
+}
+
 /**
  * Pick a prompt builder.
  *
@@ -69,7 +78,9 @@ export function pick(name, locale = DEFAULT_LOCALE) {
   if (!family) throw new Error(`Unknown prompt: ${name}`);
   if (family[locale]) return family[locale];
 
-  const directive = languageDirective(locale);
+  // The chat has no verdict tokens to protect: the directive is the language
+  // line alone, so the model is not told to copy a word that is not there.
+  const directive = name === 'assistant' ? languageOnly(locale) : languageDirective(locale);
   if (!directive) return family.en;
   return (...args) => `${family.en(...args)}${directive}`;
 }
