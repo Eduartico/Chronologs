@@ -37,6 +37,10 @@ const PATHS = {
   // by silhouette: this one is symmetric and vertical, `plane` is a tilted jet.
   travel: 'M12 2c1.2 0 2 1.7 2 4.2V9l7 4.2v2L14 13v3.8l2.5 1.9V21L12 19.8 7.5 21v-2.3L10 16.8V13l-7 2.2v-2L10 9V6.2C10 3.7 10.8 2 12 2z',
   accounts: 'M3 7l9-4 9 4v2H3zM5 9v8M10 9v8M14 9v8M19 9v8M3 20h18',
+  // A speech bubble with a tail at the lower left: the assistant's conversation.
+  chat: 'M4 5a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H9l-5 4v-4a2 2 0 01-1-1.7zM8 8h8M8 12h5',
+  send: 'M4 12l16-8-4 16-4-6zM12 14l8-10',
+  stopSquare: 'M6 6h12v12H6z',
 
   // --- money shapes ---
   // A piggy bank: what ActivoBank calls a "mealheiro".

@@ -32,7 +32,7 @@ test('refuses to guess at anything else', () => {
 });
 
 test('every prompt family builds in every shipped language', () => {
-  for (const name of ['advisor', 'classify', 'ruleSuggest']) {
+  for (const name of ['advisor', 'classify', 'ruleSuggest', 'assistant']) {
     for (const locale of Object.keys(LOCALES)) {
       assert.equal(typeof pick(name, locale), 'function', `${name}.${locale}`);
     }
