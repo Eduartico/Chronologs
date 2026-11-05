@@ -14,7 +14,10 @@
  *   {type:'error', key, detail}
  *
  * Closing the connection aborts the model call — Ollama stops generating, and
- * nothing is appended to the conversation.
+ * nothing is appended to the conversation. Neither is anything when the turn
+ * fails: the question and its answer are written together or not at all, so
+ * the page can offer to retry it. `{from}` in the body replaces the question
+ * at that index and everything after it — how editing and retrying work.
  */
 import { Router } from 'express';
 import { fail, failFrom } from '../lib/httpError.js';
@@ -23,7 +26,7 @@ import { getProjections } from '../projections/cache.js';
 import { pick } from '../engines/prompts/index.js';
 import { buildToolContext, runTool, toolDefinitions } from '../engines/assistant/tools.js';
 import { runTurn, ollamaChat, followUps, ToolsUnsupported } from '../engines/assistant/agent.js';
-import { listChats, getChat, createChat, deleteChat, appendMessage, renameChat } from '../engines/assistant/store.js';
+import { listChats, getChat, createChat, deleteChat, commitTurn, forkChat, renameChat } from '../engines/assistant/store.js';
 
 const router = Router();
 
@@ -51,12 +54,45 @@ async function systemPrompt(ctx, { toolsAvailable }) {
   });
 }
 
-router.get('/status', (req, res) => {
+/**
+ * Whether a turn would work right now, asked of Ollama itself rather than read
+ * from settings: settings said "ready" while Ollama was not even running, and the
+ * reader found out by losing their first question. `/api/tags` lists what is
+ * installed with each model's capabilities, which is also how the page knows
+ * ahead of time that the chosen model cannot call tools.
+ */
+const PROBE_MS = 2500;
+export async function probeOllama(baseUrl, model, fetchFn = fetch) {
+  try {
+    const res = await fetchFn(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(PROBE_MS) });
+    if (!res.ok) return { reachable: false, detail: `HTTP ${res.status}` };
+    const { models = [] } = await res.json();
+    const bare = (n) => String(n || '').replace(/:latest$/, '');
+    const found = models.find((m) => bare(m.name) === bare(model));
+    const caps = (m) => (Array.isArray(m?.capabilities) ? m.capabilities : null);
+    return {
+      reachable: true,
+      installed: !!found,
+      // null when this Ollama is too old to report capabilities: unknown, not "no".
+      tools: found && caps(found) ? caps(found).includes('tools') : null,
+      toolModels: models.filter((m) => caps(m)?.includes('tools')).map((m) => m.name),
+    };
+  } catch (err) {
+    return { reachable: false, detail: err?.message || 'unreachable' };
+  }
+}
+
+router.get('/status', async (req, res) => {
   try {
     const { llm } = loadSettings();
+    const configured = !!llm?.enabled && !!llm?.model;
+    const connection = configured ? await probeOllama(llm.baseUrl, llm.model) : null;
     res.json({
-      ready: !!llm?.enabled && !!llm?.model,
+      configured,
+      ready: configured && !!connection?.reachable && connection.installed !== false,
       model: llm?.model || '',
+      baseUrl: llm?.baseUrl || '',
+      connection,
       tools: toolDefinitions().map((t) => t.function.name),
     });
   } catch (err) {
@@ -117,6 +153,17 @@ router.get('/chats/:id', (req, res) => {
   }
 });
 
+router.post('/chats/:id/fork', (req, res) => {
+  try {
+    const upTo = Number.isInteger(req.body?.upTo) ? req.body.upTo : undefined;
+    const chat = forkChat(req.params.id, upTo);
+    if (!chat) return fail(res, 404, 'api.error.chatNotFound');
+    res.json(chat);
+  } catch (err) {
+    failFrom(res, err);
+  }
+});
+
 router.put('/chats/:id', (req, res) => {
   try {
     const chat = renameChat(req.params.id, req.body?.title);
@@ -166,13 +213,19 @@ router.post('/chats/:id/messages', async (req, res) => {
     const settings = loadSettings();
     const ctx = buildToolContext({ projections, settings });
     const chatFn = ollamaChat({ baseUrl: config.llm.baseUrl, model: config.llm.model });
-    const history = chat.messages.slice(-HISTORY_LIMIT);
-
-    appendMessage(chat.id, { role: 'user', content: question });
+    // `from` is the index of the question being replaced — an edit, or a
+    // retry of the answer after it. Absent, the turn goes on the end.
+    const from =
+      Number.isInteger(req.body?.from) && req.body.from >= 0 && req.body.from <= chat.messages.length
+        ? req.body.from
+        : chat.messages.length;
+    const history = chat.messages.slice(0, from).slice(-HISTORY_LIMIT);
 
     const system = await systemPrompt(ctx, { toolsAvailable: true });
+    const groundedSystem = await systemPrompt(ctx, { toolsAvailable: false });
     const turn = await runTurn({
       system,
+      groundedSystem,
       history,
       question,
       toolContext: ctx,
@@ -181,14 +234,12 @@ router.post('/chats/:id/messages', async (req, res) => {
       signal: controller.signal,
     });
 
-    const message = appendMessage(chat.id, {
-      role: 'assistant',
-      content: turn.content,
-      steps: turn.steps,
-      mode: turn.mode,
-    });
-    const saved = message.messages[message.messages.length - 1];
-    send({ type: 'done', message: saved, title: message.title });
+    if (controller.signal.aborted) return res.end();
+    const saved = commitTurn(chat.id, from, [
+      { role: 'user', content: question },
+      { role: 'assistant', content: turn.content, steps: turn.steps, mode: turn.mode },
+    ]);
+    send({ type: 'done', chat: saved, message: saved.messages[saved.messages.length - 1], title: saved.title });
 
     if (!controller.signal.aborted) {
       const suggestions = await followUps({

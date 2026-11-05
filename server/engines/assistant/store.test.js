@@ -8,7 +8,7 @@ const DIR = mkdtempSync(join(tmpdir(), 'chronologs-chats-'));
 process.env.CHRONOLOGS_DATA_DIR = DIR;
 mkdirSync(join(DIR, 'state'), { recursive: true });
 
-const { listChats, getChat, createChat, deleteChat, appendMessage, renameChat, titleFrom } = await import('./store.js');
+const { listChats, getChat, createChat, deleteChat, appendMessage, renameChat, titleFrom, commitTurn, forkChat } = await import('./store.js');
 
 test.after(() => rmSync(DIR, { recursive: true, force: true }));
 
@@ -52,4 +52,27 @@ test('rename, delete, and an id that is not a file name', () => {
 test('titles are one line and bounded', () => {
   assert.equal(titleFrom('a'.repeat(100)).length, 58);
   assert.equal(titleFrom('line one\nline two'), 'line one line two');
+});
+
+test('a turn is written whole, and `from` replaces what followed an edited question', () => {
+  const chat = createChat();
+  commitTurn(chat.id, undefined, [{ role: 'user', content: 'Q1' }, { role: 'assistant', content: 'A1' }]);
+  commitTurn(chat.id, undefined, [{ role: 'user', content: 'Q2' }, { role: 'assistant', content: 'A2' }]);
+  assert.equal(getChat(chat.id).title, 'Q1');
+  commitTurn(chat.id, 2, [{ role: 'user', content: 'Q2 edited' }, { role: 'assistant', content: 'A2b' }]);
+  assert.deepEqual(getChat(chat.id).messages.map((m) => m.content), ['Q1', 'A1', 'Q2 edited', 'A2b']);
+  commitTurn(chat.id, 0, [{ role: 'user', content: 'Q1' }, { role: 'assistant', content: 'A1 retried' }]);
+  assert.deepEqual(getChat(chat.id).messages.map((m) => m.content), ['Q1', 'A1 retried']);
+});
+
+test('a fork copies up to the chosen message and leaves the original alone', () => {
+  const chat = createChat();
+  commitTurn(chat.id, undefined, [{ role: 'user', content: 'Q1' }, { role: 'assistant', content: 'A1' }]);
+  commitTurn(chat.id, undefined, [{ role: 'user', content: 'Q2' }, { role: 'assistant', content: 'A2' }]);
+  const fork = forkChat(chat.id, 1);
+  assert.notEqual(fork.id, chat.id);
+  assert.equal(fork.forkedFrom, chat.id);
+  assert.deepEqual(fork.messages.map((m) => m.content), ['Q1', 'A1']);
+  assert.equal(getChat(chat.id).messages.length, 4);
+  assert.equal(forkChat('nope-nope-nope', 0), null);
 });

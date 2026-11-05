@@ -132,6 +132,21 @@ function createWindow() {
     event.preventDefault();
   });
 
+  // Electron draws no context menu of its own, so right-clicking selected text
+  // did nothing — there was no visible way to copy an answer. Offer the edit
+  // roles Chromium reports as possible for what is under the pointer.
+  win.webContents.on('context-menu', (_event, params) => {
+    const f = params.editFlags;
+    const items = [
+      params.isEditable && { role: 'cut', enabled: f.canCut },
+      (params.selectionText || params.isEditable) && { role: 'copy', enabled: f.canCopy },
+      params.isEditable && { role: 'paste', enabled: f.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: f.canSelectAll },
+    ].filter(Boolean);
+    if (items.length > 2) Menu.buildFromTemplate(items).popup({ window: win });
+  });
+
   return win;
 }
 

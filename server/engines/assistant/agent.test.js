@@ -13,8 +13,8 @@ import { runTurn, followUps, ToolsUnsupported, MAX_ROUNDS } from './agent.js';
  * given the data another way.
  */
 function scripted(replies, log = []) {
-  return async ({ messages, tools, onDelta }) => {
-    log.push({ messages, tools });
+  return async ({ messages, tools, format, onDelta }) => {
+    log.push({ messages, tools, format });
     const next = replies.shift();
     if (next instanceof Error) throw next;
     if (next.content) onDelta?.({ text: next.content });
@@ -83,17 +83,51 @@ test('a model that keeps asking is cut off and made to answer', async () => {
   assert.match(last.messages[last.messages.length - 1].content, /Answer now/);
 });
 
-test('a model without tool support falls back to grounded mode', async () => {
+test('a model without tool support that cannot plan gets the standing summaries', async () => {
   const events = [];
   const log = [];
-  const chat = scripted([new ToolsUnsupported('model does not support tools'), { role: 'assistant', content: 'Grounded.' }], log);
-  const turn = await runTurn({ system: 'SYS', history: [], question: 'q', toolContext, chat, emit: (e) => events.push(e) });
+  const chat = scripted(
+    [new ToolsUnsupported('model does not support tools'), { content: 'not json' }, { role: 'assistant', content: 'Grounded.' }],
+    log,
+  );
+  const turn = await runTurn({
+    system: 'SYS',
+    groundedSystem: 'NO TOOLS',
+    history: [],
+    question: 'q',
+    toolContext,
+    chat,
+    emit: (e) => events.push(e),
+  });
   assert.equal(turn.content, 'Grounded.');
   assert.equal(turn.mode, 'grounded');
   assert.deepEqual(events[0], { type: 'mode', mode: 'grounded' });
-  assert.equal(log[1].tools, undefined);
-  assert.match(log[1].messages[0].content, /^SYS\n\nDATA/);
-  assert.match(log[1].messages[0].content, /period_overview/);
+  assert.equal(log[2].tools, undefined);
+  // The tools prompt told gemma3 to call tools it did not have; it invented a table instead.
+  assert.match(log[2].messages[0].content, /^NO TOOLS\n\nDATA/);
+  assert.doesNotMatch(log[2].messages[0].content, /SYS/);
+  assert.match(log[2].messages[0].content, /period_overview/);
+});
+
+test('a model without tool support plans its lookups as JSON, and they run as steps', async () => {
+  const events = [];
+  const log = [];
+  const plan = {
+    content: JSON.stringify({
+      calls: [
+        { name: 'top_merchants', arguments: { from: '2026-09-01', to: '2026-10-31' } },
+        { name: 'not_a_tool', arguments: {} },
+      ],
+    }),
+  };
+  const chat = scripted([new ToolsUnsupported('no tools'), plan, { role: 'assistant', content: 'Planned.' }], log);
+  const turn = await runTurn({ system: 'SYS', groundedSystem: 'G', history: [], question: 'q', toolContext, chat, emit: (e) => events.push(e) });
+  assert.equal(turn.content, 'Planned.');
+  assert.equal(log[1].format, 'json', 'the plan is asked for as JSON');
+  assert.deepEqual(turn.steps.map((s) => s.name), ['top_merchants'], 'an unknown tool in the plan is dropped');
+  assert.deepEqual(events.map((e) => e.type).slice(0, 3), ['mode', 'tool_call', 'tool_result']);
+  assert.match(log[2].messages[0].content, /^G\n\nDATA \(looked up/);
+  assert.match(log[2].messages[0].content, /top_merchants/);
 });
 
 test('any other failure propagates', async () => {

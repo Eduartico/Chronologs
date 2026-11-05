@@ -17,9 +17,16 @@
  * file knows a URL.
  *
  * Models that cannot call tools (Ollama answers 400 to the `tools` field for
- * them) fall back to **grounded mode**: the three summaries a reader most often
- * asks about are fetched up front and pasted into the system prompt, and the
- * model answers from those. Less precise, never blind.
+ * them) fall back to **grounded mode**. The model is first asked, as plain
+ * JSON, which lookups would answer the question (`planLookups`); those run like
+ * real tool calls, show on screen like them, and their results are pasted into
+ * a system prompt that says there are no tools. Only when the plan comes back
+ * empty or unreadable does it get the three standing summaries instead.
+ *
+ * The grounded prompt must not be the tools prompt. It once was: gemma3 was
+ * told "if you have not called a tool for it, call one", could not, and
+ * answered a question about September's merchants with a table of Netflix,
+ * YouTube and a €56 cable car — none of it in the ledger.
  */
 import { toolDefinitions, runTool } from './tools.js';
 
@@ -63,6 +70,7 @@ function serialise(result) {
  *
  * @param {object} p
  * @param {string} p.system      The system prompt.
+ * @param {string} [p.groundedSystem] The prompt for a model with no tools; `system` if absent.
  * @param {Array}  p.history     Prior `{role, content}` messages, oldest first.
  * @param {string} p.question    The new user message.
  * @param {object} p.toolContext From `buildToolContext`.
@@ -72,7 +80,7 @@ function serialise(result) {
  * @param {AbortSignal} [p.signal]
  * @returns {{content, steps, mode}}
  */
-export async function runTurn({ system, history, question, toolContext, chat, emit = () => {}, signal }) {
+export async function runTurn({ system, groundedSystem, history, question, toolContext, chat, emit = () => {}, signal }) {
   const tools = toolDefinitions();
   let messages = [
     { role: 'system', content: system },
@@ -95,10 +103,22 @@ export async function runTurn({ system, history, question, toolContext, chat, em
       if (err instanceof ToolsUnsupported && mode === 'tools') {
         mode = 'grounded';
         emit({ type: 'mode', mode });
-        messages = [
-          { role: 'system', content: `${system}\n\n${groundingContext(toolContext)}` },
-          ...messages.slice(1),
-        ];
+        const calls = await planLookups({ chat, history, question, signal });
+        let data;
+        if (calls.length) {
+          const blocks = [];
+          for (const call of calls) {
+            emit({ type: 'tool_call', name: call.name, arguments: call.arguments });
+            const result = runTool(call.name, call.arguments, toolContext);
+            steps.push({ name: call.name, arguments: call.arguments, result });
+            emit({ type: 'tool_result', name: call.name, result });
+            blocks.push(`### ${call.name} ${JSON.stringify(call.arguments)}\n${serialise(result)}`);
+          }
+          data = `DATA (looked up for this question; answer only from it):\n\n${blocks.join('\n\n')}`;
+        } else {
+          data = groundingContext(toolContext);
+        }
+        messages = [{ role: 'system', content: `${groundedSystem || system}\n\n${data}` }, ...messages.slice(1)];
         round -= 1;
         continue;
       }
@@ -136,8 +156,51 @@ export async function runTurn({ system, history, question, toolContext, chat, em
   return { content: reply?.content || '', steps, mode };
 }
 
-/** What a model without tool support gets instead: the overview, the bills and
-    the goals, run with their defaults. */
+const MAX_PLANNED = 3;
+
+/**
+ * Tool calling for a model that has none: the catalogue as text, the question,
+ * and a request for JSON naming up to three lookups. `format: 'json'` is all
+ * Ollama needs to keep the reply parseable; anything that still fails to parse,
+ * or names a tool that does not exist, is dropped rather than retried.
+ */
+export async function planLookups({ chat, history = [], question, signal }) {
+  const catalogue = toolDefinitions()
+    .map(({ function: f }) => {
+      const params = Object.entries(f.parameters?.properties || {})
+        .map(([k, v]) => `${k}: ${v.description || v.type}`)
+        .join('; ');
+      return `- ${f.name}: ${f.description}${params ? ` Arguments — ${params}` : ''}`;
+    })
+    .join('\n');
+  const known = new Set(toolDefinitions().map((t) => t.function.name));
+  try {
+    const reply = await chat({
+      messages: [
+        {
+          role: 'system',
+          content: `You choose which read-only lookups over a personal finance ledger answer the reader's question. Today is ${new Date().toISOString().slice(0, 10)}. Resolve relative dates yourself.\n\nLOOKUPS\n${catalogue}\n\nAnswer with JSON only: {"calls": [{"name": "...", "arguments": {...}}]} — at most ${MAX_PLANNED}, fewest that answer the question.`,
+        },
+        ...history.slice(-4).map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user', content: question },
+      ],
+      format: 'json',
+      signal,
+    });
+    const parsed = JSON.parse(reply?.content || '{}');
+    const list = Array.isArray(parsed) ? parsed : parsed?.calls;
+    return (Array.isArray(list) ? list : [])
+      .filter((c) => c && known.has(c.name))
+      .map((c) => ({ name: c.name, arguments: c.arguments && typeof c.arguments === 'object' ? c.arguments : {} }))
+      .slice(0, MAX_PLANNED);
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    return [];
+  }
+}
+
+/** What a model without tool support gets when it could not plan: the
+    overview, the bills and the goals, run with their defaults. */
 export function groundingContext(toolContext) {
   const blocks = ['period_overview', 'recurring_bills', 'budget_goals'].map(
     (name) => `### ${name}\n${serialise(runTool(name, {}, toolContext))}`,

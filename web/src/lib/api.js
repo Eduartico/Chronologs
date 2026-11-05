@@ -259,16 +259,17 @@ export const api = {
   createChat: () => post('/assistant/chats'),
   getChat: (id) => get(`/assistant/chats/${id}`),
   deleteChat: (id) => del(`/assistant/chats/${id}`),
+  forkChat: (id, upTo) => post(`/assistant/chats/${id}/fork`, { upTo }),
   /**
    * One turn, streamed. `onEvent` receives each server-sent event as a parsed
    * object; the returned promise settles when the stream ends. Abort through
    * `signal` to stop the model mid-answer.
    */
-  sendChatMessage: async (id, content, { onEvent, signal } = {}) => {
+  sendChatMessage: async (id, content, { onEvent, signal, from } = {}) => {
     const res = await fetch(`${BASE}/assistant/chats/${id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, ...(Number.isInteger(from) ? { from } : {}) }),
       signal,
     });
     if (!res.ok) return unwrap(res);

@@ -2956,16 +2956,24 @@ th.sortable.num .th-inner {
 }
 
 /* ---- assistant --------------------------------------------------------------
-   Two columns: the conversations on the left, the thread on the right with the
-   composer pinned to its foot. The thread scrolls, the page does not — a chat
+   One surface, two panes: the conversations on the left behind a divider, the
+   thread on the right with the composer pinned to its foot. It used to be two
+   cards floating apart, which read as two unrelated things. The list folds away
+   to leave the thread alone. The thread scrolls, the page does not — a chat
    whose input drifts off the bottom while the answer streams is unusable. */
 .chat-page {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: var(--sp-4);
+  grid-template-columns: 250px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   height: calc(100vh - var(--sp-6) * 2);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.chat-page.list-hidden {
+  grid-template-columns: minmax(0, 1fr);
 }
 .chat-list {
   display: flex;
@@ -2974,13 +2982,20 @@ th.sortable.num .th-inner {
   padding: var(--sp-3);
   min-height: 0;
   overflow-y: auto;
+  background: var(--surface-0);
+  border-right: 1px solid var(--border);
+}
+.chat-list-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
 }
 .chat-new {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--sp-1);
-  width: 100%;
+  flex: 1;
 }
 .chat-list-empty {
   font-size: var(--fs-sm);
@@ -3049,16 +3064,15 @@ th.sortable.num .th-inner {
 .chat-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-5);
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
   border-bottom: 1px solid var(--border);
+  min-height: 56px;
 }
 .chat-head h2 {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-lg);
+  flex: 1;
+  font-size: var(--fs-md);
+  font-weight: 600;
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -3077,7 +3091,97 @@ th.sortable.num .th-inner {
   padding: var(--sp-5);
   display: flex;
   flex-direction: column;
+}
+/* A reading measure: on a wide window the answer is a column, not a banner. */
+.chat-column,
+.chat-foot {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+}
+.chat-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-5);
+}
+.chat-foot {
+  padding: 0 var(--sp-5);
+}
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 26px;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.chat-msg:hover .chat-actions,
+.chat-msg:focus-within .chat-actions,
+.chat-msg.failed .chat-actions {
+  opacity: 1;
+}
+.chat-actions .chat-meta {
+  margin: 0 var(--sp-1);
+}
+.chat-msg-user.failed .chat-bubble {
+  opacity: 0.6;
+}
+.chat-failed {
+  margin: calc(var(--sp-4) * -1) 0 0;
+  text-align: right;
+  font-size: var(--fs-xs);
+}
+.chat-edit {
+  width: min(85%, 680px);
+  display: grid;
+  gap: var(--sp-2);
+}
+.chat-edit textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.chat-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+.chat-edit-actions .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.chat-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  border: 1px solid transparent;
+}
+.chat-banner-text {
+  flex: 1;
+}
+.chat-banner .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+.chat-banner-bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.chat-banner-warn {
+  background: var(--warn-soft);
+  color: var(--text);
+  border-color: var(--warn);
+}
+.chat-banner-warn > svg {
+  color: var(--warn);
 }
 .chat-empty {
   flex: 1;
@@ -3146,6 +3250,13 @@ th.sortable.num .th-inner {
   color: var(--on-accent);
   white-space: pre-wrap;
   line-height: 1.5;
+}
+/* The page-wide highlight is --accent-soft, which on an accent bubble is the
+   bubble's own colour: the text was selectable, the selection invisible. */
+.chat-bubble::selection,
+.chat-bubble *::selection {
+  background: var(--on-accent);
+  color: var(--accent);
 }
 .chat-avatar {
   width: 28px;
@@ -3301,7 +3412,7 @@ th.sortable.num .th-inner {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin: 0 var(--sp-5);
+  margin: var(--sp-3) 0 0;
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-sm);
   background: var(--bad-soft);
@@ -3312,8 +3423,6 @@ th.sortable.num .th-inner {
   display: flex;
   gap: var(--sp-2);
   align-items: flex-end;
-  padding: var(--sp-3) var(--sp-5) 0;
-  border-top: 1px solid var(--border);
   margin-top: var(--sp-3);
 }
 .chat-composer textarea {
@@ -3331,7 +3440,7 @@ th.sortable.num .th-inner {
   white-space: nowrap;
 }
 .chat-disclaimer {
-  margin: var(--sp-2) var(--sp-5) var(--sp-3);
+  margin: var(--sp-2) 0 var(--sp-3);
   font-size: var(--fs-xs);
 }
 

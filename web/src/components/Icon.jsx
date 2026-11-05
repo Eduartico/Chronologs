@@ -62,6 +62,9 @@ const PATHS = {
   // and they carry no meaning as a category, so they stay out of the picker.
   pencil: 'M4 20h4L19.5 8.5a2.8 2.8 0 00-4-4L4 16zM14.5 6l3.5 3.5',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  fork: 'M6 3v6a6 6 0 006 6h0a6 6 0 016 6M18 3v4M6 21v-2M16 5l2-2 2 2',
+  sidebar: 'M3 5h18v14H3zM9 5v14',
   arrowUp: 'M12 20V4M6 10l6-6 6 6',
   arrowDown: 'M12 4v16M6 14l6 6 6-6',
   // Chart shapes, for the toggle that lets a series be read as bars, as a line,

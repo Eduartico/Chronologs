@@ -90,6 +90,42 @@ export function appendMessage(id, message) {
   return write(chat);
 }
 
+/**
+ * Replace everything from index `from` on with `messages` — one finished turn.
+ * A turn is saved whole or not at all: the question used to be written before
+ * the model was asked, so a turn that failed (Ollama not running) left a
+ * question with no answer, and the next attempt sent two questions in a row.
+ * `from` below the end is how an edited question or a retried answer replaces
+ * what followed it.
+ */
+export function commitTurn(id, from, messages) {
+  const chat = read(id);
+  if (!chat) return null;
+  const now = new Date().toISOString();
+  const at = Number.isInteger(from) && from >= 0 && from <= chat.messages.length ? from : chat.messages.length;
+  chat.messages = [...chat.messages.slice(0, at), ...messages.map((m) => ({ at: now, ...m }))];
+  chat.updatedAt = now;
+  const first = chat.messages.find((m) => m.role === 'user');
+  if (!chat.title && first) chat.title = titleFrom(first.content);
+  return write(chat);
+}
+
+/** A new conversation holding this one's messages up to and including `upTo`. */
+export function forkChat(id, upTo) {
+  const chat = read(id);
+  if (!chat) return null;
+  const now = new Date().toISOString();
+  const end = Number.isInteger(upTo) ? Math.min(Math.max(upTo, 0), chat.messages.length - 1) : chat.messages.length - 1;
+  return write({
+    id: randomUUID(),
+    title: chat.title,
+    forkedFrom: chat.id,
+    createdAt: now,
+    updatedAt: now,
+    messages: chat.messages.slice(0, end + 1),
+  });
+}
+
 export function renameChat(id, title) {
   const chat = read(id);
   if (!chat) return null;

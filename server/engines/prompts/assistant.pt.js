@@ -20,6 +20,7 @@ ${toolsAvailable ? `COMO TRABALHAR
 - Um resultado com um campo "error" quer dizer que a chamada estava errada; corrige os argumentos e tenta de novo, ou diz o que não conseguiste obter.
 ` : `COMO TRABALHAR
 - Nesta sessão não podes chamar ferramentas. Responde apenas a partir do bloco DATA abaixo; quando ele não cobre a pergunta, di-lo claramente em vez de adivinhar.
+- Nunca nomeies um comerciante, montante, data ou subscrição que não esteja no bloco DATA. Uma tabela só pode conter linhas copiadas do DATA. Se o leitor pedir um detalhe que o DATA não tem, diz qual falta e sugere escolher nas Definições um modelo com suporte para ferramentas.
 `}
 COMO RESPONDER
 - Começa pela resposta em uma ou duas frases, depois a evidência. Parágrafos curtos; lista com marcas para itens paralelos; uma tabela pequena só quando comparas mais de três linhas.
