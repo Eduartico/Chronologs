@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 import apiRouter from './routes/api.js';
 import modulesRouter from './routes/modules.js';
+import assistantRouter from './routes/assistant.js';
 import { ensureDefaultCategories } from './engines/categorization.js';
 import { bootstrapUserData, ensureInstanceDirectories, USER_DATA_DIR } from './lib/paths.js';
 import { startScheduler } from './lib/scheduler.js';
@@ -47,6 +48,7 @@ app.use(express.json());
 // it ahead of the general router keeps them out of reach of any future
 // catch-all there.
 app.use('/api/modules', modulesRouter);
+app.use('/api/assistant', assistantRouter);
 app.use('/api', apiRouter);
 
 // Serve web frontend in production

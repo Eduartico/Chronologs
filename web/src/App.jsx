@@ -12,6 +12,7 @@ import Accounts from './pages/Accounts.jsx';
 import Travel from './pages/Travel.jsx';
 import Categories from './pages/Categories.jsx';
 import Insights from './pages/Insights.jsx';
+import Assistant from './pages/Assistant.jsx';
 import Connections from './pages/Connections.jsx';
 import Rules from './pages/Rules.jsx';
 import Settings from './pages/Settings.jsx';
@@ -28,6 +29,7 @@ const NAV = [
   { id: 'transactions', label: 'nav.transactions', icon: 'transactions' },
   { id: 'pending', label: 'nav.pendingReview', icon: 'pending' },
   { id: 'insights', label: 'nav.insights', icon: 'insights' },
+  { id: 'assistant', label: 'nav.assistant', icon: 'chat' },
   { id: 'accounts', label: 'nav.accounts', icon: 'accounts' },
   { id: 'investments', label: 'nav.investments', icon: 'investments' },
   { id: 'travel', label: 'nav.travel', icon: 'travel' },
@@ -38,19 +40,38 @@ const NAV = [
 ];
 
 const COLLAPSED_KEY = 'chronologs.sidebar.collapsed';
+// The assistant is a reading surface — a conversation list beside the thread —
+// and a 260px menu beside both left the answer a narrow column. It keeps its
+// own collapsed state, closed until the reader opens it there.
+const ASSISTANT_COLLAPSED_KEY = 'chronologs.sidebar.collapsed.assistant';
+
+function useStoredFlag(key, fallback) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored == null ? fallback : stored === 'true';
+    } catch {
+      return fallback;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch {}
+  }, [key, value]);
+  return [value, setValue];
+}
 
 export default function App() {
   const [page, setPage] = usePersistentState('app.page', 'dashboard');
   const { t } = useT();
   const [pendingCount, setPendingCount] = useState(0);
   const [duplicateCount, setDuplicateCount] = useState(0);
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(COLLAPSED_KEY) === 'true'
-  );
-
-  useEffect(() => {
-    localStorage.setItem(COLLAPSED_KEY, String(collapsed));
-  }, [collapsed]);
+  const [menuCollapsed, setMenuCollapsed] = useStoredFlag(COLLAPSED_KEY, false);
+  const [assistantCollapsed, setAssistantCollapsed] = useStoredFlag(ASSISTANT_COLLAPSED_KEY, true);
+  const onAssistant = page === 'assistant';
+  const collapsed = onAssistant ? assistantCollapsed : menuCollapsed;
+  const setCollapsed = onAssistant ? setAssistantCollapsed : setMenuCollapsed;
 
   // Badge counts are refreshed on every navigation: reviewing or merging on one
   // page changes what the other pages have left to do.
@@ -110,6 +131,8 @@ export default function App() {
         return <Categories />;
       case 'insights':
         return <Insights />;
+      case 'assistant':
+        return <Assistant onOpenSettings={() => setPage('settings')} />;
       case 'rules':
         return <Rules />;
       case 'connections':
